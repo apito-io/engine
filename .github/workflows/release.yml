@@ -8,7 +8,6 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
-
     strategy:
       matrix:
         os: [ubuntu-latest, macos-latest, windows-latest]
@@ -25,15 +24,17 @@ jobs:
             goos: windows
             goarch: amd64
             ext: ".exe"
-
     steps:
       - name: Checkout code
         uses: actions/checkout@v3
+        with:
+            node-version: '20'
 
       - name: Set up Go
         uses: actions/setup-go@v4
         with:
-          go-version: 1.22.3
+            go-version: 1.22.3
+            node-version: '20'
 
       - name: Install dependencies
         run: go mod tidy
@@ -46,8 +47,28 @@ jobs:
         run: |
             zip engine-${{ matrix.goos }}-${{ matrix.goarch }}.zip engine${{ matrix.ext }}
 
+      - name: Upload artifact
+        uses: actions/upload-artifact@v3
+        with:
+          name: engine-${{ matrix.goos }}-${{ matrix.goarch }}
+          path: engine-${{ matrix.goos }}-${{ matrix.goarch }}.zip
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        os: [linux, darwin, windows]
+        goarch: [amd64]
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Download artifact
+        uses: actions/download-artifact@v3
+        with:
+          name: engine-${{ matrix.os }}-${{ matrix.goarch }}
+
       - name: Create GitHub Release
-        if: ${{ matrix.os == 'ubuntu-latest' }}
         uses: softprops/action-gh-release@v1
         with:
           files: |
@@ -55,9 +76,54 @@ jobs:
             engine-darwin-amd64.zip
             engine-windows-amd64.zip
           tag_name: ${{ github.ref_name }}
-          release_name: "Release ${{ github.ref_name }}"
+          name: "Release ${{ github.ref_name }}"
           body: "This is an automatic release for version ${{ github.ref_name }}."
           draft: false
           prerelease: false
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  docker:
+    needs: build
+    runs-on: ubuntu-latest
+
+    strategy:
+      matrix:
+        include:
+          - os: ubuntu-latest
+            goos: linux
+            goarch: amd64
+          - os: macos-latest
+            goos: darwin
+            goarch: amd64
+          - os: windows-latest
+            goos: windows
+            goarch: amd64
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Download artifact
+        uses: actions/download-artifact@v3
+        with:
+          name: engine-${{ matrix.goos }}-${{ matrix.goarch }}
+
+      - name: Unzip binary
+        run: |
+          unzip engine-${{ matrix.goos }}-${{ matrix.goarch }}.zip -d .
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v2
+
+      - name: Login to GitHub Container Registry
+        uses: docker/login-action@v2
+        with:
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push Docker image
+        run: |
+          docker buildx create --use
+          docker buildx inspect --bootstrap
+          docker buildx build --platform ${{ matrix.goos }}/amd64 -t ghcr.io/${{ github.repository_owner }}/engine:${{ github.ref_name }} --push .
