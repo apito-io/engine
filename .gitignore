@@ -1,0 +1,11 @@
+engine
+engine_*
+*.so
+files/storage/*
+*.DS_Store
+__debug*
+db/*.*
+db/*
+db/
+**/db/*
+*.sqlite
