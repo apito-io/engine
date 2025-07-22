@@ -1,6 +1,7 @@
 # Git
 .git
 .gitignore
+.gitattributes
 
 # GitHub
 .github
@@ -9,26 +10,81 @@
 README.md
 docs/
 *.md
+CHANGELOG.md
+LICENSE
+DOCKER_BUILD_OPTIMIZATIONS.md
 
 # Build artifacts
 engine
+engine.exe
 *.zip
 *.tar.gz
+*.deb
+*.rpm
+dist/
+build/
 
-# Development
+# Go specific
+# Keep go.mod and go.sum - they're needed
+vendor/
+*.test
+*.out
+coverage.txt
+*.prof
+
+# Development & Testing
 .env
 .env.*
+test/
+tests/
+*_test.go
+testdata/
+fixtures/
+coverage/
 
-# IDE
+# IDE & Editors
 .vscode
 .idea
 *.swp
 *.swo
+*.vim
+.sublime-*
 
 # OS
 .DS_Store
 Thumbs.db
+Desktop.ini
 
 # Temporary files
 tmp/
-temp/ 
+temp/
+*.tmp
+*.log
+logs/
+
+# Database files (if any local DBs)
+*.db
+*.sqlite
+*.sqlite3
+
+# Keys (but keep the keys/ directory structure)
+*.pem
+*.key.backup
+
+# Local development
+docker-compose.yml
+docker-compose.override.yml
+Dockerfile.dev
+.dockerdev
+.docker-cache
+docker-build.sh
+
+# Dependencies cache
+node_modules/
+.npm
+.yarn
+
+# Backup files
+*.bak
+*.backup
+*~ 
