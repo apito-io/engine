@@ -1,0 +1,53 @@
+.env
+.env.local
+.env.development
+.env.production
+
+main
+main.zip
+engine
+engine_*
+*.so
+files/storage/*
+cache/storage
+cache/schema/*
+cache/objects
+*.DS_Store
+cache/objects/schema.go
+cache/server/server
+__debug*
+db/*
+
+# BadgerDB files
+*.vlog
+*.mem
+*.sst
+LOCK
+MANIFEST
+
+# Debug binaries and executables
+**/db/**
+**/__debug_bin*
+**/__debug*
+debug_bin*
+
+# Build artifacts and binaries
+apito-engine
+bin/
+*.zip
+
+# Plugin binaries (only ignore the compiled binaries, not source code)
+plugins/hc-*-plugin/hc-*-plugin
+plugins/hc-*-plugin/node_modules
+**/hc-*-plugin/hc-*-plugin
+hc-*-plugin-debug
+
+# Logs
+*.log
+engine.log
+server.log
+dlv.log
+
+# IDE and debugging
+*.code-workspace
+.vscode/launch.json

@@ -1,0 +1,1354 @@
+package resolver
+
+import (
+	"context"
+	"errors"
+	"fmt"
+	"strings"
+
+	"github.com/apito-io/engine/database/helper"
+	ae "github.com/apito-io/engine/err"
+	"github.com/apito-io/engine/models"
+	pluginService "github.com/apito-io/engine/services/plugin"
+	"github.com/apito-io/engine/utility"
+	"github.com/apito-io/types"
+	"github.com/apito-io/types/protobuff"
+	"github.com/elliotchance/pie/pie"
+	"github.com/labstack/echo/v4"
+	graphqlClient "github.com/machinebox/graphql"
+	"github.com/tailor-inc/graphql"
+)
+
+/*func (s *GraphQLServer) SwitchProjectResolverFn(p graphql.ResolveParams) (interface{}, error) {
+}*/
+
+func (s *GraphQLServer) EnterProjectResolverFn(p graphql.ResolveParams) (interface{}, error) {
+
+	var (
+		v      = p.Context.Value
+		router = v("router").(echo.Context)
+	)
+
+	param, err := s.buildCommonSystemParam(router)
+	if err != nil {
+		return nil, err
+	}
+
+	s.Lock()
+	defer s.Unlock()
+
+	var projectId string
+	if val, ok := p.Args["id"].(string); ok {
+		projectId = val
+	} else {
+		return nil, ae.ProjectIdRequired
+	}
+
+	var token string
+	if val, ok := p.Args["token"].(string); ok {
+		token = val
+	} else {
+		return nil, ae.TokenIsRequired
+	}
+
+	user, err := s.SystemDriver.GetSystemUser(p.Context, param.UserID)
+	if err != nil {
+		return nil, utility.CaptureInternalServerError(err, map[string]interface{}{
+			"req": param,
+		})
+	}
+
+	if !user.IsSuperAdmin {
+		return nil, ae.NotAllowed
+	}
+
+	user.CurrentProjectID = projectId
+	err = s.SystemDriver.UpdateSystemUser(p.Context, user, false)
+	if err != nil {
+		return nil, err
+	}
+
+	// refresh the token
+	/* refreshTokens, err := utility.NewRefreshTokenAuthenticator(s.Cfg, token)
+	if err != nil {
+		return nil, err
+	} */
+
+	return map[string]interface{}{
+		//"token": refreshTokens.IDToken,
+		"token": token,
+	}, nil
+}
+
+func (s *GraphQLServer) ConnectSupportResolverFn(p graphql.ResolveParams) (interface{}, error) {
+
+	var (
+		v      = p.Context.Value
+		router = v("router").(echo.Context)
+	)
+
+	param, err := s.buildCommonSystemParam(router)
+	if err != nil {
+		return nil, err
+	}
+
+	hybridAuthCallToken := "EhltDOqqL0sKV1z38iDQsfQfqQluFWvTfBeFrdmAleirMG0dTrvfqi3qtgaSNx7Zf1aeP49lDnUr6shDgOca8R7RsK0sNRYetvoKguNzgpx4Er4RxSUl2Y1YF6GcIEPgbDTAfv3ltA7JPyHZDJHlbWZjEjbMV24DOKt3ChFCmjA0yUwXMCf6f6e"
+
+	// create a GraphQL client (safe to share across requests)
+	client := graphqlClient.NewClient("https://api.apito.io/secured/graphql")
+
+	// make a request
+	req := graphqlClient.NewRequest(fmt.Sprintf(`
+		   mutation MyMutation {
+			  hybridAuth(payload: {
+				user_id : "%s", 
+				email: "%s" 
+			  }) {
+				JSON
+			  }
+			}`, param.UserID, param.Email))
+
+	// set header fields
+	req.Header.Set("Authorization", "Bearer "+hybridAuthCallToken)
+
+	// run it and capture the response
+	var respData map[string]interface{}
+	if err := client.Run(context.Background(), req, &respData); err != nil {
+		return nil, err
+	}
+
+	if resp, ok := respData["hybridAuth"].(map[string]interface{}); ok {
+		if json, ok := resp["JSON"].(map[string]interface{}); ok {
+			if login, ok := json["userLogin"].(map[string]interface{}); ok {
+				return login, nil
+			}
+		}
+	}
+
+	return nil, nil
+}
+
+func (s *GraphQLServer) ListProjectsResolverFn(p graphql.ResolveParams) (interface{}, error) {
+	s.Lock()
+	defer s.Unlock()
+
+	var (
+		v      = p.Context.Value
+		router = v("router").(echo.Context)
+	)
+
+	param, err := s.buildCommonSystemParam(router)
+	if err != nil {
+		return nil, err
+	}
+
+	param.ResolveParams = &p
+	param.SystemCollectionName = "projects"
+
+	return s.SystemDriver.SearchProjects(p.Context, param)
+}
+
+func (s *GraphQLServer) ListAllProjectsResolverFn(p graphql.ResolveParams) (interface{}, error) {
+	s.Lock()
+	defer s.Unlock()
+
+	var (
+		v      = p.Context.Value
+		router = v("router").(echo.Context)
+	)
+
+	param, err := s.buildCommonSystemParam(router)
+	if err != nil {
+		return nil, err
+	}
+
+	param.ResolveParams = &p
+	param.SystemCollectionName = "projects"
+
+	return s.SystemDriver.SearchProjects(p.Context, param)
+}
+
+/*func (s *GraphQLServer) ListAllUsersResolverFn(p graphql.ResolveParams) (interface{}, error) {
+	s.Lock()
+	defer s.Unlock()
+	return s.SystemDriver.ListAllUsers(p.Context)
+}*/
+
+func (s *GraphQLServer) ListRoleScopesResolverFn(p graphql.ResolveParams) (interface{}, error) {
+
+	var (
+		v      = p.Context.Value
+		router = v("router").(echo.Context)
+	)
+
+	cache, err := s.GetApplicationCache(router)
+	if err != nil {
+		return nil, err
+	}
+
+	if cache.Project.Schema == nil {
+		return nil, ae.SchemaIsNil
+	}
+
+	var _models []string
+	for _, m := range cache.Project.Schema.Models {
+		_models = append(_models, m.Name)
+	}
+
+	/*
+		if _, ok := s.Extensions["aws"]; ok {
+			administrations = append(administrations, "logic")
+		}*/
+
+	/*	if s.AddOns.Auth != nil {
+		administrations = append(administrations, "user")
+	}*/
+
+	var _functions []string
+	for _, m := range cache.Project.Schema.Functions {
+		_functions = append(_functions, m.Name)
+	}
+
+	return map[string]interface{}{
+		"permissions": models.GlobalPermissions,
+		"models":      _models,
+		"functions":   _functions,
+	}, nil
+}
+
+func (s *GraphQLServer) GetCurrentProjectResolverFn(p graphql.ResolveParams) (interface{}, error) {
+	s.Lock()
+	defer s.Unlock()
+
+	var (
+		v      = p.Context.Value
+		router = v("router").(echo.Context)
+	)
+
+	cache, err := s.GetApplicationCache(router)
+	if err != nil {
+		return nil, err
+	}
+
+	project := new(models.Project)
+
+	*project = *cache.Project
+	project.Schema = nil
+
+	return project, nil
+}
+
+func (s *GraphQLServer) GetProjectResolverFn(p graphql.ResolveParams) (interface{}, error) {
+
+	var projectID string
+	if val, ok := p.Args["_id"].(string); ok {
+		projectID = strings.TrimSpace(utility.SingularResourceName(val))
+	} else {
+		return nil, errors.New(ae.MODEL_NAME_REQUIRED)
+	}
+	project, err := s.SystemDriver.GetProject(p.Context, projectID)
+	if err != nil {
+		return nil, err
+	}
+	project.Schema = nil
+	return project, nil
+}
+
+func (s *GraphQLServer) GetLoggedInUserFn(p graphql.ResolveParams) (interface{}, error) {
+
+	var (
+		v      = p.Context.Value
+		router = v("router").(echo.Context)
+	)
+
+	param, err := s.buildCommonSystemParam(router)
+	if err != nil {
+		return nil, err
+	}
+
+	userID := param.UserID
+
+	user, err := s.SystemDriver.GetSystemUser(p.Context, userID)
+	if err != nil {
+		return nil, err
+	}
+
+	return user, nil
+}
+
+type TenantsResponse struct {
+	ID   string `json:"_id"`
+	Name string `json:"name"`
+	Logo string `json:"logo"`
+}
+
+func (s *GraphQLServer) GetProjectTenantsResolverFn(p graphql.ResolveParams) (interface{}, error) {
+
+	var (
+		v      = p.Context.Value
+		router = v("router").(echo.Context)
+		ctx    = p.Context
+	)
+
+	cache, err := s.GetApplicationCache(router)
+	if err != nil {
+		return nil, err
+	}
+
+	project := cache.Project
+
+	var modelType *models.ModelType
+	for _, field := range cache.Project.Schema.Models {
+		if field.Name == project.TenantModelName {
+			modelType = field
+		}
+	}
+
+	if modelType == nil {
+		return nil, errors.New("tenant model not found. check project settings")
+	}
+
+	param := s.NewParam(cache.Param)
+	param.Model = modelType
+	param.ResolveParams = &p
+
+	param.IsSystemRequest = true
+	param.TenantID = "" // we are getting all tenants so no tenant id is required
+
+	driver, err := s.GraphQLExecutor.GetProjectDriver(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	resp, err := driver.QueryMultiDocumentOfProject(p.Context, param)
+	if err != nil {
+		return nil, err
+	}
+
+	var tenants []TenantsResponse
+	for _, t := range resp {
+		tenant := TenantsResponse{
+			ID: t.ID,
+		}
+		if val, ok := t.Data["name"]; ok && val != nil {
+			tenant.Name = val.(string)
+		} else {
+			tenant.Name = "N/A"
+		}
+		if val, ok := t.Data["logo"].(map[string]interface{}); ok && len(val) > 0 {
+			if _val, ok := val["url"]; ok && _val != nil {
+				tenant.Logo = _val.(string)
+			}
+		}
+		tenants = append(tenants, tenant)
+	}
+	return tenants, nil
+}
+
+func (s *GraphQLServer) ListAuditLogsFn(p graphql.ResolveParams) (interface{}, error) {
+
+	var (
+		v      = p.Context.Value
+		router = v("router").(echo.Context)
+	)
+
+	param, err := s.buildCommonSystemParam(router)
+	if err != nil {
+		return nil, err
+	}
+
+	// if _id available then change the project in param
+	if val, ok := p.Args["_id"].(string); ok && val != "" {
+		param.ProjectID = val
+	}
+
+	param.ResolveParams = &p
+	param.SystemCollectionName = "audit_logs"
+
+	resp, err := s.SystemDriver.SearchAuditLogs(p.Context, param)
+	if err != nil {
+		return nil, err
+	}
+
+	return resp.Results, nil
+}
+
+func (s *GraphQLServer) ListWebHooksResolverFn(p graphql.ResolveParams) (interface{}, error) {
+	s.Lock()
+	defer s.Unlock()
+
+	var (
+		v      = p.Context.Value
+		router = v("router").(echo.Context)
+	)
+
+	param, err := s.buildCommonSystemParam(router)
+	if err != nil {
+		return nil, err
+	}
+
+	param.ResolveParams = &p
+	param.SystemCollectionName = "webhooks"
+
+	res, err := s.SystemDriver.SearchWebHooks(p.Context, param)
+	if err != nil {
+		return nil, err
+	}
+
+	return res.Results, nil
+}
+
+func (s *GraphQLServer) ListModelsInfoResolverFn(p graphql.ResolveParams) (interface{}, error) {
+
+	s.Lock()
+	defer s.Unlock()
+
+	var (
+		v      = p.Context.Value
+		router = v("router").(echo.Context)
+	)
+
+	cache, err := s.GetApplicationCache(router)
+	if err != nil {
+		return nil, err
+	}
+
+	project := cache.Project
+
+	if project.Schema == nil {
+		//return nil, errors.New(ae.SchemaIsNil)
+		return []*models.ModelType{}, nil
+	}
+
+	var modelName string
+	if val, ok := p.Args["model_name"].(string); ok {
+		modelName = strings.TrimSpace(utility.SingularResourceName(val))
+	}
+
+	if modelName != "" {
+		var modelType *models.ModelType
+		for _, model := range project.Schema.Models {
+			if model.Name == modelName {
+				modelType = model
+				break
+			}
+		}
+
+		if modelType == nil {
+			return nil, ae.ModelTypeNotFound
+		}
+
+		// search and add locals
+		var locals pie.Strings
+		for _, f := range modelType.Fields {
+			if f.Validation != nil {
+				if len(f.Validation.Locals) > 0 {
+					locals = append(locals, f.Validation.Locals...)
+				}
+
+				/* if f.Validation.IsSystemRole {
+					//f.Validation.FixedListElements = s.SystemRoles
+				} */
+			}
+		}
+
+		modelType.Locals = locals.Unique()
+
+		if len(modelType.Connections) > 0 {
+			modelType.HasConnections = true
+		}
+
+		return []*models.ModelType{modelType}, nil // resp is a list
+	}
+
+	for _, m := range project.Schema.Models {
+		if len(m.Connections) > 0 {
+			m.HasConnections = true
+		}
+	}
+
+	return project.Schema.Models, nil
+}
+
+func (s *GraphQLServer) ProjectModelInfoResolverFn(p graphql.ResolveParams) (interface{}, error) {
+
+	s.Lock()
+	defer s.Unlock()
+
+	var (
+		v      = p.Context.Value
+		router = v("router").(echo.Context)
+	)
+
+	cache, err := s.GetApplicationCache(router)
+	if err != nil {
+		return nil, err
+	}
+
+	doc := cache.Project
+
+	var modelName string
+	if val, ok := p.Args["model_name"].(string); ok {
+		modelName = strings.TrimSpace(utility.SingularResourceName(val))
+	} else {
+		return nil, errors.New(ae.MODEL_NAME_REQUIRED)
+	}
+
+	if doc.Schema == nil {
+		return nil, ae.SchemaIsNil
+	}
+
+	var modelType *models.ModelType
+	for _, model := range doc.Schema.Models {
+		if model.Name == modelName {
+			modelType = model
+			break
+		}
+	}
+
+	if modelType == nil {
+		return nil, ae.ModelTypeNotFound
+	}
+
+	// search and add locals
+	var locals pie.Strings
+	for _, f := range modelType.Fields {
+		if f.Validation != nil {
+			if len(f.Validation.Locals) > 0 {
+				locals = append(locals, f.Validation.Locals...)
+			}
+
+			/* if f.Validation.IsSystemRole {
+				//f.Validation.FixedListElements = s.SystemRoles
+			} */
+		}
+	}
+
+	modelType.Locals = locals.Unique()
+
+	if len(modelType.Connections) > 0 {
+		modelType.HasConnections = true
+	}
+
+	return modelType, nil
+}
+
+func (s *GraphQLServer) ProjectsPlugins(p graphql.ResolveParams) (interface{}, error) {
+
+	s.Lock()
+	defer s.Unlock()
+
+	var (
+		v      = p.Context.Value
+		router = v("router").(echo.Context)
+	)
+
+	cache, err := s.GetApplicationCache(router)
+	if err != nil {
+		return nil, err
+	}
+
+	project := cache.Project
+
+	// Load HashiCorp plugins from registry
+	_hashiCorpPlugins, err := pluginService.LoadHashiCorpPluginRegistry(s.Cfg)
+	if err != nil {
+		return nil, fmt.Errorf("failed to load HashiCorp plugin registry: %w", err)
+	}
+
+	// Convert map to slice
+	var _plugins []*protobuff.PluginDetails
+	for _, plugin := range _hashiCorpPlugins {
+		// Set default storage plugin activation status if needed
+		/* if plugin.Type == models.PluginType_PLUGIN_TYPE_INTERNAL && plugin.Id == project.Settings.DefaultStoragePlugin {
+			plugin.ActivateStatus = models.PluginActivateStatus_PLUGIN_ACTIVATE_STATUS_ACTIVATED
+		} */
+		_plugins = append(_plugins, plugin)
+	}
+
+	return mergePluginLists(project.Plugins, _plugins), nil
+}
+
+func mergePluginLists(projectPlugins, localPlugins []*protobuff.PluginDetails) []*protobuff.PluginDetails {
+	// Create a map to store the local plugins indexed by ID
+	localPluginMap := make(map[string]*protobuff.PluginDetails)
+	for _, plugin := range localPlugins {
+		localPluginMap[plugin.Id] = plugin
+	}
+
+	// Iterate through the project plugins
+	for _, projectPlugin := range projectPlugins {
+		// Check if the plugin exists in the local map
+		if localPlugin, ok := localPluginMap[projectPlugin.Id]; ok {
+			// Update the local plugin with the project plugin's data
+			localPlugin.EnvVars = projectPlugin.EnvVars
+			localPlugin.ActivateStatus = projectPlugin.ActivateStatus
+			localPlugin.LoadStatus = projectPlugin.LoadStatus
+		} else {
+			// If the plugin doesn't exist locally, add it to the list
+			localPlugins = append(localPlugins, projectPlugin)
+		}
+	}
+
+	return localPlugins
+}
+
+// deprecated
+/*func (s *GraphQLServer) ListModelsDataInfoResolverFn(p graphql.ResolveParams) (interface{}, error) {
+
+	var modelName string
+	if val, ok := p.Args["model"].(string); ok && val != "" {
+		modelName = utility.SingularResourceName(val)
+	} else {
+		return nil, errors.New("Model Name is Necessary")
+	}
+
+	var modelType *models.ModelType
+	for _, field := range s.ProjectRawSchemas.Models {
+		if field.Name == modelName {
+			modelType = field
+		}
+	}
+
+	param := s.Param
+	param.Model = modelType
+	param.ResolveParams = &p
+
+	return s.GetProjectDriver().GetAllPreviewDocumentsByModel(*param)
+}*/
+
+func (s *GraphQLServer) ListDetailedModelsDataProxyResolverFn(p graphql.ResolveParams) (interface{}, error) {
+	return p, nil
+}
+
+func (s *GraphQLServer) ListDetailedModelsDataInfoResolverFn(p graphql.ResolveParams) (interface{}, error) {
+
+	var (
+		v      = p.Context.Value
+		router = v("router").(echo.Context)
+		ctx    = p.Context
+	)
+
+	cache, err := s.GetApplicationCache(router)
+	if err != nil {
+		return nil, err
+	}
+
+	// forward the proxy
+	p.Args = p.Source.(graphql.ResolveParams).Args
+
+	var modelName string
+	if val, ok := p.Args["model"].(string); ok && val != "" {
+		modelName = utility.SingularResourceName(val)
+	} else {
+		return nil, errors.New(ae.MODEL_NAME_REQUIRED)
+	}
+
+	var modelType *models.ModelType
+	for _, field := range cache.Project.Schema.Models {
+		if field.Name == modelName {
+			modelType = field
+		}
+	}
+
+	param := s.NewParam(cache.Param)
+	param.Model = modelType
+	param.ResolveParams = &p
+
+	param.IsSystemRequest = true
+
+	// inject temp tenant id to fetch specific tenant data
+	if val := router.Get("temp_tenant_id"); val != nil {
+		fmt.Println("temp_tenant_id", val)
+		param.TenantID = val.(string)
+	}
+
+	driver, err := s.GraphQLExecutor.GetProjectDriver(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	return driver.QueryMultiDocumentOfProject(p.Context, param)
+}
+
+func (s *GraphQLServer) ListDetailedModelsDataCountResolverFn(p graphql.ResolveParams) (interface{}, error) {
+	s.Lock()
+	defer s.Unlock()
+
+	var (
+		v      = p.Context.Value
+		router = v("router").(echo.Context)
+		ctx    = p.Context
+	)
+
+	cache, err := s.GetApplicationCache(router)
+	if err != nil {
+		return nil, err
+	}
+
+	// forward the proxy
+	p.Args = p.Source.(graphql.ResolveParams).Args
+
+	var modelName string
+	if val, ok := p.Args["model"].(string); ok && val != "" {
+		modelName = utility.SingularResourceName(val)
+	} else {
+		return nil, errors.New(ae.MODEL_NAME_REQUIRED)
+	}
+
+	var modelType *models.ModelType
+	for _, field := range cache.Project.Schema.Models {
+		if field.Name == modelName {
+			modelType = field
+		}
+	}
+
+	param := s.NewParam(cache.Param)
+	param.Model = modelType
+	param.ResolveParams = &p
+
+	param.IsSystemRequest = true
+
+	driver, err := s.GraphQLExecutor.GetProjectDriver(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	return driver.CountMultiDocumentOfProject(p.Context, param, false)
+}
+
+func (s *GraphQLServer) ListProjectTeams(p graphql.ResolveParams) (interface{}, error) {
+	s.Lock()
+	defer s.Unlock()
+
+	var (
+		v      = p.Context.Value
+		router = v("router").(echo.Context)
+	)
+
+	param, err := s.buildCommonSystemParam(router)
+	if err != nil {
+		return nil, err
+	}
+
+	return s.SystemDriver.GetTeamsMembers(p.Context, param.ProjectID)
+}
+
+func (s *GraphQLServer) GetTeamsResolverFn(p graphql.ResolveParams) (interface{}, error) {
+	s.Lock()
+	defer s.Unlock()
+
+	var (
+		v      = p.Context.Value
+		router = v("router").(echo.Context)
+	)
+
+	param, err := s.buildCommonSystemParam(router)
+	if err != nil {
+		return nil, err
+	}
+
+	return s.SystemDriver.GetTeams(p.Context, param.UserID)
+}
+
+func (s *GraphQLServer) GetOrganizationsResolverFn(p graphql.ResolveParams) (interface{}, error) {
+	s.Lock()
+	defer s.Unlock()
+
+	var (
+		v      = p.Context.Value
+		router = v("router").(echo.Context)
+	)
+
+	param, err := s.buildCommonSystemParam(router)
+	if err != nil {
+		return nil, err
+	}
+
+	return s.SystemDriver.GetOrganizations(p.Context, param.UserID)
+}
+
+func (s *GraphQLServer) SearchApitoUsersResolverFn(p graphql.ResolveParams) (interface{}, error) {
+	var (
+		v      = p.Context.Value
+		router = v("router").(echo.Context)
+	)
+
+	param, err := s.buildCommonSystemParam(router)
+	if err != nil {
+		return nil, err
+	}
+
+	param.ResolveParams = &p
+	param.SystemCollectionName = "users"
+
+	resp, err := s.SystemDriver.SearchUsers(p.Context, param)
+	if err != nil {
+		return nil, err
+	}
+
+	return resp.Results, nil
+}
+
+func (s *GraphQLServer) GetPhotosAndCountInfoResolverFn(p graphql.ResolveParams) (interface{}, error) {
+	return p, nil
+}
+
+/*func (s *GraphQLServer) GetPhotosInfoResolverFn(p graphql.ResolveParams) (interface{}, error) {
+	s.Lock()
+	defer s.Unlock()
+
+	var (
+		v      = p.Context.Value
+		router = v("router").(echo.Context)
+	)
+
+	_param, err := s.GetApplicationCache(router)
+	if err != nil {
+		return nil, err
+	}
+
+	project := _param.Project
+
+	if project.ActivatedPluginsIds == nil || project.ActivatedPluginsIds.Storage == "" {
+		return nil, errors.New("no activated plugin found")
+	}
+
+	var pluginCache *models.PluginCache
+	if val, ok := s.LocalPluginCache[project.ActivatedPluginsIds.Storage]; ok && val != nil {
+		pluginCache = val
+	}
+
+	if pluginCache == nil {
+		return nil, errors.New("media plugin is not loaded")
+	}
+
+	// 2. look up a symbol (an exported function or variable)
+	// in this case, variable Greeter
+	pluginLookUp, err := pluginCache.Plugin.Lookup(pluginCache.PluginConfigurations.ExportedVariable)
+	if err != nil {
+		return nil, err
+	}
+
+	var storagePlugin interfaces.StoragePluginInterface
+	storagePlugin, ok := pluginLookUp.(interfaces.StoragePluginInterface)
+	if !ok {
+		return nil, errors.New(fmt.Sprintf(`%s plugin load failed`, pluginCache.PluginConfigurations.ID))
+	}
+
+	// inject project id
+	envs := []*extensions.EnvVariables{
+		{
+			Key:   "PROJECT_ID",
+			Value: project.ID,
+		},
+	}
+	err = storagePlugin.Init(envs)
+	if err != nil {
+		return nil, err
+	}
+
+	// forward the proxy
+	p.Args = p.Source.(graphql.ResolveParams).Args
+
+	// 2. init the plugin
+	files, err := storagePlugin.ListFiles(p.Context, p.Args)
+	if err != nil {
+		return nil, err
+	}
+
+	//return s.Pixabay(p)
+	return files, err
+}
+
+func (s *GraphQLServer) CountPhotosInfoResolverFn(p graphql.ResolveParams) (interface{}, error) {
+
+	s.Lock()
+	defer s.Unlock()
+
+	var (
+		v      = p.Context.Value
+		router = v("router").(echo.Context)
+	)
+
+	_param, err := s.GetApplicationCache(router)
+	if err != nil {
+		return nil, err
+	}
+
+	project := _param.Project
+
+	if project.ActivatedPluginsIds == nil || project.ActivatedPluginsIds.Storage == "" {
+		return nil, errors.New("no activated plugin found")
+	}
+
+	var pluginCache *models.PluginCache
+	if val, ok := s.LocalPluginCache[project.ActivatedPluginsIds.Storage]; ok && val != nil {
+		pluginCache = val
+	}
+
+	if pluginCache == nil {
+		return nil, errors.New("media plugin is not loaded")
+	}
+
+	// 2. look up a symbol (an exported function or variable)
+	// in this case, variable Greeter
+	pluginLookUp, err := pluginCache.Plugin.Lookup(pluginCache.PluginConfigurations.ExportedVariable)
+	if err != nil {
+		return nil, err
+	}
+
+	var storagePlugin interfaces.StoragePluginInterface
+	storagePlugin, ok := pluginLookUp.(interfaces.StoragePluginInterface)
+	if !ok {
+		return nil, errors.New(fmt.Sprintf(`%s plugin load failed`, pluginCache.PluginConfigurations.ID))
+	}
+
+	// inject project id
+	envs := []*extensions.EnvVariables{
+		{
+			Key:   "PROJECT_ID",
+			Value: project.ID,
+		},
+	}
+	err = storagePlugin.Init(envs)
+	if err != nil {
+		return nil, err
+	}
+
+	// forward the proxy
+	p.Args = p.Source.(graphql.ResolveParams).Args
+
+	// 2. init the plugin
+	count, err := storagePlugin.CountFiles(p.Context, p.Args)
+	if err != nil {
+		return nil, err
+	}
+
+	/*
+		_param, err := s.buildCommonSystemParam(router)
+		if err != nil {
+			return nil, err
+		}
+
+		// forward the proxy
+		p.Args = p.Source.(graphql.ResolveParams).Args
+
+		param := s.NewParam(_param)
+		param.ResolveParams = &p
+		//return s.Pixabay(p)
+		return s.GraphQLExecutor.GetProjectDriver(ctx).CountMedias(p.Context, param.ProjectId, &p)
+
+	//return s.Pixabay(p)
+	return count, err
+}
+*/
+
+func (s *GraphQLServer) ListSingleModelDataInfoResolverFn(p graphql.ResolveParams) (interface{}, error) {
+
+	s.Lock()
+	defer s.Unlock()
+
+	var (
+		v      = p.Context.Value
+		router = v("router").(echo.Context)
+		ctx    = p.Context
+	)
+
+	cache, err := s.GetApplicationCache(router)
+	if err != nil {
+		return nil, err
+	}
+
+	param := s.NewParam(cache.Param)
+
+	param.ResolveParams = &p
+
+	if val, ok := p.Args["_id"].(string); ok {
+		param.DocumentID = val
+	} else {
+		return nil, errors.New("ID is not provided")
+	}
+
+	if val, ok := p.Args["revision"].(bool); ok {
+		param.Revision = val
+	}
+
+	var modelName string
+	if val, ok := p.Args["model"].(string); ok && val != "" {
+		modelName = utility.SingularResourceName(val)
+	} else {
+		return nil, errors.New(ae.MODEL_NAME_REQUIRED)
+	}
+
+	var modelType *models.ModelType
+	for _, field := range cache.Project.Schema.Models {
+		if field.Name == modelName {
+			modelType = field
+			break
+		}
+	}
+
+	if modelType == nil {
+		return nil, ae.ModelTypeNotFound
+	}
+	param.Model = modelType
+
+	if val, ok := p.Args["single_page_data"].(bool); ok {
+		param.SinglePageData = val
+	}
+
+	// fetch document of all status
+	p.Args["status"] = "all"
+
+	param.IsSystemRequest = true
+
+	// no need for these selections in case of system query
+	selections := helper.FieldToSelectionBuilder(modelType.Fields)
+	param.QuerySelectionSets = &selections
+
+	// no need for pagination and sorting in case of single document fetch
+	param.SkipPagination = true
+	param.SkipSort = true
+
+	driver, err := s.GraphQLExecutor.GetProjectDriver(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	doc, err := driver.GetSingleProjectDocument(p.Context, param)
+	if err != nil {
+		return nil, err
+	}
+
+	// return empty data if single post data
+	if doc.ID == "" && param.SinglePageData {
+		return &types.DefaultDocumentStructure{
+			Key:      param.Model.SinglePageUUID,
+			ID:       param.Model.SinglePageUUID,
+			Type:     param.Model.Name,
+			Data:     nil,
+			ExpireAt: "",
+		}, nil
+	}
+
+	/* // add the meta
+	docWithMeta, err := s.SystemDriver.AddSystemUserMetaInfo(p.Context, doc)
+	if err != nil {
+		return nil, err
+	}
+	doc.Meta = docWithMeta.Meta */
+
+	return doc, nil
+}
+
+func (s *GraphQLServer) ListDocumentRevisionInfoResolverFn(p graphql.ResolveParams) (interface{}, error) {
+	s.Lock()
+	defer s.Unlock()
+
+	var (
+		v      = p.Context.Value
+		router = v("router").(echo.Context)
+		ctx    = p.Context
+	)
+
+	cache, err := s.GetApplicationCache(router)
+	if err != nil {
+		return nil, err
+	}
+
+	param := s.NewParam(cache.Param)
+
+	param.ResolveParams = &p
+	param.DocumentID = p.Args["_id"].(string)
+
+	var modelName string
+	if val, ok := p.Args["model"].(string); ok && val != "" {
+		modelName = utility.SingularResourceName(val)
+	} else {
+		return nil, errors.New(ae.MODEL_NAME_REQUIRED)
+	}
+
+	if val, ok := p.Args["single_page_data"].(bool); ok {
+		param.SinglePageData = val
+	}
+
+	/*	if param.Plan == "free" {
+		return []*models.DocumentRevisionHistory{}, nil
+	}*/
+
+	var modelType *models.ModelType
+	for _, field := range cache.Project.Schema.Models {
+		if field.Name == modelName {
+			modelType = field
+			break
+		}
+	}
+
+	if modelType == nil {
+		return nil, ae.ModelTypeNotFound
+	}
+
+	param.Model = modelType
+	driver, err := s.GraphQLExecutor.GetProjectDriver(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	doc, err := driver.GetSingleProjectDocumentRevisions(p.Context, param)
+	if err != nil {
+		return nil, err
+	}
+
+	return doc, nil
+}
+
+func (s *GraphQLServer) ListSingleModelHasManyResolverFn(p graphql.ResolveParams) (interface{}, error) {
+
+	s.Lock()
+	defer s.Unlock()
+
+	var (
+		v      = p.Context.Value
+		router = v("router").(echo.Context)
+		ctx    = p.Context
+	)
+
+	cache, err := s.GetApplicationCache(router)
+	if err != nil {
+		return nil, err
+	}
+
+	projectId := cache.Project.ID
+
+	formModel := p.Args["from_model"].(string)
+
+	toModel := p.Args["to_model"].(string)
+	var modelType *models.ModelType
+	for _, model := range cache.Project.Schema.Models {
+		if model.Name == toModel {
+			modelType = model
+			break
+		}
+	}
+
+	if modelType == nil {
+		return nil, ae.ModelTypeNotFound
+	}
+
+	id := p.Args["_id"].(string)
+
+	param := &models.CommonSystemParams{
+		DocumentID:    id,
+		ProjectID:     projectId,
+		ResolveParams: &p,
+		Model:         modelType,
+	}
+
+	if val, ok := p.Args["known_as"].(string); ok && val != "" {
+		param.KnownAs = val
+	}
+
+	driver, err := s.GraphQLExecutor.GetProjectDriver(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	result, err := driver.GetAllRelationDocumentsOfSingleDocument(p.Context, formModel, param)
+	if err != nil {
+		return nil, err
+	}
+
+	return map[string]interface{}{
+		"data": result,
+	}, nil
+}
+
+func (s *GraphQLServer) ProjectFunctionsInfoResolverFn(p graphql.ResolveParams) (interface{}, error) {
+
+	s.Lock()
+	defer s.Unlock()
+
+	var (
+		v      = p.Context.Value
+		router = v("router").(echo.Context)
+	)
+
+	param, err := s.buildCommonSystemParam(router)
+	if err != nil {
+		return nil, err
+	}
+
+	res, err := s.SystemDriver.SearchFunctions(p.Context, param)
+	if err != nil {
+		return nil, err
+	}
+	return res.Results, nil
+}
+
+func (s *GraphQLServer) ListExecutableFunctionsResolverFn(p graphql.ResolveParams) (interface{}, error) {
+
+	s.Lock()
+	defer s.Unlock()
+
+	var (
+		v      = p.Context.Value
+		router = v("router").(echo.Context)
+	)
+
+	cache, err := s.GetApplicationCache(router)
+	if err != nil {
+		return nil, err
+	}
+
+	var model string
+	if val, ok := p.Args["model_name"].(string); ok && val != "" {
+		model = utility.SingularResourceName(val)
+	} else {
+		return nil, errors.New(ae.MODEL_NAME_REQUIRED)
+	}
+
+	// if schema not found then create
+	if cache.Project.Schema == nil {
+		return nil, ae.SchemaIsNil
+	}
+
+	var modelType *models.ModelType
+	for _, ct := range cache.Project.Schema.Models {
+		if ct.Name == model {
+			modelType = ct
+			break
+		}
+	}
+
+	if modelType == nil {
+		return nil, ae.ModelTypeNotFound
+	}
+
+	cache.Param.Model = modelType
+
+	var supportedFunctions []string
+
+	for _, ct := range cache.Project.Schema.Functions {
+		if ct.Request.Model == modelType.Name || ct.Request.Model == "JSON" {
+			supportedFunctions = append(supportedFunctions, ct.Name)
+		}
+	}
+
+	return map[string]interface{}{
+		"functions": supportedFunctions,
+	}, nil
+}
+
+func (s *GraphQLServer) LoadedFunctionProviderResolverFn(p graphql.ResolveParams) (interface{}, error) {
+
+	var _type protobuff.PluginType
+	if val, ok := p.Args["type"].(protobuff.PluginType); ok {
+		_type = val
+	}
+
+	var _list []string
+
+	// Only add HashiCorp plugins (local plugins removed)
+	for _, cache := range s.HashiCorpPluginCache {
+		if cache.PluginConfigurations != nil {
+			_list = append(_list, cache.PluginConfigurations.Id)
+		}
+	}
+
+	return map[string]interface{}{
+		"type":    _type,
+		"plugins": _list,
+	}, nil
+}
+
+func (s *GraphQLServer) ListAvailableFunctionsResolverFn(p graphql.ResolveParams) (interface{}, error) {
+	// Local plugin cache removed - function provider lookup disabled
+	// Use HashiCorp plugins instead
+	fmt.Println("Function provider lookup disabled for local plugins")
+	return map[string]interface{}{}, nil
+}
+
+/*func (s *GraphQLServer) AWSLambdaFunctionInfoResolverFn(p graphql.ResolveParams) (interface{}, error) {
+
+	var region string
+	if val, ok := p.Args["region"].(string); ok {
+		region = val
+	} else {
+		return nil, errors.New(ae.S3_REGION_IS_REQUIRED)
+	}
+
+	funcList, err := s.FetchAWSLambdaFunctions(region)
+	if err != nil {
+		return nil, err
+	}
+
+	return funcList, nil
+}*/
+
+/*func (s *GraphQLServer) FetchAWSLambdaFunctions(region string) ([]*models.FunctionProviderConfig, error) {
+
+/*var cred *models.ThirdPartyCredential
+	if val, ok := s.PluginConfigurations["aws"]; ok {
+		cred = val.Credentials
+	} else {
+		return nil, errors.New(ae.AWS_CREDENTIALS_ARE_NOT_SET)
+	}
+
+	var funcList []*models.FunctionProviderConfig
+	if cred != nil {
+		sess, err := session.NewSession(&aws.Config{
+			Region:      aws.String(region),
+			Credentials: credentials.NewStaticCredentials(cred.AccessKey, cred.SecretKey, ""),
+		})
+		if err != nil {
+			return nil, err
+		}
+		_, err = sess.Config.Credentials.Get()
+		if err != nil {
+			return nil, err
+		}
+
+		svc := lambda.New(sess)
+		resp, err := svc.ListFunctions(nil)
+		if err != nil {
+			return nil, err
+		} else if len(resp.Functions) == 0 {
+			return nil, nil
+		}
+
+		for _, f := range resp.Functions {
+
+			var envs []*models.FunctionEnvVariables
+			if f.Environment != nil {
+				for k, v := range f.Environment.Variables {
+					envs = append(envs, &models.FunctionEnvVariables{
+						Key:   k,
+						Value: *v,
+					})
+				}
+			}
+
+			funcConfig := models.FunctionProviderConfig{
+				RemoteFunctionName: *f.FunctionName,
+				Region:             region,
+				EnvVars:            envs,
+				Configs: &models.FunctionInternalConfig{
+					Runtime: *f.Runtime,
+					Memory:  *f.MemorySize,
+					Handler: *f.Handler,
+					TimeOut: *f.Timeout,
+				},
+			}
+			//parseDate(*f.LastModified).Format(time.RFC822),
+			//fmt.Sprintf("%.2fK", float32(*f.CodeSize)/1024.0),
+			//fmt.Sprintf("%dM", *f.MemorySize),
+			//time.Second*time.Duration(*f.Timeout), descLimited)
+			funcList = append(funcList, &funcConfig)
+		}
+	}
+
+	//return funcList, nil
+	return nil, nil
+}
+*/

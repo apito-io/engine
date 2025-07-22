@@ -1,0 +1,11 @@
+default: revert
+
+.PHONY: build revert
+
+build:
+	find ./ -type f -name "*.go" -exec sed -i '' -e 's/package executor/package main/g' {} \; && \
+	go build -buildmode=plugin -o /Users/diablo/go/src/github.com/apito-io/engine/executor/executor-macos.so -gcflags='all=-N -l' . && \
+	make -f MakefileOsx revert
+
+revert:
+	find ./ -type f -name "*.go" -exec sed -i '' -e 's/package main/package executor/g' {} \;

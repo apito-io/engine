@@ -1,0 +1,28 @@
+package _const
+
+const (
+	// SQL driver
+	MySQLDriver   string = "mysql"
+	MariaDBDriver string = "mariadb"
+	SQLiteDriver  string = "sqlite"
+
+	PostgreSQLDriver string = "postgresql"
+	SQLServerDriver  string = "sqlServer"
+	OracleDriver     string = "oracle"
+
+	// NoSQL driver
+	MongoDBDriver   string = "mongodb"
+	CouchbaseDriver string = "couchbase"
+
+	// Cloud Driver
+	DynamoDB  string = "dynamoDB"
+	FireStore string = "firestore"
+
+	// EmbeddedDB Embedded Database
+	EmbeddedDB string = "embedded"
+
+	// RedisDriver KeyValue database
+	RedisDriver string = "redis"
+
+	MemoryDB string = "memory" // usually its sync.Map{}
+)

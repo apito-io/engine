@@ -1,0 +1,20 @@
+{
+  "name": "hc-hello-world-js-plugin",
+  "version": "2.1.0",
+  "description": "Comprehensive JavaScript plugin for Apito Engine using HashiCorp go-plugin architecture",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js",
+    "dev": "node index.js",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [
+    "apito",
+    "plugin",
+    "hashicorp",
+    "graphql",
+    "rest"
+  ],
+  "author": "Apito Inc",
+  "license": "MIT"
+}

@@ -1,0 +1,403 @@
+package services
+
+import (
+	"bytes"
+	"context"
+	"encoding/json"
+	"errors"
+	"fmt"
+	goBatch "github.com/RashadAnsari/go-batch/v2"
+	ae "github.com/apito-io/engine/err"
+	"github.com/apito-io/engine/interfaces"
+	"github.com/apito-io/engine/models"
+	"github.com/apito-io/engine/utility"
+	"github.com/gorilla/websocket"
+	"github.com/labstack/echo/v4"
+	"io"
+	"net/http"
+	"reflect"
+	"runtime"
+	"strings"
+	"sync"
+	"time"
+)
+
+type ApitoTokenService struct {
+	cfg           *models.Config
+	systemDB      interfaces.ApitoSystemDB
+	apiKeyManager *APIKeyManager
+	blankaService *BrankaToken
+	authService   AuthServiceInterface
+	Batch         *goBatch.Batch[models.ProjectApiTracking]
+	dbWriteLock   sync.Mutex
+}
+
+func NewApitoTokenService(cfg *models.Config, auth AuthServiceInterface, driver interfaces.ApitoSystemDB) (*ApitoTokenService, error) {
+
+	ctx, _ := context.WithCancel(context.Background())
+
+	batch := goBatch.New[models.ProjectApiTracking](
+		goBatch.WithSize(100),
+		goBatch.WithMaxWait(5*time.Second),
+		goBatch.WithContext(ctx),
+	)
+
+	apiKeyManager, err := NewAPIKeyManager(cfg, driver)
+	if err != nil {
+		return nil, err
+	}
+
+	return &ApitoTokenService{
+		cfg:           cfg,
+		systemDB:      driver,
+		blankaService: GetBrankaToken(cfg, driver),
+		apiKeyManager: apiKeyManager,
+		authService:   auth,
+		Batch:         batch,
+		dbWriteLock:   sync.Mutex{},
+	}, nil
+}
+
+// CustomResponseWriter is a wrapper around the standard http.ResponseWriter
+// that captures the status code and response body.
+type CustomResponseWriter struct {
+	http.ResponseWriter
+	Body   *bytes.Buffer
+	Status int
+}
+
+// Header returns the header map that will be sent by WriteHeader.
+func (w *CustomResponseWriter) Header() http.Header {
+	return w.ResponseWriter.Header()
+}
+
+// WriteHeader captures the status code and calls the underlying WriteHeader.
+func (w *CustomResponseWriter) WriteHeader(code int) {
+	w.Status = code
+	w.ResponseWriter.WriteHeader(code)
+}
+
+// Write captures the response body and calls the underlying Write.
+func (w *CustomResponseWriter) Write(b []byte) (int, error) {
+	w.Body.Write(b)
+	return w.ResponseWriter.Write(b)
+}
+
+// getFunctionName returns the name of the function being executed
+func getFunctionName(i interface{}) string {
+	val := runtime.FuncForPC(reflect.ValueOf(i).Pointer())
+	return val.Name()
+}
+
+func (t *ApitoTokenService) ApitoPublicFunctionRouteHandler(next echo.HandlerFunc) echo.HandlerFunc {
+	return func(ctx echo.Context) error {
+		hashFlag := ctx.Request().Header.Get("X-Fn-Hash")
+		if hashFlag == "" {
+			return ctx.JSON(http.StatusUnauthorized, map[string]interface{}{"message": "invalid function request"})
+		}
+
+		ctx.Set("function_hash", hashFlag)
+
+		return next(ctx)
+	}
+}
+
+func (t *ApitoTokenService) ApitoTokenHandler(next echo.HandlerFunc) echo.HandlerFunc {
+	return func(ctx echo.Context) error {
+
+		var token *string
+		var err error
+		var projectId string
+		var userID string
+
+		var req models.GraphQLIncomingRequest
+
+		requestPath := ctx.Request().URL.Path
+
+		useTokenFlag := ctx.Request().Header.Get("X-Use-Cookies")
+		apitoKey := ctx.Request().Header.Get("X-Apito-Key")
+		if apitoKey != "" || ((requestPath == "/secured/graphql" || requestPath == "/secured/graphql/v2") || strings.HasPrefix(requestPath, "/secured/rest/") || strings.HasPrefix(requestPath, "/secured/upload/file")) && useTokenFlag == "" {
+			var token *string
+			if apitoKey != "" {
+				token = &apitoKey
+			} else {
+				// api token and bearer token handler
+				token, err = tokenFromBearer(ctx.Request())
+				if err != nil {
+					return ctx.JSON(http.StatusUnauthorized, map[string]interface{}{"message": "invalid auth header or auth header missing"})
+				}
+			}
+			var verifiedToken *models.TokenClaims
+			if strings.HasPrefix(*token, "ak_") {
+				verifiedToken, err = t.apiKeyManager.ValidateAndSetContext(ctx, *token)
+				if err != nil {
+					return ctx.JSON(http.StatusForbidden, map[string]interface{}{"message": ae.InvalidToken})
+				}
+			} else {
+				// blanka token is used in api key so it might contain tenant id
+				tenantID := ctx.Request().Header.Get("X-Apito-Tenant-ID")
+				if tenantID != "" {
+					ctx.Set("temp_tenant_id", tenantID)
+				}
+				verifiedToken, err = t.blankaService.ValidateAndSetContext(ctx, *token)
+				if err != nil {
+					return ctx.JSON(http.StatusForbidden, map[string]interface{}{"message": ae.InvalidToken})
+				}
+			}
+			projectId = verifiedToken.ProjectID
+			userID = verifiedToken.UserID
+
+		} else if useTokenFlag == "false" {
+			token, err = tokenFromBearer(ctx.Request())
+			if err != nil {
+				return ctx.JSON(http.StatusUnauthorized, map[string]interface{}{"message": "invalid auth header or auth header missing"})
+			}
+			tokenClaims, err := t.authService.VerifyIDToken(ctx.Request().Context(), *token)
+			if err != nil {
+				return ctx.JSON(http.StatusForbidden, map[string]interface{}{"message": ae.InvalidToken})
+			}
+
+			/* if t.cfg.ProjectInjectId != "" {
+				tokenClaims.ProjectID = t.cfg.ProjectInjectId
+			} */
+
+			err = utility.SetTokenClaimsToRouter(ctx, tokenClaims)
+			if err != nil {
+				return ctx.JSON(http.StatusForbidden, map[string]interface{}{"message": ae.InvalidToken})
+			}
+
+			projectId = tokenClaims.ProjectID
+			userID = tokenClaims.UserID
+
+		} else {
+			// web app cookie token handler
+			_ctx := ctx.Request().Context()
+			tokens, err := tokenFromCookies(ctx.Request())
+			if err != nil {
+				return ctx.JSON(http.StatusUnauthorized, map[string]interface{}{"message": "invalid Cookie header. Reload the page"})
+			}
+			err = t.authService.VerifyAccessToken(_ctx, tokens.AccessToken)
+			if err != nil {
+				return ctx.JSON(http.StatusForbidden, map[string]interface{}{"message": ae.InvalidToken})
+			}
+
+			tokenClaims, err := t.authService.VerifyIDToken(_ctx, tokens.IDToken)
+			if err != nil {
+				if errors.Is(err, ae.LOGIN_CONFICT) {
+					// reset the http Only Cookies
+					http.SetCookie(ctx.Response(), utility.SetTokenCookie(t.cfg, "userToken", "", true, true))
+					http.SetCookie(ctx.Response(), utility.SetTokenCookie(t.cfg, "accessToken", "", true, true))
+					http.SetCookie(ctx.Response(), utility.SetTokenCookie(t.cfg, "email", "", false, true))
+
+					/*url := ctx.Request().URL
+					url.Path = "/login"
+					params := url.Query()
+					params.Add("message", "logged in from another device or browser. Please login again.")
+					url.RawQuery = params.Encode()
+					return ctx.Redirect(http.StatusTemporaryRedirect, url.String())
+					*/
+
+					return ctx.JSON(http.StatusConflict, map[string]interface{}{"message": ae.LOGIN_CONFICT.Error()})
+				} else {
+					return ctx.JSON(http.StatusForbidden, map[string]interface{}{"message": ae.InvalidToken})
+				}
+			}
+
+			tokenClaims.TenantID = tokens.TenantID
+			err = utility.SetTokenClaimsToRouter(ctx, tokenClaims)
+			if err != nil {
+				return ctx.JSON(http.StatusForbidden, map[string]interface{}{"message": ae.InvalidToken})
+			}
+
+			projectId = tokenClaims.ProjectID
+			userID = tokenClaims.UserID
+		}
+
+		// Check if the request is an upgrade to WebSocket
+		if websocket.IsWebSocketUpgrade(ctx.Request()) {
+			// Bypass the custom response writer for WebSocket connections
+			// If you dont do this then the graphql websocket connection will fail
+			return next(ctx)
+		}
+
+		// Read and store the request body
+		var requestBody bytes.Buffer
+		if ctx.Request().Body != nil {
+			// Read the request body
+			bodyBytes, err := io.ReadAll(ctx.Request().Body)
+			if err != nil {
+				return err
+			}
+			// Store the body for logging
+			requestBody.Write(bodyBytes)
+			// Restore the body for downstream handlers
+			ctx.Request().Body = io.NopCloser(bytes.NewBuffer(bodyBytes))
+		}
+
+		// Create a new CustomResponseWriter
+		customWriter := &CustomResponseWriter{
+			ResponseWriter: ctx.Response().Writer,
+			Body:           new(bytes.Buffer),
+		}
+
+		// Replace the context's response writer with the custom one
+		ctx.Response().Writer = customWriter
+
+		auditLogs := models.AuditLogs{
+			UserID:      userID,
+			ProjectID:   projectId,
+			RequestPath: requestPath,
+		}
+		// pass the request
+		err = next(ctx)
+
+		if requestPath == "/secured/graphql" || strings.HasPrefix(requestPath, "/secured/rest/") {
+			go func(batch *goBatch.Batch[models.ProjectApiTracking]) {
+				t.dbWriteLock.Lock()
+				batch.Input <- models.ProjectApiTracking{
+					projectId: models.ApiTracking{
+						Increment: 1,
+						Bandwidth: (float64(ctx.Response().Size) / 1024.0) / 1024.0,
+					},
+				}
+				t.dbWriteLock.Unlock()
+			}(t.Batch)
+		} else if requestPath == "/system/graphql" {
+			go func(ctx echo.Context) {
+
+				if requestBody.Len() > 0 {
+					// parse json data
+					err = json.Unmarshal(requestBody.Bytes(), &req)
+					if err != nil {
+						auditLogs.InternalError = "GraphQL Request Body Unmarshal Error"
+					}
+
+					// only take the mutation request as actions
+					if strings.HasPrefix(req.Query, "mutation") {
+
+						// Capture response details after the handler has executed
+						auditLogs.ResponseCode = customWriter.Status
+						auditLogs.ResponsePayload = customWriter.Body.String()
+
+						meta := ctx.Request().Context().Value("meta")
+						if val, ok := meta.(map[string]interface{}); ok && val != nil {
+							if _val, ok := val["function"].(string); ok && _val != "" {
+								auditLogs.InternalFunction = _val
+							}
+							if _val, ok := val["activity"].(string); ok && _val != "" {
+								auditLogs.Activity = _val
+							}
+						}
+
+						// Log or process the response data and error
+						auditLogs.RequestPayload = requestBody.String()
+						if err != nil {
+							ctx.Logger().Errorf("Handler Error: %v", err)
+						}
+
+						if req.Query != "" {
+							vari, _ := json.MarshalIndent(req.Variables, "", " ")
+							auditLogs.GraphqlPayload = req.Query
+							auditLogs.GraphqlVariable = string(vari)
+							auditLogs.GraphqlOperationName = req.OperationName
+						}
+
+						if utility.IsInActionNameMap(req.OperationName) {
+							err = t.systemDB.SaveAuditLog(context.Background(), &auditLogs)
+							if err != nil {
+								fmt.Println(err.Error())
+							}
+						}
+					}
+				}
+			}(ctx)
+		} else {
+			/*contentType := ctx.Request().Header.Get("Content-Type")
+			switch contentType {
+			case "application/json":
+				// parse json data
+				var postJSONBody interface{}
+				err = json.Unmarshal(bodyBytes, &postJSONBody)
+				if err != nil {
+					fields["raw_json"] = string(bodyBytes)
+					fields["error_message"] = "POST Request JSON Body Unmarshal Error"
+				}
+				fields["post_body_source"] = "json"
+				fields["post_body"] = postJSONBody
+			case "x-www-form-urlencoded":
+				// parst x-www-form-urlencoded
+				if err := ctx.Request().ParseForm(); err == nil && len(ctx.Request().PostForm) > 0 {
+					fields["post_body_source"] = "x-www-form-urlencoded"
+					fields["post_body"] = ctx.Request().PostForm
+				}
+			default:
+				fields["post_body_source"] = contentType
+				fields["post_body"] = string(bodyBytes)
+			}*/
+		}
+		return err
+	}
+}
+
+func tokenFromCookies(r *http.Request) (*models.JWTTokens, error) {
+	if r.URL.RawQuery == "v=2" {
+		tokenString := r.Header.Get("Authorization")
+		tokenType := "Bearer"
+		// Missing Token
+		if tokenString == "" {
+			return nil, errors.New("token is missing")
+		}
+
+		// Check for tempered token , check with signing method RSA
+		if strings.HasPrefix(tokenString, tokenType) {
+			tokenString = strings.TrimSpace(strings.TrimPrefix(tokenString, tokenType))
+			if tokenString != "" {
+				return &models.JWTTokens{AccessToken: tokenString}, nil
+			} else {
+				return nil, errors.New("invalid token Claims ! WTF ")
+			}
+		}
+	}
+
+	var tokens models.JWTTokens
+	c, err := r.Cookie("accessToken")
+	if err != nil {
+		return nil, errors.New("no token")
+	}
+	tokens.AccessToken = c.Value
+
+	c, err = r.Cookie("userToken")
+	if err != nil {
+		return nil, errors.New("no token")
+	}
+	tokens.IDToken = c.Value
+
+	// optional cookie
+	c, _ = r.Cookie("temp_tenant_id")
+	if c != nil {
+		fmt.Println("temp_tenant_id", c.Value)
+		tokens.TenantID = c.Value
+	}
+
+	return &tokens, nil
+}
+
+func tokenFromBearer(r *http.Request) (*string, error) {
+	token := r.Header.Get("Authorization")
+	tokenType := "Bearer"
+	// Missing Token
+	if token == "" {
+		return nil, errors.New("unauthorized Request. API Key is missing")
+	}
+
+	var tokenString string
+	// Check for tempered token , check with signing method RSA
+	if strings.HasPrefix(token, tokenType) {
+		tokenString = strings.TrimSpace(strings.TrimPrefix(token, tokenType))
+		if tokenString == "" {
+			return nil, errors.New("invalid API Request")
+		}
+		return &tokenString, nil
+	}
+	return nil, errors.New("invalid token Type")
+}

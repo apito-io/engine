@@ -1,0 +1,151 @@
+package models
+
+import "github.com/apito-io/types/protobuff"
+
+type ProjectType int32
+
+const (
+	ProjectType_General ProjectType = 0
+	ProjectType_SaaS    ProjectType = 1
+)
+
+type MetaField struct {
+	SourceID string `json:"source_id,omitempty" firestore:"source_id,omitempty" bson:"source_id,omitempty"`
+
+	CreatedAt      string      `json:"created_at,omitempty" firestore:"created_at,omitempty" bson:"created_at,omitempty"`
+	UpdatedAt      string      `json:"updated_at,omitempty" firestore:"updated_at,omitempty" bson:"updated_at,omitempty"`
+	CreatedBy      *SystemUser `json:"created_by,omitempty" firestore:"title,omitempty" bson:"created_by,omitempty"`
+	LastModifiedBy *SystemUser `json:"last_modified_by,omitempty" firestore:"created_by,omitempty" bson:"last_modified_by,omitempty"`
+
+	Status string `json:"status,omitempty" firestore:"status,omitempty" bson:"status,omitempty"`
+	//TenantId       string `json:"tenant_id,omitempty" firestore:"tenant_id,omitempty"` move to root removed from meta
+	RootRevisionID string `json:"root_revision_id,omitempty" firestore:"root_revision_id,omitempty" bson:"root_revision_id,omitempty"`
+	Revision       bool   `json:"revision,omitempty" firestore:"revision,omitempty" bson:"revision,omitempty"`
+	RevisionAt     string `json:"revision_at,omitempty" firestore:"revision_at,omitempty" bson:"revision_at,omitempty"`
+
+	// used in filterAbsentStudent where multiple record is processed but we need to return only attendance id
+	ResourceID string `json:"resource_id,omitempty" firestore:"resource_id,omitempty" bson:"resource_id,omitempty"`
+}
+
+type SystemUser struct {
+	XKey string `json:"_key,omitempty" firestore:"_key,omitempty" bson:"_key,omitempty"`
+	ID   string `bun:"type:uuid,pk" json:"id,omitempty" firestore:"id,omitempty" bson:"_id,omitempty"`
+
+	Secret       string `json:"secret,omitempty" firestore:"secret,omitempty" bson:"secret,omitempty"`
+	TempPassword string `json:"temp_password,omitempty" firestore:"temp_password,omitempty" bson:"temp_password,omitempty"`
+
+	FirstName string `json:"first_name,omitempty" firestore:"first_name,omitempty" bson:"first_name,omitempty"`
+	LastName  string `json:"last_name,omitempty" firestore:"last_name,omitempty" bson:"last_name,omitempty"`
+	Role      string `json:"role,omitempty" firestore:"role,omitempty" bson:"role,omitempty"`
+	Username  string `json:"username,omitempty" firestore:"username,omitempty" bson:"username,omitempty"`
+	Email     string `json:"email,omitempty" firestore:"email,omitempty" bson:"email,omitempty"`
+	Avatar    string `json:"avatar,omitempty" firestore:"avatar,omitempty" bson:"avatar,omitempty"`
+
+	CurrentProjectID string `json:"current_project_id,omitempty" firestore:"current_project_id,omitempty" bson:"current_project_id,omitempty"`
+	RegisterProvider string `json:"register_provider,omitempty" firestore:"register_provider,omitempty" bson:"register_provider,omitempty"`
+
+	ProjectUser               bool     `json:"project_user,omitempty" firestore:"project_user,omitempty" bson:"project_user,omitempty"`
+	AdministrativePermissions []string `json:"administrative_permissions,omitempty" firestore:"email,omitempty" bson:"administrative_permissions,omitempty"`
+
+	ProjectAssignedRole      string   `json:"project_assigned_role,omitempty" bson:"project_assigned_role,omitempty"`
+	ProjectAccessPermissions []string `json:"project_access_permissions,omitempty" bson:"project_access_permissions,omitempty"`
+
+	IsAdmin      bool `json:"is_admin,omitempty" firestore:"is_admin,omitempty" bson:"is_admin,omitempty"`
+	IsSuperAdmin bool `json:"is_super_admin,omitempty" firestore:"is_super_admin,omitempty" bson:"is_super_admin,omitempty"`
+
+	RefreshToken    string `json:"refresh_token,omitempty" firestore:"refresh_token,omitempty" bson:"refresh_token,omitempty"`
+	AccessToken     string `json:"access_token,omitempty" firestore:"access_token,omitempty" bson:"access_token,omitempty"`
+	ReadOnlyProject bool   `json:"read_only_project,omitempty" firestore:"read_only_project,omitempty" bson:"read_only_project,omitempty"`
+	LastLoggedIn    string `json:"last_logged_in,omitempty" firestore:"last_logged_in,omitempty" bson:"last_logged_in,omitempty"`
+
+	ProjectLimit uint32 `json:"project_limit,omitempty" firestore:"project_limit,omitempty" bson:"project_limit,omitempty"`
+
+	CreatedAt string `bun:"type:timestamp,notnull,default:current_timestamp" json:"created_at,omitempty" firestore:"created_at,omitempty" bson:"created_at,omitempty"`
+	UpdatedAt string `bun:"type:timestamp,notnull" json:"updated_at,omitempty" firestore:"updated_at,omitempty" bson:"updated_at,omitempty"`
+
+	IsPaymentDue bool `json:"is_payment_due,omitempty" firestore:"is_payment_due,omitempty" bson:"is_payment_due,omitempty"`
+
+	DefaultTeam         *Team         `bun:"rel:belongs-to,join:default_team_id=team_id" json:"default_team,omitempty" firestore:"default_team,omitempty" bson:"default_team,omitempty"`
+	DefaultOrganization *Organization `bun:"rel:belongs-to,join:default_org_id=org_id" json:"default_organization,omitempty" firestore:"default_organization,omitempty" bson:"default_organization,omitempty"`
+
+	Projects     []*Project      `bun:"m2m:user_projects,join:User=Project" json:"projects,omitempty" firestore:"projects,omitempty" bson:"projects,omitempty"`
+	Teams        []*Team         `bun:"m2m:user_to_teams,join:SystemUser=Team" json:"teams,omitempty" firestore:"teams,omitempty" bson:"teams,omitempty"`
+	Organization []*Organization `bun:"rel:has-many,join:id=user_id" json:"organization,omitempty" firestore:"organization,omitempty" bson:"organization,omitempty"`
+
+	IsActive bool `json:"is_active,omitempty" firestore:"is_active,omitempty" bson:"is_active,omitempty"`
+}
+
+type ProjectSettings struct {
+	ProjectID             string   `bun:"type:uuid,pk" json:"project_id,omitempty" firestore:"project_id,omitempty" bson:"_id,omitempty"`
+	Locals                []string `json:"locals,omitempty" firestore:"locals,omitempty" bson:"locals,omitempty"`
+	SystemGraphqlHooks    bool     `json:"system_graphql_hooks,omitempty" firestore:"system_graphql_hooks,omitempty" bson:"system_graphql_hooks,omitempty"`
+	EnableRevisionHistory bool     `json:"enable_revision_history,omitempty" firestore:"revision_history,omitempty" bson:"enable_revision_history,omitempty"`
+
+	DefaultStoragePlugin  string `json:"default_storage_plugin,omitempty" firestore:"default_storage_plugin,omitempty" bson:"default_storage_plugin,omitempty"`
+	DefaultFunctionPlugin string `json:"default_function_plugin,omitempty" firestore:"default_function_plugin,omitempty" bson:"default_function_plugin,omitempty"`
+
+	DefaultLocale string `json:"default_locale,omitempty" firestore:"default_locale,omitempty" bson:"default_locale,omitempty"`
+}
+
+// Project user project
+type Project struct {
+	XKey string `json:"_key,omitempty" firestore:"_key,omitempty" bson:"_key,omitempty"`
+	ID   string `bun:"type:uuid,pk" json:"id,omitempty" firestore:"id,omitempty" bson:"_id,omitempty"`
+
+	Name        string                     `json:"name,omitempty" firestore:"name,omitempty" bson:"name,omitempty"`
+	Description string                     `json:"description,omitempty" firestore:"description,omitempty" bson:"description,omitempty"`
+	Schema      *ProjectSchema             `bun:"rel:belongs-to,join:id=project_id" json:"schema,omitempty" firestore:"schema,omitempty" bson:"schema,omitempty"`
+	CreatedAt   string                     `json:"created_at,omitempty" firestore:"created_at,omitempty" bson:"created_at,omitempty"`
+	UpdatedAt   string                     `json:"updated_at,omitempty" firestore:"updated_at,omitempty" bson:"updated_at,omitempty"`
+	ExpireAt    string                     `json:"expire_at,omitempty" firestore:"expire_at,omitempty" bson:"expire_at,omitempty"`
+	Plugins     []*protobuff.PluginDetails `bun:"rel:has-many" json:"plugins,omitempty" firestore:"plugins,omitempty" bson:"plugins,omitempty"`
+	Settings    *ProjectSettings           `bun:"rel:belongs-to,join:id=project_id" json:"settings,omitempty"  firestore:"settings,omitempty" bson:"settings,omitempty"`
+
+	Tokens  []*APIToken `bun:"rel:has-many" json:"tokens,omitempty" firestore:"tokens,omitempty" bson:"tokens,omitempty"`
+	APIKeys []*APIKey   `bun:"rel:has-many" json:"api_keys,omitempty" firestore:"api_keys,omitempty" bson:"api_keys,omitempty"`
+
+	Roles      map[string]*Role   `bun:"type:jsonb" json:"roles,omitempty" protobuf_key:"bytes,1,opt,name=key,proto3" protobuf_val:"bytes,2,opt,name=value,proto3" firestore:"roles,omitempty" bson:"roles,omitempty"`
+	Driver     *DriverCredentials `bun:"rel:belongs-to,join:id=project_id" json:"driver,omitempty"  firestore:"driver,omitempty" bson:"driver,omitempty"`
+	TempBanned bool               `json:"temp_banned,omitempty" firestore:"temp_banned,omitempty" bson:"temp_banned,omitempty"`
+
+	ProjectTemplate string `json:"project_template,omitempty" firestore:"project_template,omitempty" bson:"project_template,omitempty"`
+
+	Teams          []*Team       `bun:"m2m:team_projects,join:Project=Team" json:"teams,omitempty"  firestore:"teams,omitempty" bson:"teams,omitempty"`
+	Users          []*SystemUser `bun:"m2m:user_projects,join:Project=User" json:"users,omitempty"  firestore:"users,omitempty" bson:"users,omitempty"`
+	OrganizationID string        `json:"organization_id,omitempty" firestore:"organization_id,omitempty" bson:"organization_id,omitempty"`
+	Organization   *Organization `bun:"rel:belongs-to,join:organization_id=id" json:"organization,omitempty" firestore:"organization,omitempty" bson:"organization,omitempty"`
+
+	SystemMessages []*SystemMessage `bun:"rel:has-many" json:"system_messages,omitempty" firestore:"system_messages,omitempty" bson:"system_messages,omitempty"`
+	Workspaces     []*Workspace     `bun:"rel:has-many" json:"workspaces,omitempty" firestore:"workspaces,omitempty" bson:"workspaces,omitempty"`
+
+	ProjectPlan    string `json:"project_plan,omitempty" firestore:"project_plan,omitempty" bson:"project_plan,omitempty"` // free, pro, enterprise
+	TrialEnds      string `json:"trial_ends,omitempty" firestore:"trial_ends,omitempty" bson:"trial_ends,omitempty"`
+	PaymentDueDate string `json:"payment_due_date,omitempty" firestore:"payment_due_date,omitempty" bson:"payment_due_date,omitempty"`
+
+	// for microservice
+	MicroServicePort string `json:"micro_service_port,omitempty" firestore:"micro_service_port,omitempty" bson:"micro_service_port,omitempty"`
+
+	// for sync
+	SyncedProperty *SyncProject `bun:"rel:belongs-to,join:id=project_id" json:"synced_property,omitempty" firestore:"synced_property,omitempty" bson:"synced_property,omitempty"`
+
+	// for SaaS Project
+	ProjectType               ProjectType `json:"project_type,omitempty" firestore:"project_type,omitempty" bson:"project_type,omitempty"` // general, saas, ecom etc
+	PerTenantSeparateDatabase bool        `json:"per_tenant_separate_database,omitempty" firestore:"per_tenant_separate_database,omitempty" bson:"per_tenant_separate_database,omitempty"`
+	ProjectSecretKey          string      `json:"project_secret_key,omitempty" firestore:"project_secret_key,omitempty" bson:"project_secret_key,omitempty"`
+	TenantModelName           string      `json:"tenant_model_name,omitempty" firestore:"tenant_model_name,omitempty" bson:"tenant_model_name,omitempty"`
+}
+
+type SyncProject struct {
+	ProjectID                string `bun:"type:uuid,pk" json:"project_id,omitempty" firestore:"project_id,omitempty" bson:"_id,omitempty"`
+	SyncedTokenUsed          string `json:"synced_token_used,omitempty" firestore:"synced_token_used,omitempty" bson:"synced_token_used,omitempty"`
+	LocalProjectID           string `json:"local_project_id,omitempty" firestore:"local_project_id,omitempty" bson:"local_project_id,omitempty"`
+	MergeWithExistingProject bool   `json:"merge_with_existing_project,omitempty" firestore:"merge_with_existing_project,omitempty" bson:"merge_with_existing_project,omitempty"`
+	LastSyncedAt             string `json:"last_synced_at,omitempty" firestore:"last_synced_at,omitempty" bson:"last_synced_at,omitempty"`
+}
+
+type ProjectWithRoles struct {
+	User        *SystemUser `json:"user,omitempty" firestore:"user,omitempty" bson:"user,omitempty"`
+	Project     *Project    `json:"project,omitempty" firestore:"project" bson:"project,omitempty"`
+	Role        string      `json:"role,omitempty" firestore:"role,omitempty" bson:"role,omitempty"`
+	Permissions []string    `json:"permissions,omitempty" firestore:"permissions,omitempty" bson:"permissions,omitempty"`
+}
