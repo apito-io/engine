@@ -638,6 +638,10 @@ func (g *GraphCtrl) publicSchemaBuilder(ctx context.Context, cache *models.Appli
 				updateArgs["keepRevision"] = &graphql.ArgumentConfig{
 					Type: graphql.Boolean,
 				}
+				updateArgs["deltaUpdate"] = &graphql.ArgumentConfig{
+					Type: graphql.Boolean,
+					Description: "Delta update mode. Use if to upate array with _id",
+				}
 				// copy the common with it
 				for k, v := range commonMutationFieldsConfigArgs[definedModel.Name] {
 					updateArgs[k] = v

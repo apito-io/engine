@@ -13,7 +13,7 @@ import (
 	"github.com/tailor-inc/graphql"
 )
 
-func (s *GraphQLServer) updateAndConnectDocument(ctx context.Context, cache *models.ApplicationCache, param *models.CommonSystemParams, hooks []*models.Webhook, userInputPayload map[string]interface{}, permission *models.APIPermission, connections, disconnects map[string]interface{}) (*types.DefaultDocumentStructure, error) {
+func (s *GraphQLServer) updateAndConnectDocument(ctx context.Context, cache *models.ApplicationCache, param *models.CommonSystemParams, hooks []*models.Webhook, userInputPayload map[string]interface{}, permission *models.APIPermission, connections, disconnects map[string]interface{}, deltaUpdate bool) (*types.DefaultDocumentStructure, error) {
 
 	if len(userInputPayload) == 0 {
 		return nil, errors.New("payload is required")
@@ -71,7 +71,7 @@ func (s *GraphQLServer) updateAndConnectDocument(ctx context.Context, cache *mod
 	modelType := param.Model
 
 	//#todo need image param validation
-	updatedPayload, err := s.GraphQLExecutor.HandlePayloadFormatting(ctx, param, local, modelType.Fields, inputPayload, doc.Data)
+	updatedPayload, err := s.GraphQLExecutor.HandlePayloadFormatting(ctx, param, local, modelType.Fields, inputPayload, doc.Data, deltaUpdate)
 	if err != nil {
 		return nil, err
 	}
@@ -180,7 +180,7 @@ func (s *GraphQLServer) createAndConnectDocument(ctx context.Context, cache *mod
 	}
 
 	//#todo need image param validation
-	newPayload, err := s.GraphQLExecutor.HandlePayloadFormatting(ctx, param, local, param.Model.Fields, payload, make(map[string]interface{}))
+	newPayload, err := s.GraphQLExecutor.HandlePayloadFormatting(ctx, param, local, param.Model.Fields, payload, make(map[string]interface{}), false)
 	if err != nil {
 		return nil, err
 	}
@@ -330,7 +330,8 @@ func (s *GraphQLServer) MutationResolverFn(p graphql.ResolveParams) (interface{}
 				param.DocumentID = _id.(string)
 				param.DocPublishStatus = "published"
 				// update the existing doc
-				_doc, err := s.updateAndConnectDocument(ctx, cache, param, hooks, payload, permission, nil, nil) //#TODO add connections support
+				// upsert has no delta update support for now
+				_doc, err := s.updateAndConnectDocument(ctx, cache, param, hooks, payload, permission, nil, nil, false) //#TODO add connections support
 				if err != nil {
 					errs = append(errs, err.Error())
 				}
@@ -427,7 +428,12 @@ func (s *GraphQLServer) MutationResolverFn(p graphql.ResolveParams) (interface{}
 			payload = userInputPayload
 		}
 
-		_, err := s.updateAndConnectDocument(ctx, cache, param, hooks, payload, permission, connections, disconnects)
+		var deltaUpdate bool
+		if val, ok := p.Args["deltaUpdate"].(bool); ok {
+			deltaUpdate = val
+		}
+
+		_, err := s.updateAndConnectDocument(ctx, cache, param, hooks, payload, permission, connections, disconnects, deltaUpdate)
 		if err != nil {
 			return nil, err
 		}

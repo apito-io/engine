@@ -419,7 +419,7 @@ func (s *GraphQLExecutor) SolvePublicMutation(ctx context.Context, resolverName 
 
 		if userInputPayload != nil && len(userInputPayload) > 0 {
 			//#todo need image param validation
-			newPayload, err := s.HandlePayloadFormatting(ctx, param, _local, modelType.Fields, userInputPayload, make(map[string]interface{}))
+			newPayload, err := s.HandlePayloadFormatting(ctx, param, _local, modelType.Fields, userInputPayload, make(map[string]interface{}), false)
 			if err != nil {
 				return nil, err
 			}
@@ -664,7 +664,7 @@ func (s *GraphQLExecutor) SolvePublicMutation(ctx context.Context, resolverName 
 			}
 
 			//#todo need image param validation
-			updatedPayload, err := s.HandlePayloadFormatting(ctx, param, _local, modelType.Fields, inputPayload, doc.Data)
+			updatedPayload, err := s.HandlePayloadFormatting(ctx, param, _local, modelType.Fields, inputPayload, doc.Data, false)
 			if err != nil {
 				return nil, err
 			}
@@ -808,7 +808,9 @@ func (s *GraphQLExecutor) SolvePublicMutation(ctx context.Context, resolverName 
 func (s *GraphQLExecutor) HandlePayloadFormatting(ctx context.Context, param *models.CommonSystemParams, local string,
 	fields []*models.FieldInfo,
 	inputPayload map[string]interface{},
-	dbPayload map[string]interface{}) (map[string]interface{}, error) {
+	dbPayload map[string]interface{},
+	deltaUpdate bool,
+	) (map[string]interface{}, error) {
 
 	for _, f := range fields { // loop through the fields to format the payload
 
@@ -964,49 +966,95 @@ func (s *GraphQLExecutor) HandlePayloadFormatting(ctx context.Context, param *mo
 
 			if userInput, ok := inputPayload[f.Identifier].([]interface{}); ok && len(userInput) > 0 {
 
-				userInputLength := len(userInput)
+				// on delta update we update using the _id
+				// delte operation is ambigous here so this mode doesnt support delete operation only update
+				if deltaUpdate {
 
-				var err error
-				for i := 0; i < userInputLength; i++ {
-					var repeatedUserInput map[string]interface{}
+					userInputLength := len(userInput)
+					var err error
+					for i := 0; i < userInputLength; i++ {
+						var repeatedUserInput map[string]interface{}
 
-					repeatedUserInput = userInput[i].(map[string]interface{})
+						repeatedUserInput = userInput[i].(map[string]interface{})
 
-					var _currentID string
-					if id, ok := repeatedUserInput["_id"].(string); ok && id != "" { // if _id exists on the user input
-						_currentID = id
-					} else {
-						id = uuid.New().String()
-						repeatedUserInput["_id"] = id
+						var _currentID string
+						if id, ok := repeatedUserInput["_id"].(string); ok && id != "" { // if _id exists on the user input
+							_currentID = id
+						} else {
+							id = uuid.New().String()
+							repeatedUserInput["_id"] = id
+						}
+
+						if _currentID != "" {
+							if oldVals, ok := dbPayload[f.Identifier].([]interface{}); ok && len(oldVals) > 0 {
+								for j, _ov := range oldVals {
+									ov := _ov.(map[string]interface{})
+									if _oldID, ok := ov["_id"].(string); ok && _oldID == _currentID {
+										repeatedUserInput, err = s.HandlePayloadFormatting(ctx, param, local, f.SubFieldInfo, repeatedUserInput, ov, deltaUpdate)
+										if err != nil {
+											return nil, err
+										}
+										oldVals[j] = repeatedUserInput
+										break
+									}
+								}
+							} else {
+								return nil, errors.New("old value not found ! where is the _id is from ?")
+							}
+						} else {
+							repeatedUserInput, err = s.HandlePayloadFormatting(ctx, param, local, f.SubFieldInfo, repeatedUserInput, make(map[string]interface{}), deltaUpdate)
+							if err != nil {
+								return nil, err
+							}
+							if val, ok := dbPayload[f.Identifier].([]interface{}); ok && len(val) > 0 {
+								dbPayload[identifier] = append(val, repeatedUserInput)
+							} else { // if the field is empty, set the db payload to the new value
+								dbPayload[f.Identifier] = []interface{}{repeatedUserInput}
+							}
+						}
 					}
+				} else {
+					// this is normal update mode
+					// it usages total replace so update, delete all supported but 
+					// be sure that you have to send the entire array of objects
+					userInputLength := len(userInput)
+					var formattedInput []interface{}
+					var err error
+					for i := 0; i < userInputLength; i++ {
+						var repeatedUserInput map[string]interface{}
 
-					if _currentID != "" {
-						if oldVals, ok := dbPayload[f.Identifier].([]interface{}); ok && len(oldVals) > 0 {
-							for j, _ov := range oldVals {
+						repeatedUserInput = userInput[i].(map[string]interface{})
+
+						var _currentID string
+						if id, ok := repeatedUserInput["_id"].(string); ok { // if found
+							_currentID = id
+						} else {
+							id = uuid.New().String()
+							repeatedUserInput["_id"] = id
+						}
+						var oldUserInput map[string]interface{}
+						if oldVals, ok := dbPayload[f.Identifier].([]interface{}); ok {
+							for _, _ov := range oldVals {
 								ov := _ov.(map[string]interface{})
 								if _oldID, ok := ov["_id"].(string); ok && _oldID == _currentID {
-									repeatedUserInput, err = s.HandlePayloadFormatting(ctx, param, local, f.SubFieldInfo, repeatedUserInput, ov)
-									if err != nil {
-										return nil, err
-									}
-									oldVals[j] = repeatedUserInput
+									oldUserInput = ov
 									break
 								}
 							}
+							if oldUserInput == nil { // assuming not found or old array with no _id field
+								oldUserInput = make(map[string]interface{})
+							}
 						} else {
-							return nil, errors.New("old value not found ! where is the _id is from ?")
+							oldUserInput = make(map[string]interface{}) // assign an empty one
 						}
-					} else {
-						repeatedUserInput, err = s.HandlePayloadFormatting(ctx, param, local, f.SubFieldInfo, repeatedUserInput, make(map[string]interface{}))
+
+						repeatedUserInput, err = s.HandlePayloadFormatting(ctx, param, local, f.SubFieldInfo, repeatedUserInput, oldUserInput, deltaUpdate)
 						if err != nil {
 							return nil, err
 						}
-						if val, ok := dbPayload[f.Identifier].([]interface{}); ok && len(val) > 0 {
-							dbPayload[identifier] = append(val, repeatedUserInput)
-						} else { // if the field is empty, set the db payload to the new value
-							dbPayload[f.Identifier] = []interface{}{repeatedUserInput}
-						}
+						formattedInput = append(formattedInput, repeatedUserInput)
 					}
+					dbPayload[identifier] = formattedInput
 				}
 			}
 		case _const.ObjectField:
@@ -1017,7 +1065,7 @@ func (s *GraphQLExecutor) HandlePayloadFormatting(ctx context.Context, param *mo
 				} else {
 					oldUserInput = make(map[string]interface{}) // assign an empty one
 				}
-				repeatedUserInput, err := s.HandlePayloadFormatting(ctx, param, local, f.SubFieldInfo, userInput, oldUserInput)
+				repeatedUserInput, err := s.HandlePayloadFormatting(ctx, param, local, f.SubFieldInfo, userInput, oldUserInput, deltaUpdate)
 				if err != nil {
 					return nil, err
 				}

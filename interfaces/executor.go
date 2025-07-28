@@ -31,7 +31,7 @@ type GraphQLExecutorInterface interface {
 	SolvePublicMutation(ctx context.Context, resolverName string, _id *string, _ids []*string, status *string, local *string, userInputPayload interface{}, connect interface{}, disconnect interface{}, cache *models.ApplicationCache) ([]byte, error)
 
 	//ConnectDisconnectParamBuilder(ctx context.Context, project *models.Project, uid string, connectionIds map[string]interface{}, modelType *models.ModelType) ([]*shared.ConnectDisconnectParam, error)
-	HandlePayloadFormatting(ctx context.Context, param *models.CommonSystemParams, local string, fields []*models.FieldInfo, inputPayload map[string]interface{}, dbPayload map[string]interface{}) (map[string]interface{}, error)
+	HandlePayloadFormatting(ctx context.Context, param *models.CommonSystemParams, local string, fields []*models.FieldInfo, inputPayload map[string]interface{}, dbPayload map[string]interface{}, deltaUpdate bool) (map[string]interface{}, error)
 
 	//UploadImageFromURL(ctx context.Context, projectId, modelName, imageUrl string) (*models.FileDetails, error)
 	//HandleMediaURL(ctx context.Context, param *shared.CommonSystemParams, media map[string]interface{}) (interface{}, error)

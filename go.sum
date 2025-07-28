@@ -75,6 +75,8 @@ github.com/apito-io/databasedriver v0.0.9 h1:AB8HXGC8x47IcTErBK7KEJl93mQn+ElqVmO
 github.com/apito-io/databasedriver v0.0.9/go.mod h1:iPpEJyoKpmW7N5QrG5A1g/yJvvkHsjGi9KosrDs5cp4=
 github.com/apito-io/go-apito-plugin-sdk v0.1.21 h1:SQdWZ2YdjRr/AqlZNy4snM8+QIKlOxlUn8fSJJMl35Q=
 github.com/apito-io/go-apito-plugin-sdk v0.1.21/go.mod h1:M+JvuY7VBmeCGsueFOMB4XCDmQHCGnpMh0JbjddgU+Y=
+github.com/apito-io/go-internal-sdk v1.2.6 h1:/dOpqHBgOB2VXeMjCPFWW1TnC0PfBnYgbbJn0u5Yrvo=
+github.com/apito-io/go-internal-sdk v1.2.6/go.mod h1:lAAV4VQf4ViJa30C7kG+30nmlX/iCp4Eg21mkcnfnhA=
 github.com/apito-io/oas v1.2.3 h1:U0JCqcFVoe3buXjh5cST/JDpCw1IySCxJ/sbLVxdDMQ=
 github.com/apito-io/oas v1.2.3/go.mod h1:YAoGfhstfqYfpW8P76FnJ5Kq0hmeOhxAUNbEBtK6xqM=
 github.com/apito-io/types v0.1.4 h1:r5/14TDzE1QbxxwHbrhpTgACi+kgbnCzjyR4Gr5NYus=

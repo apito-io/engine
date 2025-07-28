@@ -3507,7 +3507,8 @@ func (s *GraphQLServer) UpsertModelDataFnFn(p graphql.ResolveParams) (interface{
 			}
 
 			//#todo need image param validation
-			modifiedPayload, err := s.GraphQLExecutor.HandlePayloadFormatting(cache.Ctx, param, local, modelType.Fields, inputPayload, doc.Data)
+			// upsert has no delta update support for now
+			modifiedPayload, err := s.GraphQLExecutor.HandlePayloadFormatting(cache.Ctx, param, local, modelType.Fields, inputPayload, doc.Data, false)
 			if err != nil {
 				return nil, err
 			}
@@ -3565,7 +3566,8 @@ func (s *GraphQLServer) UpsertModelDataFnFn(p graphql.ResolveParams) (interface{
 		}
 
 		//#todo need image param validation
-		modifiedPayload, err := s.GraphQLExecutor.HandlePayloadFormatting(cache.Ctx, param, local, modelType.Fields, inputPayload, make(map[string]interface{}))
+		// upsert has no delta update support for now
+		modifiedPayload, err := s.GraphQLExecutor.HandlePayloadFormatting(cache.Ctx, param, local, modelType.Fields, inputPayload, make(map[string]interface{}), false)
 		if err != nil {
 			return nil, err
 		}
