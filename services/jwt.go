@@ -198,12 +198,6 @@ func (s *JWTService) VerifyIDToken(ctx context.Context, token string) (*models.T
 			//ctx.Set("project_access", access)
 		}
 
-		if access, ok := claims["is_super_admin"].(string); ok {
-			a, _ := strconv.ParseBool(access)
-			tokenClaims.IsSuperAdmin = a
-			//ctx.Set("is_super_admin", a)
-		}
-
 		if email, ok := claims["email"].(string); ok {
 			tokenClaims.Email = email
 			//ctx.Set("email", email)
@@ -361,10 +355,6 @@ func (s *JWTService) GenerateLoginIDToken(ctx context.Context, projectWithRoles 
 		claims["read_only"] = "true"
 	}
 
-	if user.IsSuperAdmin {
-		claims["is_super_admin"] = "true"
-	}
-
 	// overwrite if project exists
 	if projectWithRoles.Project != nil {
 
@@ -444,11 +434,6 @@ func (s *JWTService) GenerateLoginRefreshToken(projectWithRoles *models.ProjectW
 	if user.ReadOnlyProject {
 		_payload["project_role"] = "demo"
 		_payload["read_only"] = "true"
-	}
-
-	if user.IsSuperAdmin {
-		// super admin so overwrite
-		_payload["is_super_admin"] = "true"
 	}
 
 	if projectWithRoles.Project != nil {

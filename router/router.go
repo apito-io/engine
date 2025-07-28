@@ -3,16 +3,18 @@ package router
 import (
 	"context"
 	"fmt"
+	"net/http"
+	"strings"
+
 	"github.com/apito-io/engine/controller"
 	"github.com/apito-io/engine/models"
 	"github.com/apito-io/engine/resolver"
 	im "github.com/apito-io/engine/router/middleware"
+	"github.com/apito-io/engine/utility"
 	"github.com/jboursiquot/go-proverbs"
 	"github.com/labstack/echo-contrib/pprof"
 	"github.com/labstack/echo/v4"
 	"github.com/labstack/echo/v4/middleware"
-	"net/http"
-	"strings"
 )
 
 // InitRouter #todo manage better connection in redis and gRPC
@@ -114,6 +116,13 @@ func InitRouter(cfg *models.Config) (*echo.Echo, error) {
 
 	// Store the monitor in the server for later access (optional)
 	server.PluginMonitor = pluginMonitor
+
+	fmt.Println(" ---> initializing goroutine monitor <--- ")
+	// Create and start goroutine monitoring
+	goroutineMonitor := utility.NewGoroutineMonitor()
+	go func() {
+		goroutineMonitor.StartMonitoring(ctx)
+	}()
 
 	fmt.Println("initializing graphql & auth controller")
 	graphCtrl := controller.GetGraphQLController(cfg, server)

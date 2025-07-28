@@ -96,6 +96,10 @@ func main() {
 
 	<-upg.Exit()
 
+	// Create shutdown context with timeout
+	shutdownCtx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
 	// Make sure to set a deadline on exiting the process
 	// after upg.Exit() is closed. No new upgrades can be
 	// performed if the parent doesn't exit.
@@ -104,8 +108,14 @@ func main() {
 		os.Exit(1)
 	})
 
-	// Wait for connections to drain.
-	_route.Shutdown(context.Background())
+	fmt.Println("Starting graceful shutdown...")
+
+	// Shutdown server gracefully
+	if err := _route.Shutdown(shutdownCtx); err != nil {
+		log.Printf("Server shutdown error: %v", err)
+	}
+
+	fmt.Println("Graceful shutdown completed")
 }
 
 func fmtConfig(cfg *models.Config) []byte {

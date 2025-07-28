@@ -420,8 +420,13 @@ func (s *GraphQLServer) LoadHashiCorpPlugin(ctx context.Context, _dir string, _p
 
 	// If Go plugin is in debug mode, store PID for later delve attachment
 	if _pluginDetails.Debug && _pluginDetails.Language == protobuff.PluginLanguage_PLUGIN_LANGUAGE_GO {
-		// Give plugin time to start before attempting attachment
-		time.Sleep(2 * time.Second)
+		// Give plugin time to start before attempting attachment with context timeout check
+		select {
+		case <-time.After(2 * time.Second):
+		case <-ctx.Done():
+			client.Kill()
+			return nil, fmt.Errorf("plugin debug wait cancelled due to context timeout")
+		}
 	}
 
 	// Connect via RPC

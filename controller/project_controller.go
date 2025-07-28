@@ -221,7 +221,6 @@ func (a *authCtrl) ProjectCreation(c echo.Context) error {
 				{
 					ID:           user.ID,
 					Role:         "admin",
-					IsSuperAdmin: true,
 					IsAdmin:      true,
 				},
 			},
@@ -254,7 +253,6 @@ func (a *authCtrl) ProjectCreation(c echo.Context) error {
 				{
 					ID:           user.ID,
 					Role:         "admin",
-					IsSuperAdmin: true,
 					IsAdmin:      true,
 				},
 			},
@@ -356,29 +354,9 @@ func (a *authCtrl) DemoProjectSwitch(c echo.Context) error {
 		})
 	}
 
-	if user.IsSuperAdmin {
-		// check if that project even exists or not
-		project, err := a.graphQLServer.SystemDriver.GetProject(ctx, req.ID)
-		if err != nil {
-			return c.JSON(http.StatusBadRequest, &models.HttpResponse{
-				Message: err.Error(),
-				Code:    http.StatusBadRequest,
-			})
-		}
-
-		if project.ID != "" {
-			user.CurrentProjectID = req.ID
-		} else {
-			return c.JSON(http.StatusBadRequest, &models.HttpResponse{
-				Message: "What are you switching?",
-				Code:    http.StatusBadRequest,
-			})
-		}
-	} else {
-		user.CurrentProjectID = req.ID
-		user.ReadOnlyProject = true
-	}
-
+	user.CurrentProjectID = req.ID
+	user.ReadOnlyProject = true
+	
 	err = a.graphQLServer.SystemDriver.UpdateSystemUser(ctx, user, false)
 	if err != nil {
 		return c.JSON(http.StatusInternalServerError, &models.HttpResponse{
@@ -478,6 +456,7 @@ func (a *authCtrl) ProjectList(c echo.Context) error {
 			Name:        p.Name,
 			Description: p.Description,
 			CreatedAt:   p.CreatedAt,
+			ProjectType: p.ProjectType,
 		}
 		if p.Driver != nil {
 			_project.Driver = &models.DriverCredentials{Engine: p.Driver.Engine}

@@ -56,7 +56,7 @@ func ModelSchemaBuilder(modelType *models.ModelType, update bool) *oas.Schema {
 					//Serial:                  0,
 					Label:                   "ID",
 					SystemGenerated:         true,
-					RepeatedGroupIdentifier: f.Identifier,
+					ParentField: f.Identifier,
 				})
 			}
 			fakeModel := &models.ModelType{Fields: fields}

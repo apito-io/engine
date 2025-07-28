@@ -97,7 +97,7 @@ func (m *MariaDBDriver) AddModel(ctx context.Context, project *models.Project, m
 }
 
 // AddFieldToModel adds a new field to an existing model in the project
-func (m *MariaDBDriver) AddFieldToModel(ctx context.Context, param *models.CommonSystemParams, isUpdate bool, repeatedGroupIdentifier string) (*models.ModelType, error) {
+func (m *MariaDBDriver) AddFieldToModel(ctx context.Context, param *models.CommonSystemParams, isUpdate bool, parent_field string) (*models.ModelType, error) {
 	modelsTable := fmt.Sprintf("p_%s_models", param.ProjectID)
 
 	// Get current model data
@@ -200,7 +200,7 @@ func (m *MariaDBDriver) DropModel(ctx context.Context, project *models.Project, 
 }
 
 // CreateIndex creates an index for a model in the project
-func (m *MariaDBDriver) CreateIndex(ctx context.Context, param *models.CommonSystemParams, fieldName string, repeatedGroupIdentifier string) error {
+func (m *MariaDBDriver) CreateIndex(ctx context.Context, param *models.CommonSystemParams, fieldName string, parent_field string) error {
 	tableName := fmt.Sprintf("p_%s_documents", param.ProjectID)
 	indexName := fmt.Sprintf("idx_%s_%s_%s", param.ProjectID, param.Model.Name, fieldName)
 

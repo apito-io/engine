@@ -32,7 +32,7 @@ type ModelType struct {
 type Validation struct {
 	Required bool     `json:"required,omitempty" firestore:"required,omitempty" bson:"required,omitempty"`
 	Hide     bool     `json:"hide,omitempty" firestore:"hide,omitempty" bson:"hide,omitempty"`
-	AsTitle  bool     `json:"as_title,omitempty" firestore:"as_title,omitempty" bson:"as_title,omitempty"`
+	//AsTitle  bool     `json:"as_title,omitempty" firestore:"as_title,omitempty" bson:"as_title,omitempty"`
 	Locals   []string `json:"locals,omitempty" firestore:"locals,omitempty" bson:"locals,omitempty"`
 	Unique   bool     `json:"unique,omitempty" firestore:"unique,omitempty" bson:"unique,omitempty"`
 
@@ -49,7 +49,7 @@ type Validation struct {
 	IsGallery     bool `json:"is_gallery,omitempty" firestore:"is_gallery,omitempty" bson:"is_gallery,omitempty"`
 	IsPassword    bool `json:"is_password,omitempty" firestore:"is_gallery,omitempty" bson:"is_password,omitempty"`
 	//IsSystemRole      bool      `json:"is_system_role,omitempty" firestore:"is_gallery,omitempty" bson:"is_system_role,omitempty"`
-	IsUrl bool `json:"is_url,omitempty" firestore:"is_url,omitempty" bson:"is_url,omitempty"`
+	IsURL bool `json:"is_url,omitempty" firestore:"is_url,omitempty" bson:"is_url,omitempty"`
 	// hide the field for the roles
 	HideForRoles []string `json:"hide_for_roles,omitempty" firestore:"hide_for_roles,omitempty" bson:"hide_for_roles,omitempty"`
 }
@@ -65,7 +65,7 @@ type FieldInfo struct {
 	Serial                  uint32       `json:"serial,omitempty" firestore:"serial,omitempty" bson:"serial,omitempty"`
 	Label                   string       `json:"label,omitempty" firestore:"label,omitempty" bson:"label,omitempty"`
 	SystemGenerated         bool         `json:"system_generated,omitempty" firestore:"system_generated,omitempty" bson:"system_generated,omitempty"`
-	RepeatedGroupIdentifier string       `json:"repeated_group_identifier,omitempty" firestore:"repeated_group_identifier,omitempty" bson:"repeated_group_identifier,omitempty"`
+	//RepeatedGroupIdentifier string       `json:"repeated_group_identifier,omitempty" firestore:"repeated_group_identifier,omitempty" bson:"repeated_group_identifier,omitempty"`
 	IsObjectField           bool         `json:"is_object_field,omitempty" firestore:"is_object_field,omitempty" bson:"is_object_field,omitempty"`
 	ParentField             string       `json:"parent_field,omitempty" firestore:"parent_field,omitempty" bson:"parent_field,omitempty"`
 	EnableIndexing          bool         `json:"enable_indexing,omitempty" firestore:"enable_indexing,omitempty" bson:"enable_indexing,omitempty"`

@@ -358,14 +358,9 @@ func (s *SystemDataloader) buildCommonSystemParam(i echo.Context) (*models.Commo
 
 	role := i.Get("role")
 	if role == nil || role == "" {
-		return nil, errors.New("invalid Role, Can't Do it")
+		return nil, errors.New("role is required for this operation")
 	}
 	param.Role = &models.Role{ID: role.(string)}
-
-	isSuperAdmin := i.Get("is_super_admin")
-	if isSuperAdmin != nil {
-		param.Role.IsSuperAdmin = isSuperAdmin.(bool)
-	}
 
 	projectPlan := i.Get("plan")
 	if projectPlan != nil {

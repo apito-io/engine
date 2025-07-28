@@ -392,7 +392,7 @@ func (s *SQLDriver) DropModel(ctx context.Context, project *models.Project, mode
 }
 
 // CreateIndex creates an index for a model in the project.
-func (s *SQLDriver) CreateIndex(ctx context.Context, param *models.CommonSystemParams, fieldName string, repeatedGroupIdentifier string) error {
+func (s *SQLDriver) CreateIndex(ctx context.Context, param *models.CommonSystemParams, fieldName string, parent_field string) error {
 	tableName := utility.SingularResourceName(param.Model.Name)
 	indexName := fmt.Sprintf("idx_%s_%s", tableName, fieldName)
 

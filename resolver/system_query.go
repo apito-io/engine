@@ -22,7 +22,7 @@ import (
 /*func (s *GraphQLServer) SwitchProjectResolverFn(p graphql.ResolveParams) (interface{}, error) {
 }*/
 
-func (s *GraphQLServer) EnterProjectResolverFn(p graphql.ResolveParams) (interface{}, error) {
+/* func (s *GraphQLServer) EnterProjectResolverFn(p graphql.ResolveParams) (interface{}, error) {
 
 	var (
 		v      = p.Context.Value
@@ -58,10 +58,6 @@ func (s *GraphQLServer) EnterProjectResolverFn(p graphql.ResolveParams) (interfa
 		})
 	}
 
-	if !user.IsSuperAdmin {
-		return nil, ae.NotAllowed
-	}
-
 	user.CurrentProjectID = projectId
 	err = s.SystemDriver.UpdateSystemUser(p.Context, user, false)
 	if err != nil {
@@ -72,13 +68,13 @@ func (s *GraphQLServer) EnterProjectResolverFn(p graphql.ResolveParams) (interfa
 	/* refreshTokens, err := utility.NewRefreshTokenAuthenticator(s.Cfg, token)
 	if err != nil {
 		return nil, err
-	} */
+	}
 
 	return map[string]interface{}{
 		//"token": refreshTokens.IDToken,
 		"token": token,
 	}, nil
-}
+} */
 
 func (s *GraphQLServer) ConnectSupportResolverFn(p graphql.ResolveParams) (interface{}, error) {
 
@@ -287,7 +283,6 @@ func (s *GraphQLServer) GetProjectTenantsResolverFn(p graphql.ResolveParams) (in
 	var (
 		v      = p.Context.Value
 		router = v("router").(echo.Context)
-		ctx    = p.Context
 	)
 
 	cache, err := s.GetApplicationCache(router)
@@ -315,12 +310,12 @@ func (s *GraphQLServer) GetProjectTenantsResolverFn(p graphql.ResolveParams) (in
 	param.IsSystemRequest = true
 	param.TenantID = "" // we are getting all tenants so no tenant id is required
 
-	driver, err := s.GraphQLExecutor.GetProjectDriver(ctx)
+	driver, err := s.GraphQLExecutor.GetProjectDriver(cache.Ctx)
 	if err != nil {
 		return nil, err
 	}
 
-	resp, err := driver.QueryMultiDocumentOfProject(p.Context, param)
+	resp, err := driver.QueryMultiDocumentOfProject(cache.Ctx, param)
 	if err != nil {
 		return nil, err
 	}
@@ -626,7 +621,6 @@ func (s *GraphQLServer) ListDetailedModelsDataInfoResolverFn(p graphql.ResolvePa
 	var (
 		v      = p.Context.Value
 		router = v("router").(echo.Context)
-		ctx    = p.Context
 	)
 
 	cache, err := s.GetApplicationCache(router)
@@ -657,18 +651,12 @@ func (s *GraphQLServer) ListDetailedModelsDataInfoResolverFn(p graphql.ResolvePa
 
 	param.IsSystemRequest = true
 
-	// inject temp tenant id to fetch specific tenant data
-	if val := router.Get("temp_tenant_id"); val != nil {
-		fmt.Println("temp_tenant_id", val)
-		param.TenantID = val.(string)
-	}
-
-	driver, err := s.GraphQLExecutor.GetProjectDriver(ctx)
+	driver, err := s.GraphQLExecutor.GetProjectDriver(cache.Ctx)
 	if err != nil {
 		return nil, err
 	}
 
-	return driver.QueryMultiDocumentOfProject(p.Context, param)
+	return driver.QueryMultiDocumentOfProject(cache.Ctx, param)
 }
 
 func (s *GraphQLServer) ListDetailedModelsDataCountResolverFn(p graphql.ResolveParams) (interface{}, error) {
@@ -678,7 +666,6 @@ func (s *GraphQLServer) ListDetailedModelsDataCountResolverFn(p graphql.ResolveP
 	var (
 		v      = p.Context.Value
 		router = v("router").(echo.Context)
-		ctx    = p.Context
 	)
 
 	cache, err := s.GetApplicationCache(router)
@@ -709,12 +696,12 @@ func (s *GraphQLServer) ListDetailedModelsDataCountResolverFn(p graphql.ResolveP
 
 	param.IsSystemRequest = true
 
-	driver, err := s.GraphQLExecutor.GetProjectDriver(ctx)
+	driver, err := s.GraphQLExecutor.GetProjectDriver(cache.Ctx)
 	if err != nil {
 		return nil, err
 	}
 
-	return driver.CountMultiDocumentOfProject(p.Context, param, false)
+	return driver.CountMultiDocumentOfProject(cache.Ctx, param, false)
 }
 
 func (s *GraphQLServer) ListProjectTeams(p graphql.ResolveParams) (interface{}, error) {
@@ -952,7 +939,6 @@ func (s *GraphQLServer) ListSingleModelDataInfoResolverFn(p graphql.ResolveParam
 	var (
 		v      = p.Context.Value
 		router = v("router").(echo.Context)
-		ctx    = p.Context
 	)
 
 	cache, err := s.GetApplicationCache(router)
@@ -1011,12 +997,12 @@ func (s *GraphQLServer) ListSingleModelDataInfoResolverFn(p graphql.ResolveParam
 	param.SkipPagination = true
 	param.SkipSort = true
 
-	driver, err := s.GraphQLExecutor.GetProjectDriver(ctx)
+	driver, err := s.GraphQLExecutor.GetProjectDriver(cache.Ctx)
 	if err != nil {
 		return nil, err
 	}
 
-	doc, err := driver.GetSingleProjectDocument(p.Context, param)
+	doc, err := driver.GetSingleProjectDocument(cache.Ctx, param)
 	if err != nil {
 		return nil, err
 	}
@@ -1049,7 +1035,6 @@ func (s *GraphQLServer) ListDocumentRevisionInfoResolverFn(p graphql.ResolvePara
 	var (
 		v      = p.Context.Value
 		router = v("router").(echo.Context)
-		ctx    = p.Context
 	)
 
 	cache, err := s.GetApplicationCache(router)
@@ -1090,12 +1075,12 @@ func (s *GraphQLServer) ListDocumentRevisionInfoResolverFn(p graphql.ResolvePara
 	}
 
 	param.Model = modelType
-	driver, err := s.GraphQLExecutor.GetProjectDriver(ctx)
+	driver, err := s.GraphQLExecutor.GetProjectDriver(cache.Ctx)
 	if err != nil {
 		return nil, err
 	}
 
-	doc, err := driver.GetSingleProjectDocumentRevisions(p.Context, param)
+	doc, err := driver.GetSingleProjectDocumentRevisions(cache.Ctx, param)
 	if err != nil {
 		return nil, err
 	}
@@ -1111,7 +1096,6 @@ func (s *GraphQLServer) ListSingleModelHasManyResolverFn(p graphql.ResolveParams
 	var (
 		v      = p.Context.Value
 		router = v("router").(echo.Context)
-		ctx    = p.Context
 	)
 
 	cache, err := s.GetApplicationCache(router)
@@ -1149,12 +1133,12 @@ func (s *GraphQLServer) ListSingleModelHasManyResolverFn(p graphql.ResolveParams
 		param.KnownAs = val
 	}
 
-	driver, err := s.GraphQLExecutor.GetProjectDriver(ctx)
+	driver, err := s.GraphQLExecutor.GetProjectDriver(cache.Ctx)
 	if err != nil {
 		return nil, err
 	}
 
-	result, err := driver.GetAllRelationDocumentsOfSingleDocument(p.Context, formModel, param)
+	result, err := driver.GetAllRelationDocumentsOfSingleDocument(cache.Ctx, formModel, param)
 	if err != nil {
 		return nil, err
 	}

@@ -215,31 +215,65 @@ func BuildGraphQL(ctx context.Context, cfg *models.Config, extensionRouter *echo
 
 	// redis & graphql subscription
 	go func() {
+		defer func() {
+			if r := recover(); r != nil {
+				fmt.Printf("GraphQL subscription goroutine panic: %v\n", r)
+			}
+		}()
+
 		subs, err := GetGraphQLSubscriptions()
 		if err != nil {
 			fmt.Println(err.Error())
+			return
 		}
 		srv.GraphQLSubscription = subs
 
-		ctx := context.Background()
+		ctx, cancel := context.WithCancel(context.Background())
+		defer cancel()
 
 		subscriber := srv.PubSubService.Subscribe(ctx, "system_notify_channel")
-		for {
-			msg, err := subscriber.ReceiveMessage(ctx)
-			if err != nil {
-				fmt.Println(err.Error())
-			}
 
-			if msg != nil {
-				var data models.SubscriptionEvent
-				err = json.Unmarshal([]byte(msg.Payload), &data)
+		// Add graceful shutdown channel monitoring
+		shutdownChan := make(chan struct{})
+		defer close(shutdownChan)
+
+		for {
+			select {
+			case <-ctx.Done():
+				fmt.Println("GraphQL subscription context cancelled, exiting")
+				return
+			case <-shutdownChan:
+				return
+			default:
+				msg, err := subscriber.ReceiveMessage(ctx)
 				if err != nil {
-					fmt.Println(err.Error())
+					fmt.Printf("Subscription receive error: %v\n", err)
+					// Exit on persistent errors to prevent goroutine accumulation
+					if ctx.Err() != nil {
+						return
+					}
+					time.Sleep(1 * time.Second) // Brief delay before retry
+					continue
 				}
 
-				for userId, sub := range subs.getSubscribers(nil) {
-					if userId == data.UserID {
-						sub.Data <- data
+				if msg != nil {
+					var data models.SubscriptionEvent
+					err = json.Unmarshal([]byte(msg.Payload), &data)
+					if err != nil {
+						fmt.Printf("Subscription unmarshal error: %v\n", err)
+						continue
+					}
+
+					for userId, sub := range subs.getSubscribers(nil) {
+						if userId == data.UserID {
+							select {
+							case sub.Data <- data:
+							case <-ctx.Done():
+								return
+							default:
+								// Non-blocking send to prevent deadlock
+							}
+						}
 					}
 				}
 			}
@@ -695,6 +729,7 @@ func (s *GraphQLServer) GetApplicationCache(router echo.Context) (*models.Applic
 	}
 
 	cache := &models.ApplicationCache{
+		Ctx:     ctx,
 		Project: _project,
 		Param:   param,
 	}
@@ -903,11 +938,6 @@ func (s *GraphQLServer) buildCommonSystemParam(i echo.Context) (*models.CommonSy
 		return nil, errors.New("invalid Role, Can't Do it")
 	}
 	param.Role = &models.Role{ID: role.(string)}
-
-	isSuperAdmin := i.Get("is_super_admin")
-	if isSuperAdmin != nil {
-		param.Role.IsSuperAdmin = isSuperAdmin.(bool)
-	}
 
 	readOnly := i.Get("read_only")
 	if readOnly != nil {

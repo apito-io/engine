@@ -2,94 +2,27 @@ package schemas
 
 import (
 	"context"
-	"strings"
-
 	"github.com/apito-io/engine/models"
 	"github.com/apito-io/engine/resolver"
 	"github.com/apito-io/engine/scaler"
-	"github.com/apito-io/engine/utility"
 	"github.com/labstack/echo/v4"
 	"github.com/tailor-inc/graphql"
 	"github.com/tailor-inc/graphql/gqlerrors"
 	"github.com/teivah/onecontext"
 )
 
-func SystemSchema(ctx context.Context, cache *models.ApplicationCache, graphqlRequest *models.GraphQLIncomingRequest, server *resolver.GraphQLServer, echo echo.Context) (*graphql.Result, error) {
+func SystemSchema(ctx context.Context, graphqlRequest *models.GraphQLIncomingRequest, server *resolver.GraphQLServer, echo echo.Context) (*graphql.Result, error) {
 
-	incomingRequest, err := utility.ExtractGraphQLOperationName(graphqlRequest.Query, cache.Project.Schema, true)
-	if err != nil {
-		return nil, err
-	}
+	queries := server.SystemQueries
+	mutations := server.SystemMutations
 
-	queries := make(graphql.Fields)
-	mutations := make(graphql.Fields)
-
-	if incomingRequest == nil {
-		queries = server.SystemQueries
-		mutations = server.SystemMutations
-	} else {
-		for _, req := range incomingRequest {
-			switch req.OperationType {
-			case "query":
-				for _, query := range req.FilteredModels {
-					if val, ok := server.SystemQueries[query.Name]; ok {
-						queries[query.Name] = val
-						break
-					}
-				}
-			case "mutation":
-				for _, query := range req.FilteredModels {
-					if val, ok := server.SystemMutations[query.Name]; ok {
-						mutations[query.Name] = val
-						break
-					}
-				}
-			}
-		}
-	}
-
-	if strings.HasPrefix(graphqlRequest.Query, "mutation") && cache.Param.Role.ID == "demo" && cache.Param.Role.SystemGenerated {
+	role := echo.Get("role")
+	if role == "demo" {
 		return &graphql.Result{Errors: []gqlerrors.FormattedError{
 			{
 				Message: "You Cant Change Anything in a Demo Project",
 			},
 		}}, nil
-	}
-
-	isSuperAdmin := echo.Get("is_super_admin")
-	if isSuperAdmin != nil {
-		if isSuperAdmin.(bool) == true {
-			server.Mutex.Lock()
-			/*query["listAllProjects"] = &graphql.Field{
-				Name:    "ListAllProjects",
-				Type:    graphql.NewList(objects.ProjectDetails),
-				Resolve: server.ListAllProjectsResolverFn,
-			}*/
-			queries["enterProject"] = &graphql.Field{
-				Name: "EnterProject",
-				Type: graphql.NewObject(graphql.ObjectConfig{
-					Name: "EnterProjectResponse",
-					Fields: graphql.Fields{
-						"token": &graphql.Field{
-							Type: graphql.String,
-						},
-						"role": &graphql.Field{
-							Type: graphql.String,
-						},
-					},
-				}),
-				Args: graphql.FieldConfigArgument{
-					"id": &graphql.ArgumentConfig{
-						Type: graphql.NewNonNull(graphql.String),
-					},
-					"token": &graphql.ArgumentConfig{
-						Type: graphql.NewNonNull(graphql.String),
-					},
-				},
-				Resolve: server.EnterProjectResolverFn,
-			}
-			server.Mutex.Unlock()
-		}
 	}
 
 	// default query
@@ -162,9 +95,9 @@ func SystemSchema(ctx context.Context, cache *models.ApplicationCache, graphqlRe
 	}
 
 	routerCtx := context.WithValue(context.Background(), "router", echo)
-	projectID := context.WithValue(context.Background(), "project_id", cache.Project.ID)
-	tempTenantID := context.WithValue(context.Background(), "tenant_id", cache.Param.TenantID)
-	ctx, closeContext := onecontext.Merge(routerCtx, projectID, tempTenantID)
+	//projectID := context.WithValue(context.Background(), "project_id", cache.Project.ID)
+	//tempTenantID := context.WithValue(context.Background(), "tenant_id", cache.Param.TenantID)
+	ctx, closeContext := onecontext.Merge(ctx, routerCtx)
 	defer closeContext()
 
 	return graphql.Do(graphql.Params{

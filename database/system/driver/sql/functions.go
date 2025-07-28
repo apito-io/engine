@@ -113,7 +113,7 @@ func (p *PostgreSQLDriver) ListAllProjects(ctx context.Context, userId string) (
 		return nil, err
 	}
 
-	if !user.IsSuperAdmin {
+	if !user.IsAdmin {
 		return nil, fmt.Errorf("not allowed")
 	}
 

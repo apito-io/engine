@@ -187,7 +187,6 @@ func (s *SchemaObjects) InitPrivateObjects() *ObjectModels {
 				"project_user":               &graphql.Field{Type: graphql.Boolean},
 				"administrative_permissions": &graphql.Field{Type: graphql.NewList(graphql.String)},
 
-				"is_super_admin": &graphql.Field{Type: graphql.Boolean},
 				"is_admin":       &graphql.Field{Type: graphql.Boolean},
 
 				"read_only_project":      &graphql.Field{Type: graphql.Boolean},

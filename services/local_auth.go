@@ -47,7 +47,6 @@ func (l *LocalAuthService) Signup(ctx context.Context, registerRequest *models.R
 	user.IsActive = true
 	user.CreatedAt = utility.GetCurrentTime()
 	user.UpdatedAt = utility.GetCurrentTime()
-	user.IsSuperAdmin = false
 	user.ReadOnlyProject = false
 	user.ProjectLimit = 1
 

@@ -51,7 +51,6 @@ type SystemUser struct {
 	ProjectAccessPermissions []string `json:"project_access_permissions,omitempty" bson:"project_access_permissions,omitempty"`
 
 	IsAdmin      bool `json:"is_admin,omitempty" firestore:"is_admin,omitempty" bson:"is_admin,omitempty"`
-	IsSuperAdmin bool `json:"is_super_admin,omitempty" firestore:"is_super_admin,omitempty" bson:"is_super_admin,omitempty"`
 
 	RefreshToken    string `json:"refresh_token,omitempty" firestore:"refresh_token,omitempty" bson:"refresh_token,omitempty"`
 	AccessToken     string `json:"access_token,omitempty" firestore:"access_token,omitempty" bson:"access_token,omitempty"`

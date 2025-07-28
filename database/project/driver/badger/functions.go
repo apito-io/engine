@@ -96,7 +96,7 @@ func (b *BadgerDriver) AddModel(ctx context.Context, project *models.Project, mo
 }
 
 // AddFieldToModel adds a new field to an existing model in the project
-func (b *BadgerDriver) AddFieldToModel(ctx context.Context, param *models.CommonSystemParams, isUpdate bool, repeatedGroupIdentifier string) (*models.ModelType, error) {
+func (b *BadgerDriver) AddFieldToModel(ctx context.Context, param *models.CommonSystemParams, isUpdate bool, parent_field string) (*models.ModelType, error) {
 	modelKey := b.generateKey("project_model", param.ProjectID, param.Model.Name)
 
 	// Get current model data
@@ -275,7 +275,7 @@ func (b *BadgerDriver) DropModel(ctx context.Context, project *models.Project, m
 }
 
 // CreateIndex creates an index for a model in the project (no-op for BadgerDB)
-func (b *BadgerDriver) CreateIndex(ctx context.Context, param *models.CommonSystemParams, fieldName string, repeatedGroupIdentifier string) error {
+func (b *BadgerDriver) CreateIndex(ctx context.Context, param *models.CommonSystemParams, fieldName string, parent_field string) error {
 	// BadgerDB doesn't support secondary indexes directly
 	return nil
 }

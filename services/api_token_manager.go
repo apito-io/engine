@@ -10,13 +10,14 @@ import (
 	"encoding/binary"
 	"errors"
 	"fmt"
+	"io"
+	"time"
+
 	"github.com/apito-io/engine/interfaces"
 	"github.com/apito-io/engine/models"
 	"github.com/apito-io/engine/utility"
 	"github.com/google/uuid"
 	"github.com/labstack/echo/v4"
-	"io"
-	"time"
 )
 
 var (
@@ -104,9 +105,6 @@ func (m *APIKeyManager) GenerateKey(payload *models.TokenClaims) (string, error)
 		return "", errors.New("TokenUniqueID must be 12 characters")
 	}
 	data = append(data, stringToFixedBytes(payload.TokenUniqueID, 12)...)
-
-	// IsSuperAdmin (1 byte)
-	data = append(data, boolToByte(payload.IsSuperAdmin))
 
 	// TenantID (UUID - 16 bytes)
 	data = append(data, uuidToBytes(payload.TenantID)...)
@@ -199,13 +197,6 @@ func (m *APIKeyManager) Validate(ctx context.Context, key string, skipDBCheck bo
 			return nil, err
 		}
 	}
-
-	// IsSuperAdmin (1 byte)
-	if offset >= len(data) {
-		return nil, ErrInvalidPayload
-	}
-	payload.IsSuperAdmin = data[offset] == 1
-	offset++
 
 	// TenantID (16 bytes)
 	if offset+16 > len(data) {

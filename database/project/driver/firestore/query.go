@@ -60,7 +60,7 @@ func (a *FireStoreDriver) DropModel(ctx context.Context, project *models.Project
 	return err
 }
 
-func (a *FireStoreDriver) CreateIndex(ctx context.Context, param *models.CommonSystemParams, fieldName string, repeatedGroupIdentifier string) error {
+func (a *FireStoreDriver) CreateIndex(ctx context.Context, param *models.CommonSystemParams, fieldName string, parent_field string) error {
 	// Firestore automatically creates indexes for single field queries
 	// Composite indexes need to be created through Firebase Console or gcloud CLI
 	// For this implementation, we'll just return nil as single field indexes are automatic
@@ -237,12 +237,12 @@ func (a *FireStoreDriver) AddModel(ctx context.Context, project *models.Project,
 	return project.Schema, nil
 }
 
-func (a *FireStoreDriver) AddFieldToModel(ctx context.Context, param *models.CommonSystemParams, isUpdate bool, repeatedGroupIdentifier string) (*models.ModelType, error) {
-	if repeatedGroupIdentifier == "" && isUpdate {
+func (a *FireStoreDriver) AddFieldToModel(ctx context.Context, param *models.CommonSystemParams, isUpdate bool, parent_field string) (*models.ModelType, error) {
+	if parent_field == "" && isUpdate {
 		param.Model.Fields = append(param.Model.Fields, param.FieldInfo)
-	} else if repeatedGroupIdentifier != "" {
+	} else if parent_field != "" {
 		for _, f := range param.Model.Fields {
-			if f.Identifier == repeatedGroupIdentifier {
+			if f.Identifier == parent_field {
 				subField := param.FieldInfo
 				var found bool
 				for i, s := range f.SubFieldInfo {

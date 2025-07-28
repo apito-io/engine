@@ -20,7 +20,6 @@ type TokenClaims struct {
 	UserID string `json:"user_id"`
 	Email  string `json:"email"`
 
-	IsSuperAdmin  bool `json:"is_super_admin"`
 	IsProjectUser bool `json:"is_project_user"`
 	IsReadOnly    bool `json:"is_read_only"`
 

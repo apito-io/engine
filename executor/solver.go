@@ -901,6 +901,7 @@ func (s *GraphQLExecutor) HandlePayloadFormatting(ctx context.Context, param *mo
 					return nil, err
 				}
 			}
+
 		case _const.MultilineField:
 			if userInput, ok := inputPayload[f.Identifier].(map[string]interface{}); ok && len(userInput) > 0 {
 				if html, ok := userInput["html"].(string); ok {
@@ -920,6 +921,7 @@ func (s *GraphQLExecutor) HandlePayloadFormatting(ctx context.Context, param *mo
 					}
 				}
 			}
+
 		case _const.ListField:
 
 			if f.Validation != nil && f.Validation.FixedListElements == nil { // dynamic string
@@ -959,47 +961,53 @@ func (s *GraphQLExecutor) HandlePayloadFormatting(ctx context.Context, param *mo
 			}
 
 		case _const.RepeatedField:
-			if userInput, ok := inputPayload[f.Identifier].([]interface{}); ok && len(userInput) > 0 {
-				var userInputLength int
 
-				userInputLength = len(userInput)
-				var formattedInput []interface{}
+			if userInput, ok := inputPayload[f.Identifier].([]interface{}); ok && len(userInput) > 0 {
+
+				userInputLength := len(userInput)
+
 				var err error
 				for i := 0; i < userInputLength; i++ {
 					var repeatedUserInput map[string]interface{}
 
 					repeatedUserInput = userInput[i].(map[string]interface{})
 
-					var _currentId string
-					if id, ok := repeatedUserInput["_id"].(string); ok { // if found
-						_currentId = id
+					var _currentID string
+					if id, ok := repeatedUserInput["_id"].(string); ok && id != "" { // if _id exists on the user input
+						_currentID = id
 					} else {
 						id = uuid.New().String()
 						repeatedUserInput["_id"] = id
 					}
-					var oldUserInput map[string]interface{}
-					if oldVals, ok := dbPayload[f.Identifier].([]interface{}); ok {
-						for _, _ov := range oldVals {
-							ov := _ov.(map[string]interface{})
-							if _oldId, ok := ov["_id"].(string); ok && _oldId == _currentId {
-								oldUserInput = ov
-								break
+
+					if _currentID != "" {
+						if oldVals, ok := dbPayload[f.Identifier].([]interface{}); ok && len(oldVals) > 0 {
+							for j, _ov := range oldVals {
+								ov := _ov.(map[string]interface{})
+								if _oldID, ok := ov["_id"].(string); ok && _oldID == _currentID {
+									repeatedUserInput, err = s.HandlePayloadFormatting(ctx, param, local, f.SubFieldInfo, repeatedUserInput, ov)
+									if err != nil {
+										return nil, err
+									}
+									oldVals[j] = repeatedUserInput
+									break
+								}
 							}
-						}
-						if oldUserInput == nil { // assuming not found or old array with no _id field
-							oldUserInput = make(map[string]interface{})
+						} else {
+							return nil, errors.New("old value not found ! where is the _id is from ?")
 						}
 					} else {
-						oldUserInput = make(map[string]interface{}) // assign an empty one
+						repeatedUserInput, err = s.HandlePayloadFormatting(ctx, param, local, f.SubFieldInfo, repeatedUserInput, make(map[string]interface{}))
+						if err != nil {
+							return nil, err
+						}
+						if val, ok := dbPayload[f.Identifier].([]interface{}); ok && len(val) > 0 {
+							dbPayload[identifier] = append(val, repeatedUserInput)
+						} else { // if the field is empty, set the db payload to the new value
+							dbPayload[f.Identifier] = []interface{}{repeatedUserInput}
+						}
 					}
-
-					repeatedUserInput, err = s.HandlePayloadFormatting(ctx, param, local, f.SubFieldInfo, repeatedUserInput, oldUserInput)
-					if err != nil {
-						return nil, err
-					}
-					formattedInput = append(formattedInput, repeatedUserInput)
 				}
-				dbPayload[identifier] = formattedInput
 			}
 		case _const.ObjectField:
 			if userInput, ok := inputPayload[f.Identifier].(map[string]interface{}); ok && len(userInput) > 0 {

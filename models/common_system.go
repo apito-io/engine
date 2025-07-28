@@ -1,6 +1,7 @@
 package models
 
 import (
+	"context"
 	"encoding/json"
 
 	"github.com/apito-io/types"
@@ -40,6 +41,7 @@ type GraphQLIncomingRequest struct {
 }
 
 type ApplicationCache struct {
+	Ctx         context.Context         `json:"ctx,omitempty"`
 	Project     *Project                `json:"project,omitempty"`
 	Param       *CommonSystemParams     `json:"param,omitempty"`
 	RawSchemas  *RawSchema              `json:"raw_schema,omitempty"`

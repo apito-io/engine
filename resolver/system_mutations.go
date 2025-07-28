@@ -49,9 +49,12 @@ func (s *GraphQLServer) GenerateTenantTokenResolverFn(p graphql.ResolveParams) (
 		return nil, errors.New("tenant_id is Required")
 	}
 
-	ctx := p.Context
+	cache, err := s.GetApplicationCache(router)
+	if err != nil {
+		return nil, err
+	}
 
-	_token, err := s.ApiKeyManager.GenerateTenantToken(ctx, tenantID, token)
+	_token, err := s.ApiKeyManager.GenerateTenantToken(cache.Ctx, tenantID, token)
 	if err != nil {
 		return nil, err
 	}
@@ -69,10 +72,12 @@ func (s *GraphQLServer) GenerateAPIKeyResolverFn(p graphql.ResolveParams) (inter
 
 	s.injectMetaData("GenerateAPIKeyResolverFn", router)
 
-	param, err := s.buildCommonSystemParam(router)
+	cache, err := s.GetApplicationCache(router)
 	if err != nil {
 		return nil, err
 	}
+
+	param := s.NewParam(cache.Param)
 
 	userID := param.UserID
 	projectID := param.ProjectID
@@ -91,18 +96,13 @@ func (s *GraphQLServer) GenerateAPIKeyResolverFn(p graphql.ResolveParams) (inter
 		return nil, errors.New("duration is Required")
 	}
 
-	project, err := s.SystemDriver.GetProject(p.Context, projectID)
-	if err != nil {
-		return nil, err
-	}
+	project := cache.Project
 
 	parseDuration, _ := time.Parse(time.RFC3339, duration)
 
 	t := services.GetBrankaToken(s.Cfg, s.SystemDriver)
 
-	ctx := p.Context
-
-	apiKey, err := t.GenerateAPIKey(ctx, userID, projectID, "", "api_key", parseDuration.Unix())
+	apiKey, err := t.GenerateAPIKey(cache.Ctx, userID, projectID, "", "api_key", parseDuration.Unix())
 	if err != nil {
 		return nil, err
 	}
@@ -114,7 +114,7 @@ func (s *GraphQLServer) GenerateAPIKeyResolverFn(p graphql.ResolveParams) (inter
 		Expire:    duration,
 	})
 
-	err = s.SystemDriver.UpdateProject(p.Context, project, false)
+	err = s.SystemDriver.UpdateProject(cache.Ctx, project, false)
 	if err != nil {
 		return nil, err
 	}
@@ -134,12 +134,12 @@ func (s *GraphQLServer) GenerateAPITokenResolverFn(p graphql.ResolveParams) (int
 
 	s.injectMetaData("GenerateApiTokenResolverFn", router)
 
-	param, err := s.buildCommonSystemParam(router)
+	cache, err := s.GetApplicationCache(router)
 	if err != nil {
 		return nil, err
 	}
 
-	projectId := param.ProjectID
+	param := s.NewParam(cache.Param)
 
 	var name string
 	if val, ok := p.Args["name"].(string); ok {
@@ -162,10 +162,7 @@ func (s *GraphQLServer) GenerateAPITokenResolverFn(p graphql.ResolveParams) (int
 		return nil, errors.New("duration is Required")
 	}
 
-	project, err := s.SystemDriver.GetProject(p.Context, projectId)
-	if err != nil {
-		return nil, err
-	}
+	project := cache.Project
 
 	parseDuration, _ := time.Parse(time.RFC3339, duration)
 
@@ -173,7 +170,7 @@ func (s *GraphQLServer) GenerateAPITokenResolverFn(p graphql.ResolveParams) (int
 	apiKey, err := s.ApiKeyManager.GenerateKey(&models.TokenClaims{
 		Role:      role,
 		UserID:    param.UserID,
-		ProjectID: projectId,
+		ProjectID: project.ID,
 		ExpireAt:  parseDuration,
 	})
 	if err != nil {
@@ -187,7 +184,7 @@ func (s *GraphQLServer) GenerateAPITokenResolverFn(p graphql.ResolveParams) (int
 		Expire: duration,
 	})
 
-	err = s.SystemDriver.UpdateProject(p.Context, project, false)
+	err = s.SystemDriver.UpdateProject(cache.Ctx, project, false)
 	if err != nil {
 		return nil, err
 	}
@@ -202,17 +199,16 @@ func (s *GraphQLServer) DeleteAPIKeyResolverFn(p graphql.ResolveParams) (interfa
 	var (
 		v      = p.Context.Value
 		router = v("router").(echo.Context)
-		ctx    = p.Context
 	)
 
 	s.injectMetaData("DeleteApiKeyResolverFn", router)
 
-	param, err := s.buildCommonSystemParam(router)
+	cache, err := s.GetApplicationCache(router)
 	if err != nil {
 		return nil, err
 	}
 
-	projectId := param.ProjectID
+	param := s.NewParam(cache.Param)
 
 	var token string
 	if val, ok := p.Args["token"].(string); ok {
@@ -230,12 +226,12 @@ func (s *GraphQLServer) DeleteAPIKeyResolverFn(p graphql.ResolveParams) (interfa
 
 	var verifiedToken *models.TokenClaims
 	if strings.HasPrefix(token, "ak_") {
-		verifiedToken, err = s.ApiKeyManager.Validate(ctx, token, false)
+		verifiedToken, err = s.ApiKeyManager.Validate(cache.Ctx, token, false)
 		if err != nil {
 			return nil, ae.InvalidToken
 		}
 	} else {
-		verifiedToken, err = s.BlankaTokenService.Validate(ctx, token)
+		verifiedToken, err = s.BlankaTokenService.Validate(cache.Ctx, token)
 		if err != nil {
 			return nil, ae.InvalidToken
 		}
@@ -247,10 +243,7 @@ func (s *GraphQLServer) DeleteAPIKeyResolverFn(p graphql.ResolveParams) (interfa
 		}
 	}
 
-	project, err := s.SystemDriver.GetProject(p.Context, projectId)
-	if err != nil {
-		return nil, err
-	}
+	project := cache.Project
 
 	for i, t := range project.Tokens {
 		if t.Token == token {
@@ -258,13 +251,13 @@ func (s *GraphQLServer) DeleteAPIKeyResolverFn(p graphql.ResolveParams) (interfa
 		}
 	}
 
-	err = s.SystemDriver.UpdateProject(p.Context, project, true)
+	err = s.SystemDriver.UpdateProject(cache.Ctx, project, true)
 	if err != nil {
 		return nil, err
 	}
 
 	parseDuration, _ := time.Parse(time.RFC3339, duration)
-	alreadyExpired := parseDuration.Sub(time.Now()).Hours()
+	alreadyExpired := time.Until(parseDuration).Hours()
 	if alreadyExpired > 0.0 { // expire the token
 		expiredToken := map[string]interface{}{
 			"id":        verifiedToken.TokenUniqueID,
@@ -272,7 +265,7 @@ func (s *GraphQLServer) DeleteAPIKeyResolverFn(p graphql.ResolveParams) (interfa
 			"expire_at": duration,
 		}
 
-		err = s.SystemDriver.BlacklistAToken(p.Context, expiredToken)
+		err = s.SystemDriver.BlacklistAToken(cache.Ctx, expiredToken)
 		if err != nil {
 			return nil, err
 		}
@@ -289,17 +282,16 @@ func (s *GraphQLServer) DeleteAPITokenResolverFn(p graphql.ResolveParams) (inter
 	var (
 		v      = p.Context.Value
 		router = v("router").(echo.Context)
-		ctx    = p.Context
 	)
 
 	s.injectMetaData("DeleteApiTokenResolverFn", router)
 
-	param, err := s.buildCommonSystemParam(router)
+	cache, err := s.GetApplicationCache(router)
 	if err != nil {
 		return nil, err
 	}
 
-	projectId := param.ProjectID
+	param := s.NewParam(cache.Param)
 
 	var token string
 	if val, ok := p.Args["token"].(string); ok {
@@ -315,7 +307,7 @@ func (s *GraphQLServer) DeleteAPITokenResolverFn(p graphql.ResolveParams) (inter
 		return nil, errors.New("duration is Required")
 	}
 
-	verifiedToken, err := s.BlankaTokenService.Validate(ctx, token)
+	verifiedToken, err := s.BlankaTokenService.Validate(cache.Ctx, token)
 	if err != nil {
 		return nil, ae.InvalidToken
 	}
@@ -326,10 +318,7 @@ func (s *GraphQLServer) DeleteAPITokenResolverFn(p graphql.ResolveParams) (inter
 		}
 	}
 
-	project, err := s.SystemDriver.GetProject(p.Context, projectId)
-	if err != nil {
-		return nil, err
-	}
+	project := cache.Project
 
 	for i, t := range project.APIKeys {
 		if t.Token == token {
@@ -337,7 +326,7 @@ func (s *GraphQLServer) DeleteAPITokenResolverFn(p graphql.ResolveParams) (inter
 		}
 	}
 
-	err = s.SystemDriver.UpdateProject(p.Context, project, true)
+	err = s.SystemDriver.UpdateProject(cache.Ctx, project, true)
 	if err != nil {
 		return nil, err
 	}
@@ -351,7 +340,7 @@ func (s *GraphQLServer) DeleteAPITokenResolverFn(p graphql.ResolveParams) (inter
 			"expire_at": duration,
 		}
 
-		err = s.SystemDriver.BlacklistAToken(p.Context, expiredToken)
+		err = s.SystemDriver.BlacklistAToken(cache.Ctx, expiredToken)
 		if err != nil {
 			return nil, err
 		}
@@ -451,19 +440,19 @@ func (s *GraphQLServer) CreateWebHookResolverFn(p graphql.ResolveParams) (interf
 	// now append the hook info in model as well
 	modelType.HookIds = append(modelType.HookIds, hook.ID)
 
-	_, err = s.SystemDriver.AddWebhookToProject(p.Context, hook)
+	_, err = s.SystemDriver.AddWebhookToProject(cache.Ctx, hook)
 	if err != nil {
 		return nil, err
 	}
 
-	project, err = s.SystemDriver.GetProject(p.Context, param.ProjectID)
+	project, err = s.SystemDriver.GetProject(cache.Ctx, param.ProjectID)
 	if err != nil {
 		return nil, err
 	}
 
 	project.Schema = cache.Project.Schema
 
-	err = s.SystemDriver.UpdateProject(p.Context, project, true)
+	err = s.SystemDriver.UpdateProject(cache.Ctx, project, true)
 	if err != nil {
 		return nil, err
 	}
@@ -505,7 +494,7 @@ func (s *GraphQLServer) DeleteWebHookResolverFn(p graphql.ResolveParams) (interf
 		return nil, errors.New("Hook id is Required")
 	}
 
-	hook, err := s.SystemDriver.GetWebHook(p.Context, param.ProjectID, param.DocumentID)
+	hook, err := s.SystemDriver.GetWebHook(cache.Ctx, param.ProjectID, param.DocumentID)
 	if err != nil {
 		return nil, err
 	}
@@ -538,20 +527,20 @@ func (s *GraphQLServer) DeleteWebHookResolverFn(p graphql.ResolveParams) (interf
 		modelType.HookIds = nil
 	}
 
-	project, err := s.SystemDriver.GetProject(p.Context, param.ProjectID)
+	project, err := s.SystemDriver.GetProject(cache.Ctx, param.ProjectID)
 	if err != nil {
 		return nil, err
 	}
 
 	project.Schema = cache.Project.Schema
 
-	err = s.SystemDriver.UpdateProject(p.Context, project, true)
+	err = s.SystemDriver.UpdateProject(cache.Ctx, project, true)
 	if err != nil {
 		return nil, err
 	}
 
 	// now remove from the users collection as well
-	err = s.SystemDriver.DeleteWebhook(p.Context, param.ProjectID, param.DocumentID)
+	err = s.SystemDriver.DeleteWebhook(cache.Ctx, param.ProjectID, param.DocumentID)
 	if err != nil {
 		return nil, err
 	}
@@ -611,23 +600,24 @@ func (s *GraphQLServer) CreateProjectResolverFn(p graphql.ResolveParams) (interf
 func (s *GraphQLServer) UpdateProjectResolverFn(p graphql.ResolveParams) (interface{}, error) {
 
 	var (
-		ctx    = p.Context
-		v      = ctx.Value
+		v      = p.Context.Value
 		router = v("router").(echo.Context)
 	)
 
 	s.injectMetaData("UpdateProjectResolverFn", router)
 
-	param, err := s.buildCommonSystemParam(router)
+	cache, err := s.GetApplicationCache(router)
 	if err != nil {
 		return nil, err
 	}
+
+	param := s.NewParam(cache.Param)
 
 	var projectId string
 	if val, ok := p.Args["_id"].(string); ok && val != "" {
 		projectId = val
 
-		_, err = s.SystemDriver.CheckProjectWithRoles(ctx, param.UserID, projectId)
+		_, err = s.SystemDriver.CheckProjectWithRoles(cache.Ctx, param.UserID, projectId)
 		if err != nil {
 			return nil, err
 		}
@@ -637,7 +627,7 @@ func (s *GraphQLServer) UpdateProjectResolverFn(p graphql.ResolveParams) (interf
 		projectId = param.ProjectID
 	}
 
-	project, err := s.SystemDriver.GetProject(ctx, projectId)
+	project, err := s.SystemDriver.GetProject(cache.Ctx, projectId)
 	if err != nil {
 		return nil, err
 	}
@@ -813,7 +803,7 @@ func (s *GraphQLServer) UpdateProjectResolverFn(p graphql.ResolveParams) (interf
 			req.Permissions = permissions
 		}
 
-		user, err := s.SystemDriver.GetSystemUserByEmail(ctx, req.Email)
+		user, err := s.SystemDriver.GetSystemUserByEmail(cache.Ctx, req.Email)
 		if err != nil {
 			return nil, err
 		}
@@ -828,11 +818,11 @@ func (s *GraphQLServer) UpdateProjectResolverFn(p graphql.ResolveParams) (interf
 					CurrentProjectID: projectId,
 				},
 			}
-			user, err = s.AuthService.Signup(ctx, registerRequest)
+			user, err = s.AuthService.Signup(cache.Ctx, registerRequest)
 			if err != nil {
 				return nil, err
 			}
-			user, err = s.SystemDriver.CreateSystemUser(ctx, user)
+			user, err = s.SystemDriver.CreateSystemUser(cache.Ctx, user)
 			if err != nil {
 				return nil, err
 			}
@@ -840,7 +830,7 @@ func (s *GraphQLServer) UpdateProjectResolverFn(p graphql.ResolveParams) (interf
 
 		req.UserID = user.ID
 
-		err = s.SystemDriver.AddATeamMemberToProject(p.Context, &req)
+		err = s.SystemDriver.AddATeamMemberToProject(cache.Ctx, &req)
 		if err != nil {
 			return nil, err
 		}
@@ -870,7 +860,7 @@ func (s *GraphQLServer) UpdateProjectResolverFn(p graphql.ResolveParams) (interf
 		} else {
 			return nil, errors.New("member ID is Required")
 		}
-		err := s.SystemDriver.RemoveATeamMemberFromProject(p.Context, param.ProjectID, memberId)
+		err := s.SystemDriver.RemoveATeamMemberFromProject(cache.Ctx, param.ProjectID, memberId)
 		if err != nil {
 			return nil, err
 		}
@@ -996,7 +986,7 @@ func (s *GraphQLServer) UpdateProjectResolverFn(p graphql.ResolveParams) (interf
 		project.ProjectSecretKey = utility.RandomStringGenerator(25)
 	}
 
-	err = s.SystemDriver.UpdateProject(p.Context, project, true)
+	err = s.SystemDriver.UpdateProject(cache.Ctx, project, true)
 	if err != nil {
 		return nil, err
 	}
@@ -1011,18 +1001,19 @@ func (s *GraphQLServer) UpdateProfileResolverFn(p graphql.ResolveParams) (interf
 	var (
 		v      = p.Context.Value
 		router = v("router").(echo.Context)
-		ctx    = p.Context
 	)
 
 	s.injectMetaData("UpdateProfileResolverFn", router)
 
-	param, err := s.buildCommonSystemParam(router)
+	cache, err := s.GetApplicationCache(router)
 	if err != nil {
 		return nil, err
 	}
 
+	param := s.NewParam(cache.Param)
+
 	userId := param.UserID
-	user, err := s.SystemDriver.GetSystemUser(ctx, userId)
+	user, err := s.SystemDriver.GetSystemUser(cache.Ctx, userId)
 	if err != nil {
 		return nil, err
 	}
@@ -1053,14 +1044,14 @@ func (s *GraphQLServer) UpdateProfileResolverFn(p graphql.ResolveParams) (interf
 
 	if val, ok := p.Args["old_pass"].(string); ok {
 		if newPass, ok := p.Args["new_pass"].(string); ok {
-			user, err = s.AuthService.ChangePassword(ctx, user, val, newPass)
+			user, err = s.AuthService.ChangePassword(cache.Ctx, user, val, newPass)
 			if err != nil {
 				return nil, err
 			}
 		}
 	}
 
-	err = s.SystemDriver.UpdateSystemUser(p.Context, user, true)
+	err = s.SystemDriver.UpdateSystemUser(cache.Ctx, user, true)
 	if err != nil {
 		return nil, err
 	}
@@ -1149,7 +1140,7 @@ func (s *GraphQLServer) UpsertPluginResolverFn(p graphql.ResolveParams) (interfa
 		}
 	}
 
-	err = s.SystemDriver.UpdateProject(p.Context, &project, true)
+	err = s.SystemDriver.UpdateProject(cache.Ctx, &project, true)
 	if err != nil {
 		return nil, err
 	}
@@ -1241,7 +1232,6 @@ func (s *GraphQLServer) AddModelToProjectResolverFn(p graphql.ResolveParams) (in
 	var (
 		v      = p.Context.Value
 		router = v("router").(echo.Context)
-		ctx    = p.Context
 	)
 
 	s.injectMetaData("AddModelToProjectResolverFn", router)
@@ -1252,8 +1242,6 @@ func (s *GraphQLServer) AddModelToProjectResolverFn(p graphql.ResolveParams) (in
 	}
 
 	param := cache.Param
-
-	projectId := param.ProjectID
 
 	var modelName string
 	if val, ok := p.Args["name"].(string); ok {
@@ -1289,12 +1277,12 @@ func (s *GraphQLServer) AddModelToProjectResolverFn(p graphql.ResolveParams) (in
 		param.ProjectID = cache.Project.Driver.Database
 	}
 
-	driver, err := s.GraphQLExecutor.GetProjectDriver(ctx)
+	driver, err := s.GraphQLExecutor.GetProjectDriver(cache.Ctx)
 	if err != nil {
 		return nil, err
 	}
 
-	checkCollectionExists, err := driver.CheckCollectionExists(p.Context, param, false)
+	checkCollectionExists, err := driver.CheckCollectionExists(cache.Ctx, param, false)
 	if err != nil {
 		return nil, err
 	}
@@ -1303,10 +1291,7 @@ func (s *GraphQLServer) AddModelToProjectResolverFn(p graphql.ResolveParams) (in
 		return nil, errors.New("collection already exists")
 	}
 
-	project, err := s.SystemDriver.GetProject(ctx, projectId)
-	if err != nil {
-		return nil, err
-	}
+	project := cache.Project
 
 	var singleRecord bool
 	if val, ok := p.Args["single_record"].(bool); ok {
@@ -1319,12 +1304,12 @@ func (s *GraphQLServer) AddModelToProjectResolverFn(p graphql.ResolveParams) (in
 	}
 
 	// if schema not found then create
-	project.Schema, err = driver.AddModel(p.Context, project, model)
+	project.Schema, err = driver.AddModel(cache.Ctx, project, model)
 	if err != nil {
 		return nil, err
 	}
 
-	err = s.SystemDriver.UpdateProject(p.Context, project, false)
+	err = s.SystemDriver.UpdateProject(cache.Ctx, project, false)
 	if err != nil {
 		return nil, err
 	}
@@ -1337,7 +1322,6 @@ func (s *GraphQLServer) RunModelMigrationsResolverFn(p graphql.ResolveParams) (i
 	var (
 		v      = p.Context.Value
 		router = v("router").(echo.Context)
-		ctx    = p.Context
 	)
 
 	s.injectMetaData("RunModelMigrationsResolverFn", router)
@@ -1348,7 +1332,6 @@ func (s *GraphQLServer) RunModelMigrationsResolverFn(p graphql.ResolveParams) (i
 	}
 
 	param := cache.Param
-
 	project := cache.Project
 
 	for _, model := range project.Schema.Models {
@@ -1357,19 +1340,19 @@ func (s *GraphQLServer) RunModelMigrationsResolverFn(p graphql.ResolveParams) (i
 		// temporary fix for sql driver
 		param.ProjectID = cache.Project.ID
 
-		driver, err := s.GraphQLExecutor.GetProjectDriver(ctx)
+		driver, err := s.GraphQLExecutor.GetProjectDriver(cache.Ctx)
 		if err != nil {
 			return nil, err
 		}
 
-		checkCollectionExists, err := driver.CheckCollectionExists(p.Context, param, false)
+		checkCollectionExists, err := driver.CheckCollectionExists(cache.Ctx, param, false)
 		if err != nil {
 			return nil, err
 		}
 
 		if !checkCollectionExists {
 			// if schema not found then create
-			err = driver.AddCollection(p.Context, param, false)
+			err = driver.AddCollection(cache.Ctx, param, false)
 			if err != nil {
 				return nil, err
 			}
@@ -1377,18 +1360,18 @@ func (s *GraphQLServer) RunModelMigrationsResolverFn(p graphql.ResolveParams) (i
 	}
 
 	// check relation collection
-	driver, err := s.GraphQLExecutor.GetProjectDriver(ctx)
+	driver, err := s.GraphQLExecutor.GetProjectDriver(cache.Ctx)
 	if err != nil {
 		return nil, err
 	}
 
-	checkRelationCollectionExists, err := driver.CheckCollectionExists(p.Context, param, true)
+	checkRelationCollectionExists, err := driver.CheckCollectionExists(cache.Ctx, param, true)
 	if err != nil {
 		return nil, err
 	}
 
 	if !checkRelationCollectionExists {
-		err = driver.AddCollection(p.Context, param, true)
+		err = driver.AddCollection(cache.Ctx, param, true)
 		if err != nil {
 			return nil, err
 		}
@@ -1445,7 +1428,7 @@ func (s *GraphQLServer) UpdateModelResolverFn(p graphql.ResolveParams) (interfac
 		} else {
 			return nil, errors.New(ae.NEW_MODEL_NAME_REQUIRED)
 		}
-		resp, err = s.duplicateModel(p.Context, project, newName, modelName)
+		resp, err = s.duplicateModel(cache.Ctx, project, newName, modelName)
 	case "rename":
 		var newName string
 		if val, ok := p.Args["new_name"].(string); ok {
@@ -1453,11 +1436,11 @@ func (s *GraphQLServer) UpdateModelResolverFn(p graphql.ResolveParams) (interfac
 		} else {
 			return nil, errors.New(ae.NEW_MODEL_NAME_REQUIRED)
 		}
-		resp, err = s.renameModel(p.Context, project, newName, modelName, singlePageModel)
+		resp, err = s.renameModel(cache.Ctx, project, newName, modelName, singlePageModel)
 	case "convert":
-		resp, err = s.convertModel(p.Context, project, modelName)
+		resp, err = s.convertModel(cache.Ctx, project, modelName)
 	case "delete":
-		resp, err = s.deleteModel(p.Context, project, modelName)
+		resp, err = s.deleteModel(cache.Ctx, project, modelName)
 	}
 
 	if err != nil {
@@ -1473,15 +1456,14 @@ func (s *GraphQLServer) duplicateModel(ctx context.Context, project *models.Proj
 		return nil, errors.New(ae.MODEL_NAME_REQUIRED)
 	}
 
-	var newModelName string
-
-	newModelName = strings.TrimSpace(utility.SingularResourceName(strcase.ToLowerCamel(newName)))
-	if newModelName == "user" {
-		return nil, errors.New("naming a Model `User` is protected. If you want to store authenticated users. Try adding Authentication module from Settings > Add-Ons")
-	} else if newModelName == "system" {
-		return nil, errors.New("naming a Model `System` is not allowed. Try Another alternate name instead")
-	} else if newModelName == "function" {
-		return nil, errors.New("naming a Model `Function` is not allowed. Try Another alternate name instead")
+	newModelName := strings.TrimSpace(utility.SingularResourceName(strcase.ToLowerCamel(newName)))
+	protectedNames := map[string]string{
+		"user":     "naming a Model `User` is protected. If you want to store authenticated users, try adding the Authentication module from Settings > Add-Ons.",
+		"system":   "naming a Model `System` is not allowed. Try another alternate name instead.",
+		"function": "naming a Model `Function` is not allowed. Try another alternate name instead.",
+	}
+	if msg, exists := protectedNames[newModelName]; exists {
+		return nil, errors.New(msg)
 	}
 
 	var duplicatedModel *models.ModelType
@@ -1998,7 +1980,7 @@ func (s *GraphQLServer) UpsertFunctionToProjectResolverFn(p graphql.ResolveParam
 	}*/
 
 	if oldFunction {
-		err = s.SystemDriver.UpdateProject(p.Context, project, true)
+		err = s.SystemDriver.UpdateProject(cache.Ctx, project, true)
 		if err != nil {
 			return nil, err
 		}
@@ -2010,7 +1992,7 @@ func (s *GraphQLServer) UpsertFunctionToProjectResolverFn(p graphql.ResolveParam
 			function.RestAPISecretURLKey = utility.RandomStringGenerator(25)
 		}
 		project.Schema.Functions = append(project.Schema.Functions, function)
-		err = s.SystemDriver.UpdateProject(p.Context, project, false)
+		err = s.SystemDriver.UpdateProject(cache.Ctx, project, false)
 		if err != nil {
 			return nil, err
 		}
@@ -2033,12 +2015,7 @@ func (s *GraphQLServer) UpsertRoleToProjectResolverFn(p graphql.ResolveParams) (
 		return nil, err
 	}
 
-	projectID := cache.Project.ID
-
-	project, err := s.SystemDriver.GetProject(p.Context, projectID)
-	if err != nil {
-		return nil, err
-	}
+	project := cache.Project
 
 	var roleName string
 	if val, ok := p.Args["name"].(string); ok {
@@ -2049,7 +2026,7 @@ func (s *GraphQLServer) UpsertRoleToProjectResolverFn(p graphql.ResolveParams) (
 
 	switch roleName {
 	case "admin":
-		return nil, errors.New("A Default Role with name Admin already exists in your project. Choose other names")
+		return nil, errors.New("a default Role with name `Admin` already exists in your project. Choose other names")
 	case "demo":
 		return nil, errors.New("can not create Role named `Demo`. Its being used internally. Choose other names")
 	}
@@ -2110,7 +2087,7 @@ func (s *GraphQLServer) UpsertRoleToProjectResolverFn(p graphql.ResolveParams) (
 		}
 	}
 
-	err = s.SystemDriver.UpdateProject(p.Context, project, true)
+	err = s.SystemDriver.UpdateProject(cache.Ctx, project, true)
 	if err != nil {
 		return nil, err
 	}
@@ -2127,16 +2104,12 @@ func (s *GraphQLServer) DeleteFunctionResolverFn(p graphql.ResolveParams) (inter
 		router = v("router").(echo.Context)
 	)
 
-	param, err := s.buildCommonSystemParam(router)
+	cache, err := s.GetApplicationCache(router)
 	if err != nil {
 		return nil, err
 	}
 
-	projectId := param.ProjectID
-	project, err := s.SystemDriver.GetProject(p.Context, projectId)
-	if err != nil {
-		return nil, err
-	}
+	project := cache.Project
 
 	var functionName string
 	if val, ok := p.Args["function"].(string); ok && val != "" {
@@ -2166,7 +2139,7 @@ func (s *GraphQLServer) DeleteFunctionResolverFn(p graphql.ResolveParams) (inter
 		}
 	}
 
-	err = s.SystemDriver.UpdateProject(p.Context, project, true)
+	err = s.SystemDriver.UpdateProject(cache.Ctx, project, true)
 	if err != nil {
 		return nil, err
 	}
@@ -2185,16 +2158,12 @@ func (s *GraphQLServer) DeleteRoleResolverFn(p graphql.ResolveParams) (interface
 
 	s.injectMetaData("DeleteRoleResolverFn", router)
 
-	param, err := s.buildCommonSystemParam(router)
+	cache, err := s.GetApplicationCache(router)
 	if err != nil {
 		return nil, err
 	}
 
-	projectId := param.ProjectID
-	project, err := s.SystemDriver.GetProject(p.Context, projectId)
-	if err != nil {
-		return nil, err
-	}
+	project := cache.Project
 
 	roleToDelete := strings.ToLower(utility.SingularResourceName(p.Args["role"].(string)))
 
@@ -2219,7 +2188,7 @@ func (s *GraphQLServer) DeleteRoleResolverFn(p graphql.ResolveParams) (interface
 		return nil, errors.New("role not Found")
 	}
 
-	err = s.SystemDriver.UpdateProject(p.Context, project, true)
+	err = s.SystemDriver.UpdateProject(cache.Ctx, project, true)
 	if err != nil {
 		return nil, err
 	}
@@ -2279,21 +2248,16 @@ func (s *GraphQLServer) UpsertFieldToModelResolverFn(p graphql.ResolveParams) (i
 	var (
 		v      = p.Context.Value
 		router = v("router").(echo.Context)
-		ctx    = p.Context
 	)
 
 	s.injectMetaData("UpsertFieldToModelResolverFn", router)
 
-	param, err := s.buildCommonSystemParam(router)
+	cache, err := s.GetApplicationCache(router)
 	if err != nil {
 		return nil, err
 	}
 
-	projectId := param.ProjectID
-	project, err := s.SystemDriver.GetProject(ctx, projectId)
-	if err != nil {
-		return nil, err
-	}
+	project := cache.Project
 
 	var modelName string
 	if val, ok := p.Args["model_name"].(string); ok {
@@ -2348,10 +2312,10 @@ func (s *GraphQLServer) UpsertFieldToModelResolverFn(p graphql.ResolveParams) (i
 		return nil, errors.New("field Label Is necessary")
 	}
 
-	var repeatedGroupIdentifier string
-	if val, ok := p.Args["repeated_group_identifier"].(string); ok {
+	var parentField string
+	if val, ok := p.Args["parent_field"].(string); ok {
 		if val != "_root" {
-			repeatedGroupIdentifier = val
+			parentField = val
 		}
 	}
 
@@ -2361,7 +2325,7 @@ func (s *GraphQLServer) UpsertFieldToModelResolverFn(p graphql.ResolveParams) (i
 	}
 
 	// now search for fields
-	fieldInfo := s.searchFields(modelType.Fields, repeatedGroupIdentifier, identifier)
+	fieldInfo := s.searchFields(modelType.Fields, parentField, identifier)
 
 	if !isUpdate && fieldInfo != nil {
 		return nil, errors.New(fmt.Sprintf("A field with identifier '%s' already exits", identifier))
@@ -2409,7 +2373,7 @@ func (s *GraphQLServer) UpsertFieldToModelResolverFn(p graphql.ResolveParams) (i
 				Serial:                  1,
 				Label:                   "ID",
 				SystemGenerated:         true,
-				RepeatedGroupIdentifier: fieldInfo.Identifier,
+				//RepeatedGroupIdentifier: fieldInfo.Identifier,
 				ParentField:             fieldInfo.Identifier,
 			},
 		}
@@ -2430,9 +2394,9 @@ func (s *GraphQLServer) UpsertFieldToModelResolverFn(p graphql.ResolveParams) (i
 		if v, ok := validation["required"].(bool); ok {
 			fieldInfo.Validation.Required = v
 		}
-		if v, ok := validation["as_title"].(bool); ok {
+		/* if v, ok := validation["as_title"].(bool); ok {
 			fieldInfo.Validation.AsTitle = v
-		}
+		} */
 
 		if v, ok := validation["hide"].(bool); ok {
 			fieldInfo.Validation.Hide = v
@@ -2447,7 +2411,7 @@ func (s *GraphQLServer) UpsertFieldToModelResolverFn(p graphql.ResolveParams) (i
 		}
 
 		if v, ok := validation["is_url"].(bool); ok {
-			fieldInfo.Validation.IsUrl = v
+			fieldInfo.Validation.IsURL = v
 		}
 
 		if v, ok := validation["unique"].(bool); ok {
@@ -2486,37 +2450,38 @@ func (s *GraphQLServer) UpsertFieldToModelResolverFn(p graphql.ResolveParams) (i
 
 	}
 
-	if repeatedGroupIdentifier != "" {
-		fieldInfo.RepeatedGroupIdentifier = repeatedGroupIdentifier
-		fieldInfo.ParentField = fieldInfo.RepeatedGroupIdentifier
+	if parentField != "" {
+		//fieldInfo.RepeatedGroupIdentifier = repeatedGroupIdentifier
+		fieldInfo.ParentField = fieldInfo.ParentField
 	}
 
+	param := s.NewParam(cache.Param)
 	param.Model = modelType
 	param.FieldInfo = fieldInfo
 
-	driver, err := s.GraphQLExecutor.GetProjectDriver(ctx)
+	driver, err := s.GraphQLExecutor.GetProjectDriver(cache.Ctx)
 	if err != nil {
 		return nil, err
 	}
 
-	modelType, err = driver.AddFieldToModel(p.Context, param, isUpdate, repeatedGroupIdentifier)
+	modelType, err = driver.AddFieldToModel(cache.Ctx, param, isUpdate, parentField)
 	if err != nil {
 		return nil, err
 	}
 
-	err = s.SystemDriver.UpdateProject(p.Context, project, true)
+	err = s.SystemDriver.UpdateProject(cache.Ctx, project, true)
 	if err != nil {
 		return nil, err
 	}
 
 	// expire the cache
-	err = s.ExpireGraphQLFieldCache(ctx, projectId, modelType.Name)
+	err = s.ExpireGraphQLFieldCache(cache.Ctx, project.ID, modelType.Name)
 	if err != nil {
 		return nil, err
 	}
 
 	// expire the project cache
-	err = s.ExpireGraphQLProjectCache(ctx, projectId)
+	err = s.ExpireGraphQLProjectCache(cache.Ctx, project.ID)
 	if err != nil {
 		return nil, err
 	}
@@ -2625,13 +2590,13 @@ func (s *GraphQLServer) RearrangeFieldOfModelResolverFn(p graphql.ResolveParams)
 
 	cache.Param.Model = modelType
 
-	project, err := s.SystemDriver.GetProject(p.Context, cache.Project.ID)
+	project, err := s.SystemDriver.GetProject(cache.Ctx, cache.Project.ID)
 	if err != nil {
 		return nil, err
 	}
 
 	project.Schema = cache.Project.Schema
-	err = s.SystemDriver.UpdateProject(p.Context, project, true)
+	err = s.SystemDriver.UpdateProject(cache.Ctx, project, true)
 	if err != nil {
 		return nil, err
 	}
@@ -2644,7 +2609,6 @@ func (s *GraphQLServer) ModelFieldOperationResolverFn(p graphql.ResolveParams) (
 	var (
 		v      = p.Context.Value
 		router = v("router").(echo.Context)
-		ctx    = p.Context
 	)
 
 	s.injectMetaData("ModelFieldOperationResolverFn", router)
@@ -2692,12 +2656,12 @@ func (s *GraphQLServer) ModelFieldOperationResolverFn(p graphql.ResolveParams) (
 		return nil, errors.New("field name is required")
 	}
 
-	var repeatedGroupIdentifier string
-	if val, ok := p.Args["repeated_group_identifier"].(string); ok && val != "_root" {
-		repeatedGroupIdentifier = val
+	var parentField string
+	if val, ok := p.Args["parent_field"].(string); ok && val != "_root" {
+		parentField = val
 	}
 
-	driver, err := s.GraphQLExecutor.GetProjectDriver(ctx)
+	driver, err := s.GraphQLExecutor.GetProjectDriver(cache.Ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -2724,13 +2688,13 @@ func (s *GraphQLServer) ModelFieldOperationResolverFn(p graphql.ResolveParams) (
 
 		// now search for fields
 		for _, f := range modelType.Fields {
-			if f.Identifier == fieldName && repeatedGroupIdentifier == "" {
+			if f.Identifier == fieldName && parentField == "" {
 				fieldInfo = f
 				// rename this
 				fieldInfo.Identifier = newIdentifier
 				fieldInfo.Label = label
 				break
-			} else if repeatedGroupIdentifier != "" && f.Identifier == repeatedGroupIdentifier && f.SubFieldInfo != nil {
+			} else if parentField != "" && f.Identifier == parentField && f.SubFieldInfo != nil {
 				for _, sf := range f.SubFieldInfo {
 					if sf.Identifier == fieldName {
 						fieldInfo = &models.FieldInfo{
@@ -2749,7 +2713,7 @@ func (s *GraphQLServer) ModelFieldOperationResolverFn(p graphql.ResolveParams) (
 
 						if len(sf.SubFieldInfo) > 0 {
 							for _, ssf := range sf.SubFieldInfo {
-								ssf.RepeatedGroupIdentifier = newIdentifier
+								//ssf.parent_field = newIdentifier
 								ssf.ParentField = newIdentifier
 							}
 						}
@@ -2768,7 +2732,7 @@ func (s *GraphQLServer) ModelFieldOperationResolverFn(p graphql.ResolveParams) (
 		param.SinglePageData = singlePageModel
 
 		if fieldName != param.FieldInfo.Identifier { // skip renaming if the same value is given
-			err := driver.RenameField(p.Context, fieldName, repeatedGroupIdentifier, param)
+			err := driver.RenameField(cache.Ctx, fieldName, parentField, param)
 			if err != nil {
 				return nil, err
 			}
@@ -2795,11 +2759,11 @@ func (s *GraphQLServer) ModelFieldOperationResolverFn(p graphql.ResolveParams) (
 		// Single loop to check for duplicates and create new field
 		for _, f := range modelType.Fields {
 			// Check for duplicates
-			if f.Identifier == newIdentifier && repeatedGroupIdentifier == "" {
+			if f.Identifier == newIdentifier && parentField == "" {
 				return nil, errors.New("field with that name already exists")
 			}
 
-			if f.Identifier == repeatedGroupIdentifier && f.SubFieldInfo != nil && repeatedGroupIdentifier != "" {
+			if f.Identifier == parentField && f.SubFieldInfo != nil && parentField != "" {
 				for _, sf := range f.SubFieldInfo {
 					if sf.Identifier == newIdentifier {
 						return nil, errors.New("sub field with that name already exists")
@@ -2808,7 +2772,7 @@ func (s *GraphQLServer) ModelFieldOperationResolverFn(p graphql.ResolveParams) (
 			}
 
 			// Create new field if matching field found
-			if f.Identifier == fieldName && repeatedGroupIdentifier == "" {
+			if f.Identifier == fieldName && parentField == "" {
 				newFieldInfo = models.FieldInfo{
 					Identifier:              newIdentifier,
 					Description:             f.Description,
@@ -2818,14 +2782,14 @@ func (s *GraphQLServer) ModelFieldOperationResolverFn(p graphql.ResolveParams) (
 					Serial:                  uint32(len(modelType.Fields) + 1),
 					Label:                   label,
 					ParentField:             f.ParentField,
-					RepeatedGroupIdentifier: f.RepeatedGroupIdentifier,
+					//RepeatedGroupIdentifier: f.RepeatedGroupIdentifier,
 					SystemGenerated:         f.SystemGenerated,
 					SubFieldInfo:            f.SubFieldInfo,
 				}
 				modelType.Fields = append(modelType.Fields, &newFieldInfo)
 				found = true
 				break
-			} else if repeatedGroupIdentifier != "" && f.Identifier == repeatedGroupIdentifier && f.SubFieldInfo != nil {
+			} else if parentField != "" && f.Identifier == parentField && f.SubFieldInfo != nil {
 				var fieldToDuplicate *models.FieldInfo
 				for _, sf := range f.SubFieldInfo {
 					if sf.Identifier == fieldName {
@@ -2843,7 +2807,7 @@ func (s *GraphQLServer) ModelFieldOperationResolverFn(p graphql.ResolveParams) (
 					Validation:              fieldToDuplicate.Validation,
 					Serial:                  uint32(len(f.SubFieldInfo) + 1),
 					ParentField:             fieldToDuplicate.ParentField,
-					RepeatedGroupIdentifier: fieldToDuplicate.RepeatedGroupIdentifier,
+					//RepeatedGroupIdentifier: fieldToDuplicate.RepeatedGroupIdentifier,
 					SystemGenerated:         fieldToDuplicate.SystemGenerated,
 				})
 				found = true
@@ -2858,7 +2822,7 @@ func (s *GraphQLServer) ModelFieldOperationResolverFn(p graphql.ResolveParams) (
 		param.Model = modelType
 		param.FieldInfo = &newFieldInfo
 		param.SinglePageData = singlePageModel
-		modelType, err = driver.AddFieldToModel(p.Context, param, true, repeatedGroupIdentifier)
+		modelType, err = driver.AddFieldToModel(p.Context, param, true, parent_field)
 		if err != nil {
 			return nil, err
 		} */
@@ -2867,19 +2831,19 @@ func (s *GraphQLServer) ModelFieldOperationResolverFn(p graphql.ResolveParams) (
 		fieldInfo = &newFieldInfo
 	}
 
-	project, err = s.SystemDriver.GetProject(p.Context, project.ID)
+	project, err = s.SystemDriver.GetProject(cache.Ctx, project.ID)
 	if err != nil {
 		return nil, err
 	}
 
 	project.Schema = cache.Project.Schema
-	err = s.SystemDriver.UpdateProject(p.Context, project, true)
+	err = s.SystemDriver.UpdateProject(cache.Ctx, project, true)
 	if err != nil {
 		return nil, err
 	}
 
 	// expire the cache
-	err = s.ExpireGraphQLFieldCache(ctx, project.ID, modelType.Name)
+	err = s.ExpireGraphQLFieldCache(cache.Ctx, project.ID, modelType.Name)
 	if err != nil {
 		return nil, err
 	}
@@ -2979,7 +2943,6 @@ func (s *GraphQLServer) DeleteFieldTypeResolverFn(p graphql.ResolveParams) (inte
 	var (
 		v      = p.Context.Value
 		router = v("router").(echo.Context)
-		ctx    = p.Context
 	)
 
 	s.injectMetaData("DeleteFieldTypeResolverFn", router)
@@ -3018,7 +2981,7 @@ func (s *GraphQLServer) DeleteFieldTypeResolverFn(p graphql.ResolveParams) (inte
 	param.Model = modelType
 	identifier := p.Args["identifier"].(string)
 
-	driver, err := s.GraphQLExecutor.GetProjectDriver(ctx)
+	driver, err := s.GraphQLExecutor.GetProjectDriver(cache.Ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -3071,7 +3034,7 @@ func (s *GraphQLServer) DeleteFieldTypeResolverFn(p graphql.ResolveParams) (inte
 		// drop it from db
 		param.FieldInfo = &models.FieldInfo{Identifier: identifier}
 
-		err = driver.DeleteRelationDocuments(p.Context, param.ProjectID,
+		err = driver.DeleteRelationDocuments(cache.Ctx, param.ProjectID,
 			fromConnectionType,
 			toConnectionType,
 		)
@@ -3081,7 +3044,7 @@ func (s *GraphQLServer) DeleteFieldTypeResolverFn(p graphql.ResolveParams) (inte
 	} else {
 
 		var parentIdentifier string
-		if val, ok := p.Args["repeated_group_identifier"].(string); ok {
+		if val, ok := p.Args["parent_field"].(string); ok {
 			if val != "_root" { // skip if root
 				parentIdentifier = val
 			}
@@ -3122,11 +3085,11 @@ func (s *GraphQLServer) DeleteFieldTypeResolverFn(p graphql.ResolveParams) (inte
 						Label:                   deletedField.Label,
 						SystemGenerated:         deletedField.SystemGenerated,
 						ParentField:             parentIdentifier,
-						RepeatedGroupIdentifier: parentIdentifier,
+						//RepeatedGroupIdentifier: parentIdentifier,
 					}
 
 					// Drop it from database
-					err = driver.DropField(p.Context, param)
+					err = driver.DropField(cache.Ctx, param)
 					if err != nil {
 						return nil, err
 					}
@@ -3169,7 +3132,7 @@ func (s *GraphQLServer) DeleteFieldTypeResolverFn(p graphql.ResolveParams) (inte
 				param.FieldInfo = deletedField
 
 				// Drop it from database
-				err = driver.DropField(p.Context, param)
+				err = driver.DropField(cache.Ctx, param)
 				if err != nil {
 					return nil, err
 				}
@@ -3179,13 +3142,13 @@ func (s *GraphQLServer) DeleteFieldTypeResolverFn(p graphql.ResolveParams) (inte
 		}
 	}
 
-	err = s.SystemDriver.UpdateProject(ctx, project, true)
+	err = s.SystemDriver.UpdateProject(cache.Ctx, project, true)
 	if err != nil {
 		return nil, err
 	}
 
 	// expire the project cache
-	err = s.ExpireGraphQLProjectCache(ctx, project.ID)
+	err = s.ExpireGraphQLProjectCache(cache.Ctx, project.ID)
 	if err != nil {
 		return nil, err
 	}
@@ -3198,21 +3161,16 @@ func (s *GraphQLServer) CreateConnectionTypeResolverFn(p graphql.ResolveParams) 
 	var (
 		v      = p.Context.Value
 		router = v("router").(echo.Context)
-		ctx    = p.Context
 	)
 
 	s.injectMetaData("CreateConnectionTypeResolverFn", router)
 
-	param, err := s.buildCommonSystemParam(router)
+	cache, err := s.GetApplicationCache(router)
 	if err != nil {
 		return nil, err
 	}
-
-	projectId := param.ProjectID
-	project, err := s.SystemDriver.GetProject(ctx, projectId)
-	if err != nil {
-		return nil, err
-	}
+	
+	project := cache.Project
 
 	var fromResource string
 	if val, ok := p.Args["from"].(string); ok {
@@ -3233,7 +3191,7 @@ func (s *GraphQLServer) CreateConnectionTypeResolverFn(p graphql.ResolveParams) 
 		knownAs = strings.TrimSpace(utility.SingularResourceName(strcase.ToLowerCamel(val)))
 	}
 
-	driver, err := s.GraphQLExecutor.GetProjectDriver(ctx)
+	driver, err := s.GraphQLExecutor.GetProjectDriver(cache.Ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -3260,9 +3218,9 @@ func (s *GraphQLServer) CreateConnectionTypeResolverFn(p graphql.ResolveParams) 
 
 		// dont let insert relations without defining any fields
 		if len(fromModelType.Fields) == 0 {
-			return nil, errors.New(fmt.Sprintf("can not create relations with %s, because it has no fields.", strings.Title(strings.ToLower(fromModelType.Name))))
+			return nil, fmt.Errorf("can not create relations with %s, because it has no fields.", strings.Title(strings.ToLower(fromModelType.Name)))
 		} else if len(toModelType.Fields) == 0 {
-			return nil, errors.New(fmt.Sprintf("can not create relations with %s, because it has no fields.", strings.Title(strings.ToLower(toModelType.Name))))
+			return nil, fmt.Errorf("can not create relations with %s, because it has no fields.", strings.Title(strings.ToLower(toModelType.Name)))
 		}
 
 		// from
@@ -3378,12 +3336,12 @@ func (s *GraphQLServer) CreateConnectionTypeResolverFn(p graphql.ResolveParams) 
 		// #todo we should rearrange all the serial after inserting this at the top
 
 		// used for SQL type driver. For nosql it's not implemented or needed
-		err = driver.AddRelationFields(p.Context, fromConnectionInfo, toConnectionInfo)
+		err = driver.AddRelationFields(cache.Ctx, fromConnectionInfo, toConnectionInfo)
 		if err != nil {
 			return nil, err
 		}
 
-		err = s.SystemDriver.UpdateProject(p.Context, project, false)
+		err = s.SystemDriver.UpdateProject(cache.Ctx, project, false)
 		if err != nil {
 			return nil, err
 		}
@@ -3401,7 +3359,6 @@ func (s *GraphQLServer) UpsertModelDataFnFn(p graphql.ResolveParams) (interface{
 	var (
 		v      = p.Context.Value
 		router = v("router").(echo.Context)
-		ctx    = p.Context
 	)
 
 	s.injectMetaData("UpsertModelDataFnFn", router)
@@ -3473,7 +3430,7 @@ func (s *GraphQLServer) UpsertModelDataFnFn(p graphql.ResolveParams) (interface{
 		forceUpdate = false
 	}
 
-	driver, err := s.GraphQLExecutor.GetProjectDriver(ctx)
+	driver, err := s.GraphQLExecutor.GetProjectDriver(cache.Ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -3499,7 +3456,7 @@ func (s *GraphQLServer) UpsertModelDataFnFn(p graphql.ResolveParams) (interface{
 			param.SinglePageData = true
 		}
 
-		raw, err := driver.GetSingleRawDocumentFromProject(p.Context, param)
+		raw, err := driver.GetSingleRawDocumentFromProject(cache.Ctx, param)
 		if err != nil {
 			return nil, err
 		}
@@ -3517,7 +3474,7 @@ func (s *GraphQLServer) UpsertModelDataFnFn(p graphql.ResolveParams) (interface{
 					return nil, err
 				}
 				param.ConDisParam = cdp
-				err = driver.DisconnectBuilder(p.Context, param)
+				err = driver.DisconnectBuilder(cache.Ctx, param)
 				if err != nil {
 					return nil, err
 				}
@@ -3529,7 +3486,7 @@ func (s *GraphQLServer) UpsertModelDataFnFn(p graphql.ResolveParams) (interface{
 					return nil, err
 				}
 				param.ConDisParam = cdp
-				err = driver.ConnectBuilder(p.Context, param)
+				err = driver.ConnectBuilder(cache.Ctx, param)
 				if err != nil {
 					return nil, err
 				}
@@ -3550,7 +3507,7 @@ func (s *GraphQLServer) UpsertModelDataFnFn(p graphql.ResolveParams) (interface{
 			}
 
 			//#todo need image param validation
-			modifiedPayload, err := s.GraphQLExecutor.HandlePayloadFormatting(p.Context, param, local, modelType.Fields, inputPayload, doc.Data)
+			modifiedPayload, err := s.GraphQLExecutor.HandlePayloadFormatting(cache.Ctx, param, local, modelType.Fields, inputPayload, doc.Data)
 			if err != nil {
 				return nil, err
 			}
@@ -3563,7 +3520,7 @@ func (s *GraphQLServer) UpsertModelDataFnFn(p graphql.ResolveParams) (interface{
 
 			// replacing the doc might case the local field to disappear. don't replace the old doc
 			// fixed it later !!
-			err = driver.UpdateDocumentOfProject(p.Context, param, doc, forceUpdate)
+			err = driver.UpdateDocumentOfProject(cache.Ctx, param, doc, forceUpdate)
 			if err != nil {
 				return nil, err
 			}
@@ -3608,7 +3565,7 @@ func (s *GraphQLServer) UpsertModelDataFnFn(p graphql.ResolveParams) (interface{
 		}
 
 		//#todo need image param validation
-		modifiedPayload, err := s.GraphQLExecutor.HandlePayloadFormatting(p.Context, param, local, modelType.Fields, inputPayload, make(map[string]interface{}))
+		modifiedPayload, err := s.GraphQLExecutor.HandlePayloadFormatting(cache.Ctx, param, local, modelType.Fields, inputPayload, make(map[string]interface{}))
 		if err != nil {
 			return nil, err
 		}
@@ -3620,7 +3577,7 @@ func (s *GraphQLServer) UpsertModelDataFnFn(p graphql.ResolveParams) (interface{
 		}
 
 		//_, err = s.GraphQLExecutor.GetProjectDriver(ctx).AddDocumentToProject(p.Context, param.ProjectId, modelName, doc)
-		_, err = driver.AddDocumentToProject(p.Context, param, doc)
+		_, err = driver.AddDocumentToProject(cache.Ctx, param, doc)
 		if err != nil {
 			return nil, err
 		}
@@ -3632,15 +3589,15 @@ func (s *GraphQLServer) UpsertModelDataFnFn(p graphql.ResolveParams) (interface{
 				if err != nil {
 					// if relation error at first then remove the document
 					param.DocumentID = doc.ID
-					err = driver.DeleteDocumentFromProject(p.Context, param)
+					err = driver.DeleteDocumentFromProject(cache.Ctx, param)
 					return nil, err
 				}
 				param.ConDisParam = v
-				err = driver.ConnectBuilder(p.Context, param)
+				err = driver.ConnectBuilder(cache.Ctx, param)
 				if err != nil {
 					// if relation error at first then remove the document
 					param.DocumentID = doc.ID
-					err = driver.DeleteDocumentFromProject(p.Context, param)
+					err = driver.DeleteDocumentFromProject(cache.Ctx, param)
 					return nil, err
 				}
 			}
@@ -3661,34 +3618,30 @@ func (s *GraphQLServer) DuplicateModelDataFnFn(p graphql.ResolveParams) (interfa
 	var (
 		v      = p.Context.Value
 		router = v("router").(echo.Context)
-		ctx    = p.Context
 	)
 
 	s.injectMetaData("DuplicateModelDataFnFn", router)
 
-	param, err := s.buildCommonSystemParam(router)
+	cache, err := s.GetApplicationCache(router)
 	if err != nil {
 		return nil, err
 	}
 
+	param := s.NewParam(cache.Param)
 	param.ResolveParams = &p
 
-	projectId := param.ProjectID
-	tenantId := router.Get("tenant")
+	tenantID := router.Get("tenant")
 
 	switch param.Role.ID {
 	case "tenant":
-		if tenantId == nil {
+		if tenantID == nil {
 			return nil, errors.New("unable to Identify the User")
 		}
-		param.TenantID = tenantId.(string)
+		param.TenantID = tenantID.(string)
 		break
 	}
 
-	project, err := s.SystemDriver.GetProject(p.Context, projectId)
-	if err != nil {
-		return nil, err
-	}
+	project := cache.Project
 
 	var modelName string
 	if val, ok := p.Args["model_name"].(string); ok && val != "" {
@@ -3722,12 +3675,12 @@ func (s *GraphQLServer) DuplicateModelDataFnFn(p graphql.ResolveParams) (interfa
 		param.Model = modelType
 		param.ProjectType = project.ProjectType
 
-		driver, err := s.GraphQLExecutor.GetProjectDriver(ctx)
+		driver, err := s.GraphQLExecutor.GetProjectDriver(cache.Ctx)
 		if err != nil {
 			return nil, err
 		}
 
-		exists, err := driver.GetSingleProjectDocument(p.Context, param)
+		exists, err := driver.GetSingleProjectDocument(cache.Ctx, param)
 		if err != nil {
 			return nil, err
 		}
@@ -3740,7 +3693,7 @@ func (s *GraphQLServer) DuplicateModelDataFnFn(p graphql.ResolveParams) (interfa
 			exists.Meta.UpdatedAt = utility.GetCurrentTime()
 
 			//_, err = s.GraphQLExecutor.GetProjectDriver(ctx).AddDocumentToProject(p.Context, param.ProjectId, modelName, doc)
-			_, err = driver.AddDocumentToProject(p.Context, param, exists)
+			_, err = driver.AddDocumentToProject(cache.Ctx, param, exists)
 			if err != nil {
 				return nil, err
 			}
@@ -3761,7 +3714,6 @@ func (s *GraphQLServer) DeleteModelDataFnFn(p graphql.ResolveParams) (interface{
 	var (
 		v      = p.Context.Value
 		router = v("router").(echo.Context)
-		ctx    = p.Context
 	)
 
 	s.injectMetaData("DeleteModelDataFnFn", router)
@@ -3805,20 +3757,20 @@ func (s *GraphQLServer) DeleteModelDataFnFn(p graphql.ResolveParams) (interface{
 		param.DocumentID = docId
 		param.Model = modelType
 
-		driver, err := s.GraphQLExecutor.GetProjectDriver(ctx)
+		driver, err := s.GraphQLExecutor.GetProjectDriver(cache.Ctx)
 		if err != nil {
 			return nil, err
 		}
 
 		param.DocPublishStatus = "all"
 
-		exists, err := driver.GetSingleProjectDocument(p.Context, param)
+		exists, err := driver.GetSingleProjectDocument(cache.Ctx, param)
 		if err != nil {
 			return nil, err
 		}
 
 		if exists != nil {
-			err = driver.DeleteDocumentFromProject(p.Context, param)
+			err = driver.DeleteDocumentFromProject(cache.Ctx, param)
 			if err != nil {
 				return nil, err
 			}

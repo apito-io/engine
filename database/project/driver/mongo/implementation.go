@@ -590,7 +590,7 @@ func (m *MongoDriver) AddModel(ctx context.Context, project *models.Project, mod
 }
 
 // AddFieldToModel adds a new field to an existing model in the project.
-func (m *MongoDriver) AddFieldToModel(ctx context.Context, param *models.CommonSystemParams, isUpdate bool, repeatedGroupIdentifier string) (*models.ModelType, error) {
+func (m *MongoDriver) AddFieldToModel(ctx context.Context, param *models.CommonSystemParams, isUpdate bool, parent_field string) (*models.ModelType, error) {
 	// Since we don't have direct access to project schema, we'll work with the provided model
 	if param.Model == nil {
 		return nil, errors.New("model not provided")
@@ -599,7 +599,7 @@ func (m *MongoDriver) AddFieldToModel(ctx context.Context, param *models.CommonS
 	targetModel := param.Model
 
 	// Handle field addition based on whether it's a parent field or nested field
-	if repeatedGroupIdentifier == "" {
+	if parent_field == "" {
 		// Adding a top-level field
 		if isUpdate {
 			// Update existing field
@@ -614,7 +614,7 @@ func (m *MongoDriver) AddFieldToModel(ctx context.Context, param *models.CommonS
 		targetModel.Fields = append(targetModel.Fields, param.FieldInfo)
 	} else {
 		// Adding to a nested/repeated group
-		depth := m.searchAndAppend(targetModel.Fields, isUpdate, repeatedGroupIdentifier, param.FieldInfo, 0)
+		depth := m.searchAndAppend(targetModel.Fields, isUpdate, parent_field, param.FieldInfo, 0)
 		if depth == 0 {
 			return nil, errors.New("parent field not found")
 		}
@@ -751,7 +751,7 @@ func (m *MongoDriver) DropModel(ctx context.Context, project *models.Project, mo
 	return collection.Drop(ctx)
 }
 
-func (m *MongoDriver) CreateIndex(ctx context.Context, param *models.CommonSystemParams, fieldName string, repeatedGroupIdentifier string) error {
+func (m *MongoDriver) CreateIndex(ctx context.Context, param *models.CommonSystemParams, fieldName string, parent_field string) error {
 	collection := m.Database.Collection(param.Model.Name)
 
 	// Create index options

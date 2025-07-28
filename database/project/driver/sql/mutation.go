@@ -415,20 +415,20 @@ func (S *SQLDriver) DeleteRelationDocuments(ctx context.Context, projectId strin
 	return nil
 }
 
-func (S *SQLDriver) AddFieldToModel(ctx context.Context, param *models.CommonSystemParams, isUpdate bool, repeatedGroupIdentifier string) (*models.ModelType, error) {
+func (S *SQLDriver) AddFieldToModel(ctx context.Context, param *models.CommonSystemParams, isUpdate bool, parent_field string) (*models.ModelType, error) {
 
 	if param.FieldInfo.InputType == "geo" {
 		return nil, errors.New("geo Field is not supported in PostgreSQL. We will be integrating it soon")
 	}
 
-	if repeatedGroupIdentifier == "" && !isUpdate {
+	if parent_field == "" && !isUpdate {
 		if (!isUpdate && param.FieldInfo.Serial == 0) || len(param.Model.Fields) == 0 { // new field cant be zero
 			param.FieldInfo.Serial = uint32(len(param.Model.Fields) + 1)
 		}
 		param.Model.Fields = append(param.Model.Fields, param.FieldInfo)
-	} else if repeatedGroupIdentifier != "" {
+	} else if parent_field != "" {
 		for _, f := range param.Model.Fields {
-			if f.Identifier == repeatedGroupIdentifier {
+			if f.Identifier == parent_field {
 				subField := param.FieldInfo
 				var found bool
 				for i, s := range f.SubFieldInfo {
@@ -446,7 +446,7 @@ func (S *SQLDriver) AddFieldToModel(ctx context.Context, param *models.CommonSys
 		}
 	}
 
-	if repeatedGroupIdentifier != "" {
+	if parent_field != "" {
 		return param.Model, nil // dont create anything
 		// todo transform this to one to many relation
 	}

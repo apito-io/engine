@@ -121,12 +121,12 @@ The `ProjectDBInterface` contains **47 methods** that must be implemented. Here'
   - Update project metadata
 - **Returns**: Updated project schema
 
-#### `AddFieldToModel(ctx context.Context, param *models.CommonSystemParams, isUpdate bool, repeatedGroupIdentifier string) (*models.ModelType, error)`
+#### `AddFieldToModel(ctx context.Context, param *models.CommonSystemParams, isUpdate bool, parent_field string) (*models.ModelType, error)`
 
 - **Purpose**: Adds or updates fields in an existing model
 - **Parameters**:
   - `isUpdate`: True if updating existing field, false if adding new
-  - `repeatedGroupIdentifier`: For nested/repeated field groups
+  - `parent_field`: For nested/repeated field groups
 - **Implementation**: Modify schema structure, handle data migration if needed
 
 #### `RenameModel(ctx context.Context, project *models.Project, modelName, newName string) error`
@@ -149,7 +149,7 @@ The `ProjectDBInterface` contains **47 methods** that must be implemented. Here'
 
 ### Index Management (2 methods)
 
-#### `CreateIndex(ctx context.Context, param *models.CommonSystemParams, fieldName string, repeatedGroupIdentifier string) error`
+#### `CreateIndex(ctx context.Context, param *models.CommonSystemParams, fieldName string, parent_field string) error`
 
 - **Purpose**: Creates database indexes for improved query performance
 - **Implementation**:

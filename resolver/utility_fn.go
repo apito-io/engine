@@ -6,16 +6,17 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io/ioutil"
+	"net/http"
+	"strings"
+	"time"
+
 	"github.com/apito-io/engine/models"
 	"github.com/apito-io/engine/utility"
 	"github.com/getsentry/sentry-go"
 	"github.com/google/uuid"
 	"github.com/microcosm-cc/bluemonday"
 	"golang.org/x/crypto/bcrypt"
-	"io/ioutil"
-	"net/http"
-	"strings"
-	"time"
 )
 
 func (s *GraphQLServer) HandlePayloadFormattingOld(ctx context.Context, param *models.CommonSystemParams, payload map[string]interface{}) (map[string]interface{}, map[string]interface{}, error) {
@@ -150,7 +151,10 @@ func (s *GraphQLServer) runWebHook(event string, hook *models.Webhook, payload i
 	//req.Header.Set("X-Custom-Header", "myvalue")
 	req.Header.Set("Content-Type", "application/json")
 
-	client := &http.Client{}
+	// Add timeout to prevent goroutine leaks
+	client := &http.Client{
+		Timeout: 30 * time.Second,
+	}
 	resp, err := client.Do(req)
 	if err != nil {
 		sentry.CaptureException(err)

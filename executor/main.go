@@ -2,7 +2,9 @@ package executor
 
 import (
 	"context"
+	"errors"
 	"fmt"
+
 	"github.com/apito-io/engine/database"
 	shardDB "github.com/apito-io/engine/database/shared"
 	"github.com/apito-io/engine/interfaces"
@@ -75,8 +77,12 @@ func (s *GraphQLExecutor) SetProjectDriverCredential(ctx context.Context, driver
 
 func (s *GraphQLExecutor) GetProjectDriver(ctx context.Context) (interfaces.ProjectDBInterface, error) {
 
-	projectID := ctx.Value("project_id").(string)
-	conn, err := s.connectionManager.GetConnection(ctx, projectID)
+	projectID := ctx.Value("project_id")
+
+	if projectID == nil {
+		return nil, errors.New("project id is required in context for `GetProjectDriver`")
+	}
+	conn, err := s.connectionManager.GetConnection(ctx, projectID.(string))
 	if err != nil {
 		fmt.Println(err.Error())
 		return nil, err

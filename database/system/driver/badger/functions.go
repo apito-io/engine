@@ -236,7 +236,7 @@ func (b *BadgerDriver) ListAllProjects(ctx context.Context, userId string) ([]*m
 		return nil, err
 	}
 
-	if !user.IsSuperAdmin {
+	if !user.IsAdmin {
 		return nil, fmt.Errorf("not allowed")
 	}
 

@@ -198,7 +198,7 @@ func RootResolverQueryBuilder(param *models.CommonSystemParams, previewMode bool
 	var previewIcon *string
 	if previewMode { // preview mode is on so just fetch the preview data
 		for _, f := range param.Model.Fields {
-			if f.Validation != nil && f.Validation.AsTitle && previewField == nil {
+			if f.Validation != nil && previewField == nil {
 				previewField = &f.Identifier
 			} else if f.FieldType == "media" && f.Validation != nil && !f.Validation.IsGallery && previewIcon == nil {
 				previewIcon = &f.Identifier

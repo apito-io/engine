@@ -1252,7 +1252,10 @@ func (s *GraphQLServer) BuildServerQueriesAndMutations() {
 				"model_name": &graphql.ArgumentConfig{
 					Type: graphql.NewNonNull(graphql.String),
 				},
-				"repeated_group_identifier": &graphql.ArgumentConfig{
+				/* "repeated_group_identifier": &graphql.ArgumentConfig{
+					Type: graphql.String,
+				}, */
+				"parent_field": &graphql.ArgumentConfig{
 					Type: graphql.String,
 				},
 				"is_object_field": &graphql.ArgumentConfig{
@@ -1346,7 +1349,10 @@ func (s *GraphQLServer) BuildServerQueriesAndMutations() {
 				"model_name": &graphql.ArgumentConfig{
 					Type: graphql.NewNonNull(graphql.String),
 				},
-				"repeated_group_identifier": &graphql.ArgumentConfig{
+				/* "repeated_group_identifier": &graphql.ArgumentConfig{
+					Type: graphql.String,
+				}, */
+				"parent_field": &graphql.ArgumentConfig{
 					Type: graphql.String,
 				},
 				"identifier": &graphql.ArgumentConfig{
@@ -1374,7 +1380,10 @@ func (s *GraphQLServer) BuildServerQueriesAndMutations() {
 				"new_name": &graphql.ArgumentConfig{
 					Type: graphql.NewNonNull(graphql.String),
 				},
-				"repeated_group_identifier": &graphql.ArgumentConfig{
+				/* "repeated_group_identifier": &graphql.ArgumentConfig{
+					Type: graphql.String,
+				}, */
+				"parent_field": &graphql.ArgumentConfig{
 					Type: graphql.String,
 				},
 				"single_page_model": &graphql.ArgumentConfig{

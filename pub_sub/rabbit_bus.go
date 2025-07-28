@@ -1,11 +1,13 @@
 package pub_sub
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
+	"sync"
+
 	"github.com/google/uuid"
 	amqp "github.com/rabbitmq/amqp091-go"
-	"sync"
 )
 
 type rabbitBus struct {
@@ -157,8 +159,22 @@ func (rb *rabbitBus) Subscribe(topic string, cb func(data interface{}), options 
 		}
 
 		go func() {
+			defer func() {
+				if r := recover(); r != nil {
+					fmt.Printf("RabbitMQ subscription handler panic: %v\n", r)
+				}
+				fmt.Printf("RabbitMQ subscription handler stopped for topic: %s\n", topic)
+			}()
+
+			// Create context for this subscription handler
+			ctx, cancel := context.WithCancel(context.Background())
+			defer cancel()
+
 			for {
 				select {
+				case <-ctx.Done():
+					fmt.Printf("RabbitMQ subscription handler context cancelled for topic: %s\n", topic)
+					return
 				case unsubMsg := <-unsubChan:
 					if val, ok := rb.queuesMap.Load(unsubMsg.topic); ok {
 						subs := val.(*subscription)

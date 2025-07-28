@@ -25,7 +25,7 @@ type ProjectDBInterface interface {
 	// AddModel adds a new model to the project.
 	AddModel(ctx context.Context, project *models.Project, model *models.ModelType) (*models.ProjectSchema, error)
 	// AddFieldToModel adds a new field to an existing model in the project.
-	AddFieldToModel(ctx context.Context, param *models.CommonSystemParams, isUpdate bool, repeatedGroupIdentifier string) (*models.ModelType, error)
+	AddFieldToModel(ctx context.Context, param *models.CommonSystemParams, isUpdate bool, parent_field string) (*models.ModelType, error)
 	// RenameModel renames a model in the project.
 	RenameModel(ctx context.Context, project *models.Project, modelName, newName string) error
 	// ConvertModel converts a model in the project.
@@ -35,7 +35,7 @@ type ProjectDBInterface interface {
 
 	// Index-related functions
 	// CreateIndex creates an index for a model in the project.
-	CreateIndex(ctx context.Context, param *models.CommonSystemParams, fieldName string, repeatedGroupIdentifier string) error
+	CreateIndex(ctx context.Context, param *models.CommonSystemParams, fieldName string, parent_field string) error
 	// DropIndex drops an index from a model in the project.
 	DropIndex(ctx context.Context, param *models.CommonSystemParams, indexName string) error
 

@@ -5,10 +5,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"time"
-
 	"github.com/apito-io/engine/models"
 	"github.com/apito-io/types"
-	"github.com/couchbase/gocb/v2"
 	"github.com/google/uuid"
 )
 
@@ -104,13 +102,13 @@ func (c *CouchbaseDriver) AddModel(ctx context.Context, project *models.Project,
 }
 
 // AddFieldToModel adds a new field to an existing model in the project
-func (c *CouchbaseDriver) AddFieldToModel(ctx context.Context, param *models.CommonSystemParams, isUpdate bool, repeatedGroupIdentifier string) (*models.ModelType, error) {
+func (c *CouchbaseDriver) AddFieldToModel(ctx context.Context, param *models.CommonSystemParams, isUpdate bool, parent_field string) (*models.ModelType, error) {
 	// In Couchbase, fields are managed in the model metadata
-	if repeatedGroupIdentifier == "" && isUpdate {
+	if parent_field == "" && isUpdate {
 		param.Model.Fields = append(param.Model.Fields, param.FieldInfo)
-	} else if repeatedGroupIdentifier != "" {
+	} else if parent_field != "" {
 		for _, f := range param.Model.Fields {
-			if f.Identifier == repeatedGroupIdentifier {
+			if f.Identifier == parent_field {
 				subField := param.FieldInfo
 				var found bool
 				for i, s := range f.SubFieldInfo {
@@ -213,7 +211,7 @@ func (c *CouchbaseDriver) DropModel(ctx context.Context, project *models.Project
 }
 
 // CreateIndex creates an index for a model in the project
-func (c *CouchbaseDriver) CreateIndex(ctx context.Context, param *models.CommonSystemParams, fieldName string, repeatedGroupIdentifier string) error {
+func (c *CouchbaseDriver) CreateIndex(ctx context.Context, param *models.CommonSystemParams, fieldName string, parent_field string) error {
 	indexName := fmt.Sprintf("idx_%s_%s_%s", param.ProjectID, param.Model.Name, fieldName)
 
 	// Create index on document_data field using N1QL

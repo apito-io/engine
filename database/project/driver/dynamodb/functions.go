@@ -114,13 +114,13 @@ func (d *DynamoDBDriver) AddModel(ctx context.Context, project *models.Project, 
 }
 
 // AddFieldToModel adds a new field to an existing model in the project
-func (d *DynamoDBDriver) AddFieldToModel(ctx context.Context, param *models.CommonSystemParams, isUpdate bool, repeatedGroupIdentifier string) (*models.ModelType, error) {
+func (d *DynamoDBDriver) AddFieldToModel(ctx context.Context, param *models.CommonSystemParams, isUpdate bool, parent_field string) (*models.ModelType, error) {
 	// Update the model schema in DynamoDB
-	if repeatedGroupIdentifier == "" && isUpdate {
+	if parent_field == "" && isUpdate {
 		param.Model.Fields = append(param.Model.Fields, param.FieldInfo)
-	} else if repeatedGroupIdentifier != "" {
+	} else if parent_field != "" {
 		for _, f := range param.Model.Fields {
-			if f.Identifier == repeatedGroupIdentifier {
+			if f.Identifier == parent_field {
 				subField := param.FieldInfo
 				var found bool
 				for i, s := range f.SubFieldInfo {
@@ -308,7 +308,7 @@ func (d *DynamoDBDriver) DropModel(ctx context.Context, project *models.Project,
 }
 
 // CreateIndex creates an index for a model in the project
-func (d *DynamoDBDriver) CreateIndex(ctx context.Context, param *models.CommonSystemParams, fieldName string, repeatedGroupIdentifier string) error {
+func (d *DynamoDBDriver) CreateIndex(ctx context.Context, param *models.CommonSystemParams, fieldName string, parent_field string) error {
 	// DynamoDB indexes are managed at table level and defined during table creation
 	// For project-specific indexes, we would need to create GSIs which is complex
 	// For now, we'll just return nil as the basic indexes are already created

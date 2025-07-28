@@ -84,28 +84,52 @@ func (pm *PluginMonitor) healthCheckRoutine(ctx context.Context) {
 	ticker := time.NewTicker(HEALTH_CHECK_INTERVAL)
 	defer ticker.Stop()
 
+	defer func() {
+		if r := recover(); r != nil {
+			fmt.Printf("Plugin health check routine panic: %v\n", r)
+		}
+		fmt.Println("🔍 [PLUGIN-MONITOR] Health check routine stopped")
+	}()
+
 	for {
 		select {
 		case <-ctx.Done():
+			fmt.Println("🔍 [PLUGIN-MONITOR] Health check routine context cancelled")
 			return
 		case <-pm.stopChannel:
+			fmt.Println("🔍 [PLUGIN-MONITOR] Health check routine stop signal received")
 			return
 		case <-ticker.C:
-			pm.performHealthChecks(ctx)
+			// Add timeout to health checks to prevent blocking
+			healthCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
+			pm.performHealthChecks(healthCtx)
+			cancel()
 		}
 	}
 }
 
 // restartHandlerRoutine handles plugin restart requests
 func (pm *PluginMonitor) restartHandlerRoutine(ctx context.Context) {
+	defer func() {
+		if r := recover(); r != nil {
+			fmt.Printf("Plugin restart handler routine panic: %v\n", r)
+		}
+		fmt.Println("🔍 [PLUGIN-MONITOR] Restart handler routine stopped")
+	}()
+
 	for {
 		select {
 		case <-ctx.Done():
+			fmt.Println("🔍 [PLUGIN-MONITOR] Restart handler routine context cancelled")
 			return
 		case <-pm.stopChannel:
+			fmt.Println("🔍 [PLUGIN-MONITOR] Restart handler routine stop signal received")
 			return
 		case pluginID := <-pm.restartQueue:
-			pm.handlePluginRestart(ctx, pluginID)
+			// Add timeout to restart operations to prevent blocking
+			restartCtx, cancel := context.WithTimeout(ctx, 60*time.Second)
+			pm.handlePluginRestart(restartCtx, pluginID)
+			cancel()
 		}
 	}
 }
@@ -306,8 +330,12 @@ func (pm *PluginMonitor) restartPlugin(ctx context.Context, pluginID string) err
 	delete(pm.server.HashiCorpPluginCache, pluginID)
 	pm.server.Unlock()
 
-	// Wait a bit for cleanup
-	time.Sleep(1 * time.Second)
+	// Wait a bit for cleanup with context timeout check
+	select {
+	case <-time.After(1 * time.Second):
+	case <-ctx.Done():
+		return fmt.Errorf("restart cancelled due to context timeout")
+	}
 
 	// Restart the plugin
 	dir := filepath.Join(pm.server.Cfg.PluginPath, pluginID)

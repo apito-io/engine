@@ -664,19 +664,11 @@ func (g *GraphCtrl) SystemGraphQL(i echo.Context) error {
 
 	ctx := i.Request().Context()
 
-	cache, err := g.gqlServer.GetApplicationCache(i)
-	if err != nil {
-		return i.JSON(http.StatusBadRequest, &models.HttpResponse{
-			Message: err.Error(),
-			Code:    http.StatusBadRequest,
-		})
-	}
-
-	res, err := schemas.SystemSchema(ctx, cache, &req, g.gqlServer, i)
+	res, err := schemas.SystemSchema(ctx, &req, g.gqlServer, i)
 	if err != nil {
 		return i.JSON(http.StatusBadRequest, &models.HttpResponse{
 			Message: utility.CaptureInternalServerError(err, map[string]interface{}{
-				"req": cache,
+				"req": req,
 			}).Error(),
 			Code: http.StatusBadRequest,
 		})

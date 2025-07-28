@@ -20,9 +20,6 @@ func SetTokenClaimsToRouter(ctx echo.Context, tokenClaims *models.TokenClaims) e
 			ctx.Set("temp_tenant_id", tempTenantID)
 		} */
 
-		//ctx.Set("ust", tokenClaims.UserSubscriptionType)
-		ctx.Set("is_super_admin", tokenClaims.IsSuperAdmin)
-
 		// user id is set by access token not id token
 		if tokenClaims.UserID != "" {
 			ctx.Set("user", tokenClaims.UserID)

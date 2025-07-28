@@ -29,7 +29,6 @@ type Role struct {
 	IsAdmin                   bool                      `json:"is_admin,omitempty" firestore:"is_admin,omitempty" bson:"is_admin,omitempty"`
 	IsProjectUser             bool                      `json:"is_project_user,omitempty" firestore:"is_project_user,omitempty" bson:"is_project_user,omitempty"`
 	ReadOnlyProject           bool                      `json:"read_only_project,omitempty" firestore:"read_only_project,omitempty" bson:"read_only_project,omitempty"`
-	IsSuperAdmin              bool                      `json:"is_super_admin,omitempty" firestore:"read_only_project,omitempty" bson:"is_super_admin,omitempty"`
 }
 
 // MarshalApiPermissions serializes ApiPermissions to JSON.

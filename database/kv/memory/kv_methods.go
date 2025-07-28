@@ -20,19 +20,16 @@ func (m *KVMemoryService) AddToSortedSets(ctx context.Context, setName string, k
 	score := float64(time.Now().Unix())
 	m.sortedSets[setName][key] = score
 
-	// Handle expiration by setting a timer
+	// Handle expiration by adding to expiration map (will be cleaned up by background worker)
 	if exp > 0 {
-		go func() {
-			time.Sleep(exp)
-			m.mutex.Lock()
-			defer m.mutex.Unlock()
-			if m.sortedSets[setName] != nil {
-				delete(m.sortedSets[setName], key)
-				if len(m.sortedSets[setName]) == 0 {
-					delete(m.sortedSets, setName)
-				}
-			}
-		}()
+		expTime := time.Now().Add(exp)
+		if m.expirations == nil {
+			m.expirations = make(map[string]map[string]time.Time)
+		}
+		if m.expirations[setName] == nil {
+			m.expirations[setName] = make(map[string]time.Time)
+		}
+		m.expirations[setName][key] = expTime
 	}
 
 	return nil

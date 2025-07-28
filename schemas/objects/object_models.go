@@ -75,7 +75,6 @@ func (s *SchemaObjects) GetSystemUserObject(prefix string) *graphql.Object {
 			"project_user":               &graphql.Field{Type: graphql.Boolean},
 			"administrative_permissions": &graphql.Field{Type: graphql.NewList(graphql.String)},
 
-			"is_super_admin": &graphql.Field{Type: graphql.Boolean},
 			"is_admin":       &graphql.Field{Type: graphql.Boolean},
 
 			"read_only_project":      &graphql.Field{Type: graphql.Boolean},
@@ -257,7 +256,6 @@ func (s *SchemaObjects) GetFieldInfoObject(validationTypeObj *graphql.Object) *g
 			"field_type":       &graphql.Field{Type: graphql.String},
 			"field_sub_type":   &graphql.Field{Type: graphql.String},
 			"system_generated": &graphql.Field{Type: graphql.Boolean},
-			"parent_field":     &graphql.Field{Type: graphql.String},
 			"sub_field_info": &graphql.Field{Type: graphql.NewList(graphql.NewObject(graphql.ObjectConfig{
 				Name: "SubFieldInfo",
 				Fields: graphql.Fields{
@@ -288,12 +286,13 @@ func (s *SchemaObjects) GetFieldInfoObject(validationTypeObj *graphql.Object) *g
 					}))},
 				},
 			}))},
-			"validation":                &graphql.Field{Type: validationTypeObj},
-			"serial":                    &graphql.Field{Type: graphql.Int},
-			"label":                     &graphql.Field{Type: graphql.String},
-			"repeated_group_identifier": &graphql.Field{Type: graphql.String},
-			"is_object_field":           &graphql.Field{Type: graphql.Boolean},
-			"enable_indexing":           &graphql.Field{Type: graphql.Boolean},
+			"validation": &graphql.Field{Type: validationTypeObj},
+			"serial":     &graphql.Field{Type: graphql.Int},
+			"label":      &graphql.Field{Type: graphql.String},
+			//"repeated_group_identifier": &graphql.Field{Type: graphql.String},
+			"parent_field":    &graphql.Field{Type: graphql.String},
+			"is_object_field": &graphql.Field{Type: graphql.Boolean},
+			"enable_indexing": &graphql.Field{Type: graphql.Boolean},
 		},
 	})
 }
