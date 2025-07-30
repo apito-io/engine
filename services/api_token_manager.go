@@ -287,7 +287,7 @@ func (m *APIKeyManager) GenerateTenantToken(ctx context.Context, tenantID, token
 	claims.UserID = projectUserID
 
 	claims.TenantID = tenantID
-	//claims.TenantID = "f7512eb6-7d19-49f2-aad6-056073743d40"
+	//claims.TenantID = "2a7cd0c3-d263-4d25-8b6a-263692879fc6"
 	claims.TokenType = "tenant"
 	claims.ExpireAt = time.Now().Add(time.Hour * 24 * 30) // 30 days
 	return m.GenerateKey(claims)

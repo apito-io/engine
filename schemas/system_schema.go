@@ -13,9 +13,6 @@ import (
 
 func SystemSchema(ctx context.Context, graphqlRequest *models.GraphQLIncomingRequest, server *resolver.GraphQLServer, echo echo.Context) (*graphql.Result, error) {
 
-	queries := server.SystemQueries
-	mutations := server.SystemMutations
-
 	role := echo.Get("role")
 	if role == "demo" {
 		return &graphql.Result{Errors: []gqlerrors.FormattedError{
@@ -24,14 +21,7 @@ func SystemSchema(ctx context.Context, graphqlRequest *models.GraphQLIncomingReq
 			},
 		}}, nil
 	}
-
-	// default query
-	queries["currentProject"] = &graphql.Field{
-		Name:    "GetCurrentProject",
-		Type:    server.PrivateSchemObjects.ProjectDetailsObject,
-		Resolve: server.GetCurrentProjectResolverFn,
-	}
-
+	
 	/*	subscriptions := graphql.Fields{
 		"notifySystem": &graphql.Field{
 			Name: "NotifySystemType",
@@ -53,26 +43,16 @@ func SystemSchema(ctx context.Context, graphqlRequest *models.GraphQLIncomingReq
 		},
 	}*/
 
-	var _query *graphql.Object
-	var _mutation *graphql.Object
-	if len(queries) > 0 {
-		_query = graphql.NewObject(graphql.ObjectConfig{
-			Name:   "QueryType",
-			Fields: queries,
-		})
-	}
-
-	if len(mutations) > 0 {
-		_mutation = graphql.NewObject(graphql.ObjectConfig{
-			Name:   "MutationQuery",
-			Fields: mutations,
-		})
-	}
-
 	schema, err := graphql.NewSchema(
 		graphql.SchemaConfig{
-			Query:    _query,
-			Mutation: _mutation,
+			Query: graphql.NewObject(graphql.ObjectConfig{
+				Name:   "QueryType",
+				Fields: server.SystemQueries,
+			}),
+			Mutation: graphql.NewObject(graphql.ObjectConfig{
+				Name:   "MutationQuery",
+				Fields: server.SystemMutations,
+			}),
 			Types: []graphql.Type{
 				scaler.ScalarJSON,
 				scaler.ScalarJSONArray,

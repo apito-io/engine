@@ -18,6 +18,11 @@ func (s *GraphQLServer) BuildServerQueriesAndMutations() {
 	s.PrivateSchemObjects = privateSchemaObjects
 
 	s.SystemQueriesChan <- &graphql.Fields{
+		"currentProject": &graphql.Field{
+			Name:    "GetCurrentProject",
+			Type:    privateSchemaObjects.ProjectDetailsObject,
+			Resolve: s.GetCurrentProjectResolverFn,
+		},
 		"auditLogs": &graphql.Field{
 			Name: "GetAuditLogs",
 			Type: graphql.NewList(privateSchemaObjects.AuditLogObject),
@@ -1342,7 +1347,7 @@ func (s *GraphQLServer) BuildServerQueriesAndMutations() {
 			},
 			Resolve: s.RearrangeFieldOfModelResolverFn,
 		},
-		"deleteFieldFromModel": &graphql.Field{
+		/* "deleteFieldFromModel": &graphql.Field{
 			Name: "DeleteFieldFromModel",
 			Type: privateSchemaObjects.ModelTypeObject,
 			Args: graphql.FieldConfigArgument{
@@ -1351,7 +1356,7 @@ func (s *GraphQLServer) BuildServerQueriesAndMutations() {
 				},
 				/* "repeated_group_identifier": &graphql.ArgumentConfig{
 					Type: graphql.String,
-				}, */
+				}, 
 				"parent_field": &graphql.ArgumentConfig{
 					Type: graphql.String,
 				},
@@ -1363,7 +1368,7 @@ func (s *GraphQLServer) BuildServerQueriesAndMutations() {
 				},
 			},
 			Resolve: s.DeleteFieldTypeResolverFn,
-		},
+		}, */
 		"modelFieldOperation": &graphql.Field{
 			Name: "FieldOperationType",
 			Type: privateSchemaObjects.FieldInfoObject,
@@ -1378,7 +1383,7 @@ func (s *GraphQLServer) BuildServerQueriesAndMutations() {
 					Type: graphql.NewNonNull(graphql.String),
 				},
 				"new_name": &graphql.ArgumentConfig{
-					Type: graphql.NewNonNull(graphql.String),
+					Type: graphql.String,
 				},
 				/* "repeated_group_identifier": &graphql.ArgumentConfig{
 					Type: graphql.String,
@@ -1387,6 +1392,9 @@ func (s *GraphQLServer) BuildServerQueriesAndMutations() {
 					Type: graphql.String,
 				},
 				"single_page_model": &graphql.ArgumentConfig{
+					Type: graphql.Boolean,
+				},
+				"is_relation": &graphql.ArgumentConfig{
 					Type: graphql.Boolean,
 				},
 			},

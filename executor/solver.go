@@ -5,6 +5,10 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"reflect"
+	"strings"
+	"time"
+
 	gqlgen "github.com/99designs/gqlgen/graphql"
 	_const "github.com/apito-io/engine/const"
 	ae "github.com/apito-io/engine/err"
@@ -14,13 +18,9 @@ import (
 	"github.com/google/uuid"
 	"github.com/graph-gophers/dataloader/v7"
 	"github.com/liangyaopei/structmap"
-	"github.com/microcosm-cc/bluemonday"
 	"github.com/tailor-inc/graphql"
 	"github.com/vektah/gqlparser/v2/ast"
 	"golang.org/x/crypto/bcrypt"
-	"reflect"
-	"strings"
-	"time"
 )
 
 type DataloaderResultTyped[T any] struct {
@@ -810,7 +810,7 @@ func (s *GraphQLExecutor) HandlePayloadFormatting(ctx context.Context, param *mo
 	inputPayload map[string]interface{},
 	dbPayload map[string]interface{},
 	deltaUpdate bool,
-	) (map[string]interface{}, error) {
+) (map[string]interface{}, error) {
 
 	for _, f := range fields { // loop through the fields to format the payload
 
@@ -906,24 +906,14 @@ func (s *GraphQLExecutor) HandlePayloadFormatting(ctx context.Context, param *mo
 
 		case _const.MultilineField:
 			if userInput, ok := inputPayload[f.Identifier].(map[string]interface{}); ok && len(userInput) > 0 {
-				if html, ok := userInput["html"].(string); ok {
-					p := bluemonday.UGCPolicy()
-					dbPayload[identifier] = map[string]interface{}{
-						"html": p.Sanitize(html),
-					}
-				}
-				if markdown, ok := userInput["markdown"].(string); ok {
-					dbPayload[identifier] = map[string]interface{}{
-						"markdown": markdown,
-					}
-				}
-				if text, ok := userInput["text"].(string); ok {
-					dbPayload[identifier] = map[string]interface{}{
-						"text": text,
-					}
+				// Process multiline field with markdown as source of truth
+				processed := utility.ProcessMultilineField(userInput)
+				if len(processed) > 0 {
+					dbPayload[identifier] = processed
+				} else {
+					return nil, errors.New("markdown is required for multiline field")
 				}
 			}
-
 		case _const.ListField:
 
 			if f.Validation != nil && f.Validation.FixedListElements == nil { // dynamic string
@@ -1015,7 +1005,7 @@ func (s *GraphQLExecutor) HandlePayloadFormatting(ctx context.Context, param *mo
 					}
 				} else {
 					// this is normal update mode
-					// it usages total replace so update, delete all supported but 
+					// it usages total replace so update, delete all supported but
 					// be sure that you have to send the entire array of objects
 					userInputLength := len(userInput)
 					var formattedInput []interface{}

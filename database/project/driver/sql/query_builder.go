@@ -10,13 +10,11 @@ import (
 	"strings"
 	"time"
 
-	md "github.com/JohannesKaufmann/html-to-markdown"
 	qutility "github.com/apito-io/engine/database/utility"
 	"github.com/apito-io/engine/models"
 	"github.com/apito-io/engine/utility"
 	"github.com/apito-io/types"
 	"github.com/graph-gophers/dataloader"
-	strip "github.com/grokify/html-strip-tags-go"
 	"github.com/tailor-inc/graphql"
 )
 
@@ -232,20 +230,15 @@ func CommonDocTransformation(model *models.ModelType, local string, result map[s
 			}
 		default:
 			if utility.ArrayContains(classification.MultilineFields, k) {
-				converter := md.NewConverter("", true, nil)
 				var html string
 				if val, ok := v.(string); ok {
 					html = val
 				}
-				markdown, err := converter.ConvertString(html)
-				if err != nil {
-					fmt.Println(err.Error())
-				}
-				data[k] = map[string]interface{}{
-					"html":     html,
-					"markdown": markdown,
-					"text":     strip.StripTags(html),
-				}
+				// Use the new markdown processor
+				processed := utility.ProcessMultilineField(map[string]interface{}{
+					"html": html,
+				})
+				data[k] = processed
 			} else if utility.ArrayContains(classification.DoubleFields, k) {
 				if val, ok := v.([]byte); ok {
 					f, _ := strconv.ParseFloat(string(val), 64)

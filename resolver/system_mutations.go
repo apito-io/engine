@@ -2370,11 +2370,11 @@ func (s *GraphQLServer) UpsertFieldToModelResolverFn(p graphql.ResolveParams) (i
 					Hide:   true,
 					Unique: true,
 				},
-				Serial:                  1,
-				Label:                   "ID",
-				SystemGenerated:         true,
+				Serial:          1,
+				Label:           "ID",
+				SystemGenerated: true,
 				//RepeatedGroupIdentifier: fieldInfo.Identifier,
-				ParentField:             fieldInfo.Identifier,
+				ParentField: fieldInfo.Identifier,
 			},
 		}
 	}
@@ -2661,6 +2661,11 @@ func (s *GraphQLServer) ModelFieldOperationResolverFn(p graphql.ResolveParams) (
 		parentField = val
 	}
 
+	var isRelation bool
+	if val, ok := p.Args["is_relation"].(bool); ok {
+		isRelation = val
+	}
+
 	driver, err := s.GraphQLExecutor.GetProjectDriver(cache.Ctx)
 	if err != nil {
 		return nil, err
@@ -2774,17 +2779,17 @@ func (s *GraphQLServer) ModelFieldOperationResolverFn(p graphql.ResolveParams) (
 			// Create new field if matching field found
 			if f.Identifier == fieldName && parentField == "" {
 				newFieldInfo = models.FieldInfo{
-					Identifier:              newIdentifier,
-					Description:             f.Description,
-					InputType:               f.InputType,
-					FieldType:               f.FieldType,
-					Validation:              f.Validation,
-					Serial:                  uint32(len(modelType.Fields) + 1),
-					Label:                   label,
-					ParentField:             f.ParentField,
+					Identifier:  newIdentifier,
+					Description: f.Description,
+					InputType:   f.InputType,
+					FieldType:   f.FieldType,
+					Validation:  f.Validation,
+					Serial:      uint32(len(modelType.Fields) + 1),
+					Label:       label,
+					ParentField: f.ParentField,
 					//RepeatedGroupIdentifier: f.RepeatedGroupIdentifier,
-					SystemGenerated:         f.SystemGenerated,
-					SubFieldInfo:            f.SubFieldInfo,
+					SystemGenerated: f.SystemGenerated,
+					SubFieldInfo:    f.SubFieldInfo,
 				}
 				modelType.Fields = append(modelType.Fields, &newFieldInfo)
 				found = true
@@ -2799,16 +2804,16 @@ func (s *GraphQLServer) ModelFieldOperationResolverFn(p graphql.ResolveParams) (
 				}
 				// Add subfield if not found
 				f.SubFieldInfo = append(f.SubFieldInfo, &models.FieldInfo{
-					Identifier:              newIdentifier,
-					Label:                   label,
-					Description:             fieldToDuplicate.Description,
-					InputType:               fieldToDuplicate.InputType,
-					FieldType:               fieldToDuplicate.FieldType,
-					Validation:              fieldToDuplicate.Validation,
-					Serial:                  uint32(len(f.SubFieldInfo) + 1),
-					ParentField:             fieldToDuplicate.ParentField,
+					Identifier:  newIdentifier,
+					Label:       label,
+					Description: fieldToDuplicate.Description,
+					InputType:   fieldToDuplicate.InputType,
+					FieldType:   fieldToDuplicate.FieldType,
+					Validation:  fieldToDuplicate.Validation,
+					Serial:      uint32(len(f.SubFieldInfo) + 1),
+					ParentField: fieldToDuplicate.ParentField,
 					//RepeatedGroupIdentifier: fieldToDuplicate.RepeatedGroupIdentifier,
-					SystemGenerated:         fieldToDuplicate.SystemGenerated,
+					SystemGenerated: fieldToDuplicate.SystemGenerated,
 				})
 				found = true
 			}
@@ -2829,6 +2834,40 @@ func (s *GraphQLServer) ModelFieldOperationResolverFn(p graphql.ResolveParams) (
 
 		// for response
 		fieldInfo = &newFieldInfo
+	case enums.FieldOperation_Delete:
+
+		if isRelation {
+			fromConnectionType, toConnectionType, err := s.deleteRelationField(cache.Ctx, project, modelType, fieldName)
+			if err != nil {
+				return nil, err
+			}
+			err = driver.DeleteRelationDocuments(cache.Ctx, project.ID,
+				fromConnectionType,
+				toConnectionType,
+			)
+			if err != nil {
+				return nil, err
+			}
+		} else {
+			// delete the field
+			updatedFields, deletedField, found := s.findAndDeleteField(modelType.Fields, fieldName, parentField)
+			if !found {
+				return nil, errors.New("field not found to delete")
+			}
+
+			param := s.NewParam(cache.Param)
+			// update the fields
+			modelType.Fields = updatedFields
+			param.FieldInfo = deletedField
+			fieldInfo = deletedField
+			param.Model = modelType
+
+			// Drop it from database
+			err = driver.DropField(cache.Ctx, param)
+			if err != nil {
+				return nil, err
+			}
+		}
 	}
 
 	project, err = s.SystemDriver.GetProject(cache.Ctx, project.ID)
@@ -2851,49 +2890,7 @@ func (s *GraphQLServer) ModelFieldOperationResolverFn(p graphql.ResolveParams) (
 	return fieldInfo, nil
 }
 
-/*func (s *GraphQLServer) UploadImageFromURLResolverFn(p graphql.ResolveParams) (interface{}, error) {
-
-	var (
-		v      = p.Context.Value
-		router = v("router").(echo.Context)
-	)
-
-	param, err := s.buildCommonSystemParam(router)
-	if err != nil {
-		return nil, err
-	}
-
-	var url string
-	if val, ok := p.Args["url"].(string); ok && val != "" {
-		url = val
-	} else {
-		return nil, errors.New("URL is Necessary")
-	}
-	m, err := s.GraphQLExecutor.HandleMediaURL(p.Context, param, map[string]interface{}{
-		"url": url,
-	})
-	if err != nil {
-		return nil, err
-	}
-	return m, nil
-}
-*/
-
-func (s *GraphQLServer) deleteFieldFromModels(models []*models.ModelType, modelID, fieldID string) *models.ModelType {
-	for _, m := range models {
-		if m.Name == modelID {
-			for i, f := range m.Fields {
-				if f.Identifier == fieldID {
-					m.Fields = append(m.Fields[:i], m.Fields[i+1:]...)
-					return m
-				}
-			}
-		}
-	}
-	return nil
-}
-
-func (s *GraphQLServer) findAndDeleteField(fields []*models.FieldInfo, identifier string, parentPath string) (*models.FieldInfo, bool) {
+func (s *GraphQLServer) findAndDeleteField(fields []*models.FieldInfo, identifier string, parentPath string) ([]*models.FieldInfo, *models.FieldInfo, bool) {
 	for i, f := range fields {
 		// Check if this is the field to delete
 		if f.Identifier == identifier {
@@ -2904,9 +2901,9 @@ func (s *GraphQLServer) findAndDeleteField(fields []*models.FieldInfo, identifie
 
 			// Update the parent's SubFieldInfo reference if we're in a nested context
 			if parentPath != "" {
-				for j := range fields {
-					if fields[j].Identifier == parentPath {
-						fields[j].SubFieldInfo = fields
+				for j := range f.SubFieldInfo {
+					if f.SubFieldInfo[j].Identifier == parentPath {
+						f.SubFieldInfo[j].SubFieldInfo = f.SubFieldInfo
 						break
 					}
 				}
@@ -2919,241 +2916,81 @@ func (s *GraphQLServer) findAndDeleteField(fields []*models.FieldInfo, identifie
 				}
 			}
 
-			return deletedField, true
+			return fields, deletedField, true
 		}
 
 		// Recursively search in subfields
-		if f.SubFieldInfo != nil && len(f.SubFieldInfo) > 0 {
+		if len(f.SubFieldInfo) > 0 {
 			newParentPath := f.Identifier
 			if parentPath != "" {
 				newParentPath = parentPath + "." + f.Identifier
 			}
 
-			if deletedField, found := s.findAndDeleteField(f.SubFieldInfo, identifier, newParentPath); found {
-				return deletedField, true
+			if _subFields, deletedField, found := s.findAndDeleteField(f.SubFieldInfo, identifier, newParentPath); found {
+				return _subFields, deletedField, true
 			}
 		}
 	}
 
-	return nil, false
+	return nil, nil, false
 }
 
-func (s *GraphQLServer) DeleteFieldTypeResolverFn(p graphql.ResolveParams) (interface{}, error) {
+func (s *GraphQLServer) deleteRelationField(ctx context.Context, project *models.Project, modelType *models.ModelType, identifier string) (*models.ConnectionType, *models.ConnectionType, error) {
 
-	var (
-		v      = p.Context.Value
-		router = v("router").(echo.Context)
-	)
-
-	s.injectMetaData("DeleteFieldTypeResolverFn", router)
-
-	cache, err := s.GetApplicationCache(router)
-	if err != nil {
-		return nil, err
-	}
-
-	project := cache.Project
-
-	var modelName string
-	if val, ok := p.Args["model_name"].(string); ok {
-		modelName = strings.TrimSpace(utility.SingularResourceName(val))
-	} else {
-		return nil, errors.New(ae.MODEL_NAME_REQUIRED)
-	}
-
-	var modelType *models.ModelType
-	// if schema not found then create
-	if project.Schema == nil {
-		return nil, ae.SchemaIsNil
-	}
-	for _, ct := range project.Schema.Models {
-		if ct.Name == modelName {
-			modelType = ct
+	// struct the connection type before removing from schema
+	var fromConnectionType *models.ConnectionType
+	// delete the forward relation
+	for i, r := range modelType.Connections {
+		if r.Model == identifier {
+			fromConnectionType = r
+			modelType.Connections = append(modelType.Connections[:i], modelType.Connections[i+1:]...)
 			break
 		}
 	}
-	if modelType == nil {
-		return nil, errors.New(ae.MODEL_IS_REQUIRED)
+	if len(modelType.Connections) == 0 {
+		modelType.Connections = nil
 	}
 
-	param := s.NewParam(cache.Param)
-
-	param.Model = modelType
-	identifier := p.Args["identifier"].(string)
-
-	driver, err := s.GraphQLExecutor.GetProjectDriver(cache.Ctx)
-	if err != nil {
-		return nil, err
+	if fromConnectionType == nil {
+		return nil, nil, errors.New("from connection type not found")
 	}
 
-	if isRelation, ok := p.Args["is_relation"].(bool); ok && isRelation {
+	// struct the connection type before removing from schema
+	var toConnectionType *models.ConnectionType
 
-		// struct the connection type before removing from schema
-		var fromConnectionType *models.ConnectionType
-		// delete the forward relation
-		for i, r := range modelType.Connections {
-			if r.Model == identifier {
-				fromConnectionType = r
-				modelType.Connections = append(modelType.Connections[:i], modelType.Connections[i+1:]...)
-				break
-			}
-		}
-		if len(modelType.Connections) == 0 {
-			modelType.Connections = nil
-		}
-
-		// struct the connection type before removing from schema
-		var toConnectionType *models.ConnectionType
-
-		// delete the backward relation
-		for _, ct := range project.Schema.Models {
-			if ct.Name == identifier {
-				for i, r := range ct.Connections {
-					if r.Model == modelName {
-						toConnectionType = r
-						ct.Connections = append(ct.Connections[:i], ct.Connections[i+1:]...)
-						break
-					}
-				}
-				if len(ct.Connections) == 0 {
-					ct.Connections = nil
-				}
-				break
-			}
-		}
-
-		// delete system has one identifer
-		if fromConnectionType.Relation == "has_one" {
-			s.deleteFieldFromModels(project.Schema.Models, toConnectionType.Model, fmt.Sprintf(`system_%s_id`, fromConnectionType.Model))
-		}
-
-		if toConnectionType.Relation == "has_one" {
-			s.deleteFieldFromModels(project.Schema.Models, fromConnectionType.Model, fmt.Sprintf(`system_%s_id`, toConnectionType.Model))
-		}
-
-		// drop it from db
-		param.FieldInfo = &models.FieldInfo{Identifier: identifier}
-
-		err = driver.DeleteRelationDocuments(cache.Ctx, param.ProjectID,
-			fromConnectionType,
-			toConnectionType,
-		)
-		if err != nil {
-			return nil, err
-		}
-	} else {
-
-		var parentIdentifier string
-		if val, ok := p.Args["parent_field"].(string); ok {
-			if val != "_root" { // skip if root
-				parentIdentifier = val
-			}
-		}
-
-		// Handle parent-child explicit relationship if parentIdentifier is provided
-		if parentIdentifier != "" {
-			// Find parent field recursively
-			parentField := s.searchFields(modelType.Fields, "", parentIdentifier)
-
-			if parentField == nil {
-				return nil, errors.New("parent field not found")
-			}
-
-			// Find and remove child field
-			var deletedField *models.FieldInfo
-			for i, sf := range parentField.SubFieldInfo {
-				if sf.Identifier == identifier {
-					deletedField = sf
-					// Remove the field
-					parentField.SubFieldInfo = append(parentField.SubFieldInfo[:i], parentField.SubFieldInfo[i+1:]...)
-
-					// Adjust serial numbers for siblings
-					for j := range parentField.SubFieldInfo {
-						if parentField.SubFieldInfo[j].Serial > deletedField.Serial {
-							parentField.SubFieldInfo[j].Serial--
-						}
-					}
-
-					// Prepare field info for database update
-					param.FieldInfo = &models.FieldInfo{
-						Identifier:              deletedField.Identifier,
-						Description:             deletedField.Description,
-						InputType:               deletedField.InputType,
-						FieldType:               deletedField.FieldType,
-						Validation:              deletedField.Validation,
-						Serial:                  deletedField.Serial,
-						Label:                   deletedField.Label,
-						SystemGenerated:         deletedField.SystemGenerated,
-						ParentField:             parentIdentifier,
-						//RepeatedGroupIdentifier: parentIdentifier,
-					}
-
-					// Drop it from database
-					err = driver.DropField(cache.Ctx, param)
-					if err != nil {
-						return nil, err
-					}
+	// delete the backward relation
+	for _, ct := range project.Schema.Models {
+		if ct.Name == identifier {
+			for i, r := range ct.Connections {
+				if r.Model == modelType.Name {
+					toConnectionType = r
+					ct.Connections = append(ct.Connections[:i], ct.Connections[i+1:]...)
 					break
 				}
 			}
-
-			if deletedField == nil {
-				return nil, errors.New("field not found in parent")
+			if len(ct.Connections) == 0 {
+				ct.Connections = nil
 			}
-		} else {
-			// Use recursive approach for fields at any nesting level
-			var deletedField *models.FieldInfo
-			var found bool
-
-			// Check for top-level fields first for backward compatibility
-			for i, f := range modelType.Fields {
-				if f.Identifier == identifier {
-					deletedField = f
-					modelType.Fields = append(modelType.Fields[:i], modelType.Fields[i+1:]...)
-					found = true
-
-					// Adjust serial numbers
-					for j := range modelType.Fields {
-						if modelType.Fields[j].Serial > deletedField.Serial {
-							modelType.Fields[j].Serial--
-						}
-					}
-					break
-				}
-			}
-
-			// If not found at top level, search recursively
-			if !found {
-				deletedField, found = s.findAndDeleteField(modelType.Fields, identifier, "")
-			}
-
-			if deletedField != nil {
-				// Prepare field info for database update
-				param.FieldInfo = deletedField
-
-				// Drop it from database
-				err = driver.DropField(cache.Ctx, param)
-				if err != nil {
-					return nil, err
-				}
-			} else if !found {
-				return nil, errors.New("field not found")
-			}
+			break
 		}
 	}
 
-	err = s.SystemDriver.UpdateProject(cache.Ctx, project, true)
-	if err != nil {
-		return nil, err
+	if toConnectionType == nil {
+		return nil, nil, errors.New("to connection type not found")
 	}
 
-	// expire the project cache
-	err = s.ExpireGraphQLProjectCache(cache.Ctx, project.ID)
-	if err != nil {
-		return nil, err
+	// delete system has one identifer
+	if fromConnectionType.Relation == "has_one" {
+		_fields, _, _ := s.findAndDeleteField(modelType.Fields, fmt.Sprintf(`system_%s_id`, fromConnectionType.Model), "")
+		modelType.Fields = _fields
 	}
 
-	return modelType, nil
+	if toConnectionType.Relation == "has_one" {
+		_fields, _, _ := s.findAndDeleteField(modelType.Fields, fmt.Sprintf(`system_%s_id`, toConnectionType.Model), "")
+		modelType.Fields = _fields
+	}
+
+	return fromConnectionType, toConnectionType, nil
 }
 
 func (s *GraphQLServer) CreateConnectionTypeResolverFn(p graphql.ResolveParams) (interface{}, error) {
@@ -3169,7 +3006,7 @@ func (s *GraphQLServer) CreateConnectionTypeResolverFn(p graphql.ResolveParams) 
 	if err != nil {
 		return nil, err
 	}
-	
+
 	project := cache.Project
 
 	var fromResource string

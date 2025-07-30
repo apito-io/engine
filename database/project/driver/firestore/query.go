@@ -6,11 +6,10 @@ import (
 	"fmt"
 
 	"cloud.google.com/go/firestore"
-	md "github.com/JohannesKaufmann/html-to-markdown"
 	"github.com/apito-io/engine/models"
+	"github.com/apito-io/engine/utility"
 	"github.com/apito-io/types"
 	"github.com/graph-gophers/dataloader"
-	strip "github.com/grokify/html-strip-tags-go"
 	"github.com/tailor-inc/graphql"
 	"google.golang.org/api/iterator"
 	"google.golang.org/api/option"
@@ -585,15 +584,13 @@ func (a *FireStoreDriver) QueryMultiDocumentOfProjectBytes(ctx context.Context, 
 		rdoc.DataTo(&doc)
 
 		for _, m := range multilineFields { // #todo if not requestd then dont run
-			converter := md.NewConverter("", true, nil)
 			if d, ok := doc.Data[m].(map[string]interface{}); ok {
 				if html, ok := d["html"].(string); ok {
-					markdown, err := converter.ConvertString(html)
-					if err != nil {
-						fmt.Println(err.Error())
-					}
-					d["markdown"] = markdown
-					d["text"] = strip.StripTags(html)
+					// Use the new markdown processor
+					processed := utility.ProcessMultilineField(map[string]interface{}{
+						"html": html,
+					})
+					doc.Data[m] = processed
 				}
 			}
 		}
@@ -638,15 +635,13 @@ func (a *FireStoreDriver) QueryMultiDocumentOfProject(ctx context.Context, param
 		rdoc.DataTo(&doc)
 
 		for _, m := range multilineFields { // #todo if not requestd then dont run
-			converter := md.NewConverter("", true, nil)
 			if d, ok := doc.Data[m].(map[string]interface{}); ok {
 				if html, ok := d["html"].(string); ok {
-					markdown, err := converter.ConvertString(html)
-					if err != nil {
-						fmt.Println(err.Error())
-					}
-					d["markdown"] = markdown
-					d["text"] = strip.StripTags(html)
+					// Use the new markdown processor
+					processed := utility.ProcessMultilineField(map[string]interface{}{
+						"html": html,
+					})
+					doc.Data[m] = processed
 				}
 			}
 		}

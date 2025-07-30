@@ -4,9 +4,9 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/TruthHun/html2md"
 	_const "github.com/apito-io/engine/const"
 	"github.com/apito-io/engine/models"
+	"github.com/apito-io/engine/utility"
 	"github.com/k3a/html2text"
 	"github.com/tailor-inc/graphql"
 )
@@ -126,16 +126,26 @@ func GetFieldByType(name string, inputType string, fieldType string, validation 
 				t = graphql.NewObject(graphql.ObjectConfig{
 					Name: name + "_MultilineField",
 					Fields: graphql.Fields{
-						"html": &graphql.Field{
-							Type: graphql.String,
-						},
 						"markdown": &graphql.Field{
 							Type: graphql.String,
 							Resolve: func(p graphql.ResolveParams) (interface{}, error) {
 								source := p.Source.(map[string]interface{})
-								if val, ok := source["html"].(string); ok {
-									markdown := html2md.Convert(val)
-									return markdown, nil
+								if val, ok := source["markdown"].(string); ok {
+									return val, nil
+								}
+								return nil, nil
+							},
+						},
+						"html": &graphql.Field{
+							Type: graphql.String,
+							Resolve: func(p graphql.ResolveParams) (interface{}, error) {
+								source := p.Source.(map[string]interface{})
+								if val, ok := source["html"].(string); ok && val != "" {
+									return val, nil
+								} else if val, ok := source["markdown"].(string); ok && val != "" {
+									// Convert markdown to HTML if HTML not available
+									html := utility.MarkdownToHTML(val)
+									return html, nil
 								}
 								return nil, nil
 							},
@@ -146,11 +156,13 @@ func GetFieldByType(name string, inputType string, fieldType string, validation 
 								source := p.Source.(map[string]interface{})
 								if val, ok := source["text"].(string); ok && val != "" {
 									return val, nil
+								} else if val, ok := source["markdown"].(string); ok && val != "" {
+									// Convert markdown to clean text (removes all formatting)
+									text := utility.MarkdownToText(val)
+									return text, nil
 								} else if val, ok := source["html"].(string); ok && val != "" {
 									text := html2text.HTML2Text(val)
 									return text, nil
-								} else if val, ok := source["markdown"].(string); ok && val != "" {
-									return val, nil
 								} else {
 									return nil, nil
 								}

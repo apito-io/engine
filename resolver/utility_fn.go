@@ -15,7 +15,6 @@ import (
 	"github.com/apito-io/engine/utility"
 	"github.com/getsentry/sentry-go"
 	"github.com/google/uuid"
-	"github.com/microcosm-cc/bluemonday"
 	"golang.org/x/crypto/bcrypt"
 )
 
@@ -95,11 +94,9 @@ func (s *GraphQLServer) HandlePayloadFormattingOld(ctx context.Context, param *m
 			}
 		} else if f.FieldType == "multiline" {
 			if val, ok := inputPayload[f.Identifier].(map[string]interface{}); ok && len(val) > 0 {
-				html := val["html"].(string)
-				p := bluemonday.UGCPolicy()
-				modifiedPayloads[f.Identifier] = map[string]interface{}{
-					"html": p.Sanitize(html),
-				}
+				// Use the new markdown processor to handle multiline fields
+				processed := utility.ProcessMultilineField(val)
+				modifiedPayloads[f.Identifier] = processed
 			}
 		} else if p, ok := inputPayload[f.Identifier].(map[string]interface{}); ok && len(p) > 0 && f.FieldType == "repeated" {
 			if id, ok := p["_id"].(string); ok {
