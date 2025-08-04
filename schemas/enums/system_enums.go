@@ -12,6 +12,7 @@ const (
 	FieldOperation_Rename    FieldOperation = "rename"
 	FieldOperation_Duplicate FieldOperation = "duplicate"
 	FieldOperation_Delete    FieldOperation = "delete"
+	FieldOperation_Move      FieldOperation = "move"
 )
 
 var FieldOperationEnums = graphql.NewEnum(graphql.EnumConfig{
@@ -28,6 +29,10 @@ var FieldOperationEnums = graphql.NewEnum(graphql.EnumConfig{
 		"delete": &graphql.EnumValueConfig{
 			Value:       FieldOperation_Delete,
 			Description: "Delete a Field",
+		},
+		"move": &graphql.EnumValueConfig{
+			Value:       FieldOperation_Move,
+			Description: "Move a Field",
 		},
 	},
 })

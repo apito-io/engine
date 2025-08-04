@@ -1333,20 +1333,7 @@ func (s *GraphQLServer) BuildServerQueriesAndMutations() {
 			},
 			Resolve: s.UpsertFieldToModelResolverFn,
 		},
-		// field operation
-		"rearrangeSerialOfField": &graphql.Field{
-			Name: "RearrangeSerialOfFieldType",
-			Type: privateSchemaObjects.ModelTypeObject,
-			Args: graphql.FieldConfigArgument{
-				"model_name": &graphql.ArgumentConfig{
-					Type: graphql.NewNonNull(graphql.String),
-				},
-				"serial_payload_map": &graphql.ArgumentConfig{
-					Type: graphql.NewNonNull(scaler.ScalarJSONArray),
-				},
-			},
-			Resolve: s.RearrangeFieldOfModelResolverFn,
-		},
+
 		/* "deleteFieldFromModel": &graphql.Field{
 			Name: "DeleteFieldFromModel",
 			Type: privateSchemaObjects.ModelTypeObject,
@@ -1356,7 +1343,7 @@ func (s *GraphQLServer) BuildServerQueriesAndMutations() {
 				},
 				/* "repeated_group_identifier": &graphql.ArgumentConfig{
 					Type: graphql.String,
-				}, 
+				},
 				"parent_field": &graphql.ArgumentConfig{
 					Type: graphql.String,
 				},
@@ -1397,8 +1384,34 @@ func (s *GraphQLServer) BuildServerQueriesAndMutations() {
 				"is_relation": &graphql.ArgumentConfig{
 					Type: graphql.Boolean,
 				},
+				"moved_to": &graphql.ArgumentConfig{
+					Type: graphql.String,
+				},
 			},
 			Resolve: s.ModelFieldOperationResolverFn,
+		},
+		// field operation
+		"rearrangeSerialOfField": &graphql.Field{
+			Name: "RearrangeSerialOfFieldType",
+			Type: privateSchemaObjects.ModelTypeObject,
+			Args: graphql.FieldConfigArgument{
+				"model_name": &graphql.ArgumentConfig{
+					Type: graphql.NewNonNull(graphql.String),
+				},
+				"field_name": &graphql.ArgumentConfig{
+					Type: graphql.NewNonNull(graphql.String),
+				},
+				"new_position": &graphql.ArgumentConfig{
+					Type: graphql.NewNonNull(graphql.Int),
+				},
+				"parent_id": &graphql.ArgumentConfig{
+					Type: graphql.String,
+				},
+				"move_type": &graphql.ArgumentConfig{
+					Type: graphql.NewNonNull(graphql.String),
+				},
+			},
+			Resolve: s.RearrangeFieldOfModelResolverFn,
 		},
 		// ---- end ----
 		/*		"uploadImageFromUrl": &graphql.Field{
