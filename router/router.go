@@ -22,7 +22,7 @@ import (
 
 func InitRouter(cfg *models.Config) (*echo.Echo, error) {
 
-	fmt.Println("initializing router")
+	fmt.Println("initializing apito engine router")
 	router := echo.New()
 	pprof.Register(router)
 	router.Use(middleware.Recover())
@@ -133,7 +133,6 @@ func InitRouter(cfg *models.Config) (*echo.Echo, error) {
 
 		startRoutes.GET("/start", authCtrl.Journey)
 		startRoutes.POST("/dbTest", authCtrl.DatabaseTest)
-
 	}
 
 	/*authv3Routes := router.Group("auth/v3")

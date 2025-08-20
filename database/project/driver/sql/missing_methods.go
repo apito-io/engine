@@ -2,6 +2,7 @@ package sql
 
 import (
 	"context"
+	"database/sql"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -11,7 +12,7 @@ import (
 	"github.com/apito-io/engine/utility"
 	"github.com/apito-io/types"
 	"github.com/google/uuid"
-	"gorm.io/gorm"
+	_ "github.com/uptrace/bun"
 )
 
 // GetProjectUsers retrieves metadata for multiple users in the project.
@@ -21,7 +22,7 @@ func (s *SQLDriver) GetProjectUsers(ctx context.Context, projectId string, keys 
 	// In SQL, project users might be stored in a specific table
 	var users []map[string]interface{}
 	query := "SELECT * FROM project_users WHERE project_id = ? AND id IN (?)"
-	err := s.Gorm.Raw(query, projectId, keys).Scan(&users).Error
+	err := s.ORM.NewRaw(query, projectId, keys).Scan(ctx, &users)
 	if err != nil {
 		return nil, err
 	}
@@ -42,9 +43,9 @@ func (s *SQLDriver) GetProjectUsers(ctx context.Context, projectId string, keys 
 func (s *SQLDriver) GetProjectUser(ctx context.Context, phone, email, projectId string) (*types.DefaultDocumentStructure, error) {
 	var user map[string]interface{}
 	query := "SELECT * FROM project_users WHERE project_id = ? AND (phone = ? OR email = ?)"
-	err := s.Gorm.Raw(query, projectId, phone, email).Scan(&user).Error
+	err := s.ORM.NewRaw(query, projectId, phone, email).Scan(ctx, &user)
 	if err != nil {
-		if err == gorm.ErrRecordNotFound {
+		if errors.Is(err, sql.ErrNoRows) {
 			return nil, errors.New("user not found")
 		}
 		return nil, err
@@ -63,9 +64,9 @@ func (s *SQLDriver) GetProjectUser(ctx context.Context, phone, email, projectId 
 func (s *SQLDriver) GetLoggedInProjectUser(ctx context.Context, param *models.CommonSystemParams) (*types.DefaultDocumentStructure, error) {
 	var user map[string]interface{}
 	query := "SELECT * FROM project_users WHERE project_id = ? AND user_id = ?"
-	err := s.Gorm.Raw(query, param.ProjectID, param.UserID).Scan(&user).Error
+	err := s.ORM.NewRaw(query, param.ProjectID, param.UserID).Scan(ctx, &user)
 	if err != nil {
-		if err == gorm.ErrRecordNotFound {
+		if errors.Is(err, sql.ErrNoRows) {
 			return nil, errors.New("user not found")
 		}
 		return nil, err
@@ -92,7 +93,7 @@ func (s *SQLDriver) GetSingleProjectDocumentRevisions(ctx context.Context, param
 	`
 
 	var results []map[string]interface{}
-	err := s.Gorm.Raw(query, param.DocumentID, param.DocumentID).Scan(&results).Error
+	err := s.ORM.NewRaw(query, param.DocumentID, param.DocumentID).Scan(ctx, &results)
 	if err != nil {
 		return nil, err
 	}
@@ -136,7 +137,7 @@ func (s *SQLDriver) AggregateDocOfProject(ctx context.Context, param *models.Com
 	}
 
 	var result map[string]interface{}
-	err := s.Gorm.Raw(query, param.TenantID).Scan(&result).Error
+	err := s.ORM.NewRaw(query, param.TenantID).Scan(ctx, &result)
 	if err != nil {
 		return nil, err
 	}
@@ -165,7 +166,7 @@ func (s *SQLDriver) NewInsertableRelations(ctx context.Context, param *models.Co
 		tableName,
 		utility.SingularResourceName(param.ForwardConnectionType.Model))
 
-	err := s.Gorm.Raw(query, param.ForwardConnectionID).Pluck(utility.SingularResourceName(param.BackwardConnectionType.Model)+"_id", &existingIds).Error
+	err := s.ORM.NewRaw(query, param.ForwardConnectionID).Scan(ctx, &existingIds)
 	if err != nil {
 		return nil, err
 	}
@@ -195,7 +196,7 @@ func (s *SQLDriver) CheckOneToOneRelationExists(ctx context.Context, param *mode
 		tableName,
 		utility.SingularResourceName(param.ForwardConnectionType.Model))
 
-	err := s.Gorm.Raw(query, param.ForwardConnectionID).Count(&count).Error
+	err := s.ORM.NewRaw(query, param.ForwardConnectionID).Scan(ctx, &count)
 	if err != nil {
 		return false, err
 	}
@@ -213,7 +214,7 @@ func (s *SQLDriver) GetRelationIds(ctx context.Context, param *models.ConnectDis
 		tableName,
 		utility.SingularResourceName(param.ForwardConnectionType.Model))
 
-	err := s.Gorm.Raw(query, param.ForwardConnectionID).Pluck(utility.SingularResourceName(param.BackwardConnectionType.Model)+"_id", &relationIds).Error
+	err := s.ORM.NewRaw(query, param.ForwardConnectionID).Scan(ctx, &relationIds)
 	if err != nil {
 		return nil, err
 	}
@@ -231,9 +232,9 @@ func (s *SQLDriver) GetRelationDocument(ctx context.Context, param *models.Conne
 		utility.SingularResourceName(param.ForwardConnectionType.Model),
 		utility.SingularResourceName(param.BackwardConnectionType.Model))
 
-	err := s.Gorm.Raw(query, param.ForwardConnectionID, param.ActionIDs[0]).Scan(&result).Error
+	err := s.ORM.NewRaw(query, param.ForwardConnectionID, param.ActionIDs[0]).Scan(ctx, &result)
 	if err != nil {
-		if err == gorm.ErrRecordNotFound {
+		if errors.Is(err, sql.ErrNoRows) {
 			return nil, errors.New("relation not found")
 		}
 		return nil, err
@@ -268,7 +269,7 @@ func (s *SQLDriver) CreateRelation(ctx context.Context, projectId string, relati
 		data["tenant_id"] = relation.TenantID
 	}
 
-	err := s.Gorm.Table(tableName).Create(data).Error
+	_, err := s.ORM.NewInsert().Table(tableName).Model(&data).Exec(ctx)
 	return err
 }
 
@@ -276,7 +277,7 @@ func (s *SQLDriver) CreateRelation(ctx context.Context, projectId string, relati
 func (s *SQLDriver) DeleteRelation(ctx context.Context, param *models.ConnectDisconnectParam, id string) error {
 	tableName := fmt.Sprintf("%s_%s", utility.SingularResourceName(param.ForwardConnectionType.Model), utility.SingularResourceName(param.BackwardConnectionType.Model))
 
-	err := s.Gorm.Table(tableName).Where("id = ?", id).Delete(nil).Error
+	_, err := s.ORM.NewDelete().Table(tableName).Where("id = ?", id).Exec(ctx)
 	return err
 }
 
@@ -287,7 +288,7 @@ func (s *SQLDriver) DeleteDocumentRelation(ctx context.Context, param *models.Co
 
 	// Get all table names
 	var tables []string
-	err := s.Gorm.Raw("SHOW TABLES").Pluck("Tables_in_"+param.ProjectID, &tables).Error
+	err := s.ORM.NewRaw("SHOW TABLES").Scan(ctx, &tables)
 	if err != nil {
 		return err
 	}
@@ -300,10 +301,10 @@ func (s *SQLDriver) DeleteDocumentRelation(ctx context.Context, param *models.Co
 			if len(parts) == 2 {
 				// Try to delete relations where this document is referenced
 				query1 := fmt.Sprintf("DELETE FROM `%s` WHERE %s_id = ?", table, parts[0])
-				s.Gorm.Exec(query1, param.DocumentID)
+				s.ORM.NewRaw(query1, param.DocumentID).Exec(ctx)
 
 				query2 := fmt.Sprintf("DELETE FROM `%s` WHERE %s_id = ?", table, parts[1])
-				s.Gorm.Exec(query2, param.DocumentID)
+				s.ORM.NewRaw(query2, param.DocumentID).Exec(ctx)
 			}
 		}
 	}
@@ -315,13 +316,13 @@ func (s *SQLDriver) DeleteDocumentRelation(ctx context.Context, param *models.Co
 func (s *SQLDriver) DeleteDocumentsFromProject(ctx context.Context, param *models.CommonSystemParams) error {
 	tableName := utility.SingularResourceName(param.Model.Name)
 
-	err := s.Gorm.Table(tableName).Where("id IN (?)", param.DocumentIDs).Delete(nil).Error
+	_, err := s.ORM.NewDelete().Table(tableName).Where("id IN (?)", param.DocumentIDs).Exec(ctx)
 	if err != nil {
 		return err
 	}
 
 	// Also delete from meta table
-	err = s.Gorm.Table("meta").Where("doc_id IN (?)", param.DocumentIDs).Delete(nil).Error
+	_, err = s.ORM.NewDelete().Table("meta").Where("doc_id IN (?)", param.DocumentIDs).Exec(ctx)
 	return err
 }
 
@@ -331,7 +332,7 @@ func (s *SQLDriver) RenameModel(ctx context.Context, project *models.Project, mo
 	newTableName := utility.SingularResourceName(newName)
 
 	query := fmt.Sprintf("RENAME TABLE `%s` TO `%s`", oldTableName, newTableName)
-	err := s.Gorm.Exec(query).Error
+	_, err := s.ORM.NewRaw(query).Exec(ctx)
 	if err != nil {
 		return err
 	}
@@ -355,7 +356,7 @@ func (s *SQLDriver) ConvertModel(ctx context.Context, project *models.Project, m
 	newTableName := fmt.Sprintf("converted_%s", oldTableName)
 
 	query := fmt.Sprintf("CREATE TABLE `%s` AS SELECT * FROM `%s`", newTableName, oldTableName)
-	err := s.Gorm.Exec(query).Error
+	_, err := s.ORM.NewRaw(query).Exec(ctx)
 	return err
 }
 
@@ -365,7 +366,7 @@ func (s *SQLDriver) RenameField(ctx context.Context, oldFieldName string, repeat
 	newFieldName := param.FieldInfo.Identifier
 
 	query := fmt.Sprintf("ALTER TABLE `%s` CHANGE COLUMN `%s` `%s` %s", tableName, oldFieldName, newFieldName, "TEXT")
-	err := s.Gorm.Exec(query).Error
+	_, err := s.ORM.NewRaw(query).Exec(ctx)
 	return err
 }
 
@@ -374,7 +375,7 @@ func (s *SQLDriver) DropModel(ctx context.Context, project *models.Project, mode
 	tableName := utility.SingularResourceName(modelName)
 
 	query := fmt.Sprintf("DROP TABLE IF EXISTS `%s`", tableName)
-	err := s.Gorm.Exec(query).Error
+	_, err := s.ORM.NewRaw(query).Exec(ctx)
 	if err != nil {
 		return err
 	}
@@ -397,7 +398,7 @@ func (s *SQLDriver) CreateIndex(ctx context.Context, param *models.CommonSystemP
 	indexName := fmt.Sprintf("idx_%s_%s", tableName, fieldName)
 
 	query := fmt.Sprintf("CREATE INDEX `%s` ON `%s` (`%s`)", indexName, tableName, fieldName)
-	err := s.Gorm.Exec(query).Error
+	_, err := s.ORM.NewRaw(query).Exec(ctx)
 	return err
 }
 
@@ -406,7 +407,7 @@ func (s *SQLDriver) DropIndex(ctx context.Context, param *models.CommonSystemPar
 	tableName := utility.SingularResourceName(param.Model.Name)
 
 	query := fmt.Sprintf("DROP INDEX `%s` ON `%s`", indexName, tableName)
-	err := s.Gorm.Exec(query).Error
+	_, err := s.ORM.NewRaw(query).Exec(ctx)
 	return err
 }
 
@@ -425,7 +426,7 @@ func (s *SQLDriver) AddTeamMetaInfo(ctx context.Context, docs []*models.SystemUs
 	// Query team metadata
 	var teamData []map[string]interface{}
 	query := "SELECT * FROM team_members WHERE user_id IN (?)"
-	err := s.Gorm.Raw(query, userIds).Scan(&teamData).Error
+	err := s.ORM.NewRaw(query, userIds).Scan(ctx, &teamData)
 	if err != nil {
 		return docs, nil // Return original docs if metadata query fails
 	}
@@ -454,7 +455,7 @@ func (s *SQLDriver) AddTeamMetaInfo(ctx context.Context, docs []*models.SystemUs
 // DeleteMediaFile deletes a media file from the project.
 func (s *SQLDriver) DeleteMediaFile(ctx context.Context, param models.CommonSystemParams) error {
 	query := "DELETE FROM media WHERE id = ? AND model = ?"
-	err := s.Gorm.Exec(query, param.DocumentID, param.Model.Name).Error
+	_, err := s.ORM.NewRaw(query, param.DocumentID, param.Model.Name).Exec(ctx)
 	return err
 }
 
@@ -500,7 +501,7 @@ func (s *SQLDriver) DuplicateModel(ctx context.Context, project *models.Project,
 	newTableName := utility.SingularResourceName(newName)
 
 	query := fmt.Sprintf("CREATE TABLE `%s` LIKE `%s`", newTableName, oldTableName)
-	err := s.Gorm.Exec(query).Error
+	_, err := s.ORM.NewRaw(query).Exec(ctx)
 	if err != nil {
 		return nil, err
 	}

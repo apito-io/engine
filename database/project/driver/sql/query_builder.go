@@ -145,18 +145,15 @@ func FilterBuilder(variable string, where map[string]interface{}, modelType *mod
 			switch suffix {
 			case "contains":
 				conditions = append(conditions, fmt.Sprintf(`%s LIKE '%%%s%%'`, fieldName, value.(string)))
-				break
 			case "eq", "ne", "lt", "lte", "gt", "gtr", "in", "not_in":
-				switch value.(type) {
+				switch value := value.(type) {
 				case int, float64, bool:
-					conditions = append(conditions, fmt.Sprintf(`%s %s %v`, fieldName, FilterSuffix[suffix], value.(string)))
-					break
+					conditions = append(conditions, fmt.Sprintf(`%s %s %v`, fieldName, FilterSuffix[suffix], value))
 				case string:
-					conditions = append(conditions, fmt.Sprintf(`%s %s '%v'`, fieldName, FilterSuffix[suffix], value.(string)))
-					break
+					conditions = append(conditions, fmt.Sprintf(`%s %s '%v'`, fieldName, FilterSuffix[suffix], value))
 				case []interface{}:
 					var vals []string
-					for _, v := range value.([]interface{}) {
+					for _, v := range value {
 						switch v.(type) {
 						case int, float64:
 							vals = append(vals, fmt.Sprintf("%v", v))
@@ -167,7 +164,6 @@ func FilterBuilder(variable string, where map[string]interface{}, modelType *mod
 					final := fmt.Sprintf("[%s]", strings.Join(vals, ","))
 					conditions = append(conditions, fmt.Sprintf(`COUNT(%s[* FILTER CONTAINS(%s, CURRENT)])`, fieldName, final))
 				}
-				break
 			}
 		}
 

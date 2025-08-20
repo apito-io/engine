@@ -5,8 +5,8 @@ type Config struct {
 
 	BrankaKey string `env:"BRANKA_KEY" env-default:""`
 
-	CORSOrigin   string `env:"CORS_ORIGIN" env-default:""`
-	CookieDomain string `env:"COOKIE_DOMAIN" env-default:""`
+	CORSOrigin   string `env:"CORS_ORIGIN" env-default:"http://localhost:4000"`
+	CookieDomain string `env:"COOKIE_DOMAIN" env-default:"localhost"`
 
 	UptraceDNS string `env:"UPTRACE_DNS" env-default:""`
 
@@ -18,16 +18,16 @@ type Config struct {
 	// Server Information
 	ServePort string `env:"SERVE_PORT" env-default:"5050"` // Server Listening Port
 
-	SystemDatabaseEngine string `env:"APITO_SYSTEM_DB_ENGINE" env-default:"embedded"`
+	SystemDatabaseEngine string `env:"APITO_SYSTEM_DB_ENGINE" env-default:"coreDB"`
 
 	// System Database Information
 	SystemDBUser     string `env:"SYSTEM_DB_USER" env-default:""`
 	SystemDBPassword string `env:"SYSTEM_DB_PASSWORD" env-default:""`
 	SystemDBHost     string `env:"SYSTEM_DB_HOST" env-default:""`
 	SystemDBPort     string `env:"SYSTEM_DB_PORT" env-default:""`
-	SystemDBName     string `env:"SYSTEM_DB_NAME" env-default:""`
+	SystemDBName     string `env:"SYSTEM_DB_NAME" env-default:"~/.apito/engine-data/apito_system.db"`
 
-	DefaultProjectDatabaseEngine string `env:"APITO_PROJECT_DB_ENGINE" env-default:"embedded"`
+	DefaultProjectDatabaseEngine string `env:"APITO_PROJECT_DB_ENGINE" env-default:"coreDB"`
 
 	DefaultProjectDBUser     string `env:"PROJECT_DB_USER" env-default:""`
 	DefaultProjectDBPassword string `env:"PROJECT_DB_PASSWORD" env-default:""`
@@ -37,7 +37,7 @@ type Config struct {
 
 	DefaultSaaSProjectDBName string `env:"DEFAULT_SAAS_PROJECT_DB_NAME" env-default:""`
 
-	KVStorageEngine         string `env:"KV_ENGINE" env-default:"embedded"`
+	KVStorageEngine         string `env:"KV_ENGINE" env-default:"memory"`
 	KVStorageEngineHost     string `env:"KV_HOST" env-default:""`
 	KVStorageEnginePort     string `env:"KV_PORT" env-default:""`
 	KVStorageEngineUser     string `env:"KV_USER" env-default:""`

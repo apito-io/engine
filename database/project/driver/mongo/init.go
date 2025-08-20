@@ -51,3 +51,7 @@ func GetMongoDriver(driverCredentials *models.DriverCredentials) (*MongoDriver, 
 		DriverCredential: driverCredentials,
 	}, nil
 }
+
+func (m *MongoDriver) Ping() error {
+	return m.Client.Ping(context.Background(), nil)
+}

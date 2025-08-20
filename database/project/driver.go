@@ -4,7 +4,6 @@ import (
 	"errors"
 
 	_const "github.com/apito-io/engine/const"
-	"github.com/apito-io/engine/database/project/driver/firestore"
 	"github.com/apito-io/engine/database/project/driver/mongo"
 	"github.com/apito-io/engine/database/project/driver/sql"
 	"github.com/apito-io/engine/interfaces"
@@ -31,8 +30,6 @@ func GetProjectDriverWithConfig(conf *models.Config, engineConfig *models.Driver
 	switch engineConfig.Engine {
 	case _const.PostgreSQLDriver, _const.MySQLDriver, _const.MariaDBDriver:
 		db, err = sql.GetSQLDriver(engineConfig)
-	case _const.FireStore:
-		db, err = firestore.GetFirestoreDriver(engineConfig)
 	case _const.MongoDBDriver:
 		db, err = mongo.GetMongoDriver(engineConfig)
 	default:

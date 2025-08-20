@@ -14,13 +14,12 @@ import (
 	"github.com/apito-io/engine/utility"
 	"github.com/apito-io/types"
 	"github.com/google/uuid"
-	"gorm.io/datatypes"
-	"gorm.io/gorm"
+	"github.com/uptrace/bun"
 )
 
 func (S *SQLDriver) DeleteProject(ctx context.Context, projectId string) error {
 	sql := fmt.Sprintf(`drop schema %s;`, projectId)
-	err := S.Gorm.Exec(sql).Error
+	_, err := S.ORM.NewRaw(sql).Exec(ctx)
 	if err != nil {
 		return err
 	}
@@ -31,7 +30,7 @@ func (S *SQLDriver) DropField(ctx context.Context, param *models.CommonSystemPar
 
 	tableName := utility.SingularResourceName(param.Model.Name)
 	sql := fmt.Sprintf("ALTER TABLE `%s` DROP COLUMN %s;", tableName, param.FieldInfo.Identifier)
-	err := S.Gorm.Exec(sql).Error
+	_, err := S.ORM.NewRaw(sql).Exec(ctx)
 	//return nil
 	if err != nil {
 		return err
@@ -67,19 +66,19 @@ func (S *SQLDriver) AddCollection(ctx context.Context, param *models.CommonSyste
 	switch S.DriverCredential.Engine {
 	case _const.PostgreSQLDriver:
 		// create database can not be executed inside transaction so it's outside the transaction
-		if err := S.Gorm.Exec(fmt.Sprintf("CREATE DATABASE `%s`", projectId)).Error; err != nil {
+		if _, err := S.ORM.NewRaw(fmt.Sprintf("CREATE DATABASE `%s`", projectId)).Exec(ctx); err != nil {
 			return err
 		}
 
-		// reinit the GORM connection
+		// reinit the Bun connection
 		S.DriverCredential.Database = projectId
 		db, err := GetSQLDriver(S.DriverCredential)
 		if err != nil {
 			return err
 		}
 
-		err = db.Gorm.Transaction(func(tx *gorm.DB) error {
-			if err := tx.Exec(`
+		err = db.ORM.RunInTx(ctx, nil, func(ctx context.Context, tx bun.Tx) error {
+			if _, err := tx.NewRaw(`
 			CREATE TABLE public.meta(
 				id VARCHAR(36) NOT NULL PRIMARY KEY,
 				doc_id VARCHAR(36) NOT NULL,
@@ -88,11 +87,11 @@ func (S *SQLDriver) AddCollection(ctx context.Context, param *models.CommonSyste
 				created_by VARCHAR(36) NOT NULL,
 				updated_by VARCHAR(36),
 				status VARCHAR(36)
-			);`).Error; err != nil {
+			);`).Exec(ctx); err != nil {
 				return err
 			}
 
-			if err := tx.Exec(`
+			if _, err := tx.NewRaw(`
 			CREATE TABLE public.media(
 				id VARCHAR(36) NOT NULL PRIMARY KEY,
 				model VARCHAR(125),
@@ -103,7 +102,7 @@ func (S *SQLDriver) AddCollection(ctx context.Context, param *models.CommonSyste
 				s3_key TEXT,
 				url TEXT,
 				created_at DATE NOT NULL DEFAULT CURRENT_DATE
-			);`).Error; err != nil {
+			);`).Exec(ctx); err != nil {
 				return err
 			}
 			// return nil will commit the whole transaction
@@ -113,9 +112,9 @@ func (S *SQLDriver) AddCollection(ctx context.Context, param *models.CommonSyste
 			return err
 		}
 	case _const.MySQLDriver, _const.MariaDBDriver:
-		err := S.Gorm.Transaction(func(tx *gorm.DB) error {
+		err := S.ORM.RunInTx(ctx, nil, func(ctx context.Context, tx bun.Tx) error {
 			// do some database operations in the transaction (use 'tx' from this point, not 'db')
-			if err := tx.Exec(fmt.Sprintf("CREATE DATABASE %s", projectId)).Error; err != nil {
+			if _, err := tx.NewRaw(fmt.Sprintf("CREATE DATABASE %s", projectId)).Exec(ctx); err != nil {
 				// return any error will rollback
 				return err
 			}
@@ -125,7 +124,7 @@ func (S *SQLDriver) AddCollection(ctx context.Context, param *models.CommonSyste
 				tenantField = fmt.Sprintf("tenant_id VARCHAR(36) NOT NULL, ADD CONSTRAINT %s_tenant_id_fk FOREIGN KEY (tenant_id) REFERENCES %s(id), ADD CONSTRAINT %s_tenant_composite_key UNIQUE(id, tenant_id);", utility.SingularResourceName(param.Model.Name), param.TenantModel, utility.SingularResourceName(param.Model.Name))
 			}
 
-			if err := tx.Exec(fmt.Sprintf(`
+			if _, err := tx.NewRaw(fmt.Sprintf(`
 			CREATE TABLE %s.meta(
 				id VARCHAR(36) NOT NULL PRIMARY KEY,
 				%s
@@ -135,11 +134,11 @@ func (S *SQLDriver) AddCollection(ctx context.Context, param *models.CommonSyste
 				created_by VARCHAR(36) NOT NULL,
 				updated_by VARCHAR(36),
 				status VARCHAR(35)
-			);`, projectId, tenantField)).Error; err != nil {
+			);`, projectId, tenantField)).Exec(ctx); err != nil {
 				return err
 			}
 
-			if err := tx.Exec(fmt.Sprintf(`
+			if _, err := tx.NewRaw(fmt.Sprintf(`
 			CREATE TABLE %s.media(
 				id VARCHAR(36) NOT NULL PRIMARY KEY,
 				%s
@@ -151,7 +150,7 @@ func (S *SQLDriver) AddCollection(ctx context.Context, param *models.CommonSyste
 				s3_key TEXT,
 				url TEXT,
 				created_at DATE NOT NULL DEFAULT (CURRENT_DATE)
-			);`, projectId, tenantField)).Error; err != nil {
+			);`, projectId, tenantField)).Exec(ctx); err != nil {
 				return err
 			}
 			// return nil will commit the whole transaction
@@ -168,7 +167,7 @@ func (a *SQLDriver) CheckCollectionExists(ctx context.Context, param *models.Com
 	// check if table exists
 	query := fmt.Sprintf("SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = '%s' AND table_name = '%s'", param.ProjectID, param.Model.Name)
 	var count int64
-	err := a.Gorm.Raw(query).Scan(&count).Error
+	err := a.ORM.NewRaw(query).Scan(ctx, &count)
 	if err != nil {
 		return false, err
 	}
@@ -216,7 +215,7 @@ func (S *SQLDriver) AddModel(ctx context.Context, project *models.Project, model
 
 	//Then execute your query for creating table
 	query := fmt.Sprintf("CREATE TABLE %s;", createTableQuery)
-	err := S.Gorm.Exec(query).Error
+	_, err := S.ORM.NewRaw(query).Exec(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -228,7 +227,7 @@ func (S *SQLDriver) AddModel(ctx context.Context, project *models.Project, model
 			utility.SingularResourceName(model.Name),
 			project.TenantModelName,
 			utility.SingularResourceName(model.Name))
-		err = S.Gorm.Exec(query).Error
+		_, err = S.ORM.NewRaw(query).Exec(ctx)
 		if err != nil {
 			return nil, err
 		}
@@ -257,12 +256,12 @@ func (s *SQLDriver) AddRelationFields_AUTOGEN(ctx context.Context, from *models.
 			)
 		`, pivotTable, fromTable, toTable, fromTable, fromTable, toTable, toTable)
 
-		err := s.Gorm.Exec(query).Error
+		_, err := s.ORM.NewRaw(query).Exec(ctx)
 		return err
 	} else if from.Relation == "has_one" {
 		// Add foreign key column
 		query := fmt.Sprintf("ALTER TABLE `%s` ADD COLUMN %s_id VARCHAR(36)", toTable, fromTable)
-		err := s.Gorm.Exec(query).Error
+		_, err := s.ORM.NewRaw(query).Exec(ctx)
 		if err != nil {
 			// Column might already exist, ignore error
 			return nil
@@ -272,7 +271,7 @@ func (s *SQLDriver) AddRelationFields_AUTOGEN(ctx context.Context, from *models.
 		constraintQuery := fmt.Sprintf(
 			"ALTER TABLE `%s` ADD CONSTRAINT fk_%s_%s FOREIGN KEY (%s_id) REFERENCES %s(id)",
 			toTable, toTable, fromTable, fromTable, fromTable)
-		s.Gorm.Exec(constraintQuery) // Ignore errors for constraints
+		s.ORM.NewRaw(constraintQuery).Exec(ctx) // Ignore errors for constraints
 	}
 
 	return nil
@@ -290,15 +289,10 @@ func (S *SQLDriver) AddRelationFields(ctx context.Context, from *models.Connecti
 	case "has_one":
 		switch to.Relation {
 		case "has_one":
-			// First drop the foreign key constraint
-			fkName := fmt.Sprintf("fk_%s_%s", toTableName, toFieldName)
-			err := S.Gorm.Migrator().DropConstraint(toTableName, fkName)
-			if err != nil {
-				return err
-			}
-
-			// Then drop the column
-			err = S.Gorm.Migrator().DropColumn(toTableName, fmt.Sprintf("%s_id", toFieldName))
+			// Drop the foreign key constraint and column
+			query := fmt.Sprintf("ALTER TABLE `%s` DROP FOREIGN KEY fk_%s_%s, DROP COLUMN %s_id",
+				toTableName, toTableName, toFieldName, toFieldName)
+			_, err := S.ORM.NewRaw(query).Exec(ctx)
 			if err != nil {
 				return err
 			}
@@ -307,7 +301,7 @@ func (S *SQLDriver) AddRelationFields(ctx context.Context, from *models.Connecti
 			query := fmt.Sprintf(`ALTER TABLE `+"`%s`"+` ADD %s_id VARCHAR(36) , 
 			ADD CONSTRAINT fk_%s_%s_id FOREIGN KEY (%s_id) references `+"`%s`"+` (id) 
 			ON DELETE CASCADE;`, fromTableName, fromFieldName, fromTableName, fromFieldName, fromFieldName, toTableName)
-			err := S.Gorm.Exec(query).Error
+			_, err := S.ORM.NewRaw(query).Exec(ctx)
 			if err != nil {
 				return err
 			}
@@ -324,14 +318,14 @@ func (S *SQLDriver) AddRelationFields(ctx context.Context, from *models.Connecti
 				toFieldName, fromTableName,
 				fromFieldName, toTableName,
 				toFieldName, fromFieldName)
-			err := S.Gorm.Exec(query).Error
+			_, err := S.ORM.NewRaw(query).Exec(ctx)
 			if err != nil {
 				return err
 			}
 		case "has_one":
 			//same for one to one & one to many
 			query := fmt.Sprintf("ALTER TABLE `%s` ADD %s_id VARCHAR(36) REFERENCES `%s` (id) ON DELETE CASCADE;", toTableName, toFieldName, fromTableName)
-			err := S.Gorm.Exec(query).Error
+			_, err := S.ORM.NewRaw(query).Exec(ctx)
 			if err != nil {
 				return err
 			}
@@ -350,12 +344,12 @@ func (s *SQLDriver) DeleteRelationDocuments_AUTOGEN(ctx context.Context, project
 		// Drop pivot table
 		pivotTable := fmt.Sprintf("%s_%s", fromTable, toTable)
 		query := fmt.Sprintf("DROP TABLE IF EXISTS `%s`", pivotTable)
-		err := s.Gorm.Exec(query).Error
+		_, err := s.ORM.NewRaw(query).Exec(ctx)
 		return err
 	} else if from.Relation == "has_one" {
 		// Remove foreign key column
 		query := fmt.Sprintf("ALTER TABLE `%s` DROP COLUMN %s_id", toTable, fromTable)
-		err := s.Gorm.Exec(query).Error
+		_, err := s.ORM.NewRaw(query).Exec(ctx)
 		return err
 	}
 
@@ -374,22 +368,17 @@ func (S *SQLDriver) DeleteRelationDocuments(ctx context.Context, projectId strin
 	case "has_one":
 		switch to.Relation {
 		case "has_one":
-			// First drop the foreign key constraint
-			fkName := fmt.Sprintf("fk_%s_%s", toTableName, toFieldName)
-			err := S.Gorm.Migrator().DropConstraint(toTableName, fkName)
-			if err != nil {
-				return err
-			}
-
-			// Then drop the column
-			err = S.Gorm.Migrator().DropColumn(toTableName, fmt.Sprintf("%s_id", toFieldName))
+			// Drop the foreign key constraint and column
+			query := fmt.Sprintf("ALTER TABLE `%s` DROP FOREIGN KEY fk_%s_%s, DROP COLUMN %s_id",
+				toTableName, toTableName, toFieldName, toFieldName)
+			_, err := S.ORM.NewRaw(query).Exec(ctx)
 			if err != nil {
 				return err
 			}
 		case "has_many":
 			//same for one to one & one to many
 			query := fmt.Sprintf("ALTER TABLE `%s` DROP FOREIGN KEY fk_%s_%s_id; ALTER TABLE `%s` DROP COLUMN %s_id;", fromTableName, fromTableName, fromFieldName, fromTableName, fromFieldName)
-			err := S.Gorm.Exec(query).Error
+			_, err := S.ORM.NewRaw(query).Exec(ctx)
 			if err != nil {
 				return err
 			}
@@ -399,14 +388,14 @@ func (S *SQLDriver) DeleteRelationDocuments(ctx context.Context, projectId strin
 		case "has_many":
 			//same for one to one & one to many
 			query := fmt.Sprintf(`DROP TABLE IF EXISTS %s_%s;`, fromTableName, toTableName)
-			err := S.Gorm.Exec(query).Error
+			_, err := S.ORM.NewRaw(query).Exec(ctx)
 			if err != nil {
 				return err
 			}
 		case "has_one":
 			//same for one to one & one to many
 			query := fmt.Sprintf("ALTER TABLE `%s` DROP CONSTRAINT %s_id;", toTableName, toFieldName)
-			err := S.Gorm.Exec(query).Error
+			_, err := S.ORM.NewRaw(query).Exec(ctx)
 			if err != nil {
 				return err
 			}
@@ -515,7 +504,7 @@ func (S *SQLDriver) AddFieldToModel(ctx context.Context, param *models.CommonSys
 			}
 			//Then execute your query for creating table
 			query := fmt.Sprintf("ALTER TABLE `%s` ADD COLUMN IF NOT EXISTS %s %s %s;", tableName, column, datatype, strings.Join(validations, " "))
-			err := S.Gorm.Exec(query).Error
+			_, err := S.ORM.NewRaw(query).Exec(ctx)
 			if err != nil {
 				return nil, err
 			}
@@ -523,7 +512,7 @@ func (S *SQLDriver) AddFieldToModel(ctx context.Context, param *models.CommonSys
 	} else {
 		//Then execute your query for creating table
 		query := fmt.Sprintf("ALTER TABLE `%s` ADD %s %s %s;", tableName, param.FieldInfo.Identifier, datatype, strings.Join(validations, " "))
-		err := S.Gorm.Exec(query).Error
+		_, err := S.ORM.NewRaw(query).Exec(ctx)
 		if err != nil {
 			return nil, err
 		}
@@ -572,7 +561,7 @@ func (S *SQLDriver) CreateMediaDocument(ctx context.Context, projectId string, m
 		data["url"] = media.URL
 	}
 
-	err := S.Gorm.Table("media").Create(data).Error
+	_, err := S.ORM.NewInsert().Table("media").Model(&data).Exec(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -582,7 +571,7 @@ func (S *SQLDriver) CreateMediaDocument(ctx context.Context, projectId string, m
 
 func (S *SQLDriver) AddDocumentToProject(ctx context.Context, param *models.CommonSystemParams, doc *types.DefaultDocumentStructure) (interface{}, error) {
 
-	err := S.Gorm.Transaction(func(tx *gorm.DB) error {
+	err := S.ORM.RunInTx(ctx, nil, func(ctx context.Context, tx bun.Tx) error {
 
 		tableName := utility.SingularResourceName(param.Model.Name)
 
@@ -605,7 +594,7 @@ func (S *SQLDriver) AddDocumentToProject(ctx context.Context, param *models.Comm
 				data[k] = v
 			}
 		}
-		err := tx.Table(tableName).Create(data).Error
+		_, err := tx.NewInsert().Table(tableName).Model(&data).Exec(ctx)
 		if err != nil {
 			return err
 		}
@@ -625,7 +614,7 @@ func (S *SQLDriver) AddDocumentToProject(ctx context.Context, param *models.Comm
 				return errors.New("tenant id is required for a saas project")
 			}
 		}
-		err = tx.Table("meta").Create(metaData).Error
+		_, err = tx.NewInsert().Table("meta").Model(&metaData).Exec(ctx)
 		if err != nil {
 			return err
 		}
@@ -679,7 +668,7 @@ func (S *SQLDriver) UpdateDocumentOfProject(ctx context.Context, param *models.C
 				}
 			} else if utility.ArrayContains(pictureField, k) {
 				b, _ := json.Marshal(v)
-				data[k] = datatypes.JSON(b)
+				data[k] = string(b)
 			}
 			break
 		case reflect.Ptr:
@@ -691,7 +680,7 @@ func (S *SQLDriver) UpdateDocumentOfProject(ctx context.Context, param *models.C
 				if err != nil {
 					return err
 				}
-				data[k] = datatypes.JSON(b)
+				data[k] = string(b)
 			}
 			break
 		default:
@@ -699,7 +688,7 @@ func (S *SQLDriver) UpdateDocumentOfProject(ctx context.Context, param *models.C
 		}
 
 	}
-	err := S.Gorm.Table(tableName).Where("id = ?", doc.ID).Updates(data).Error
+	_, err := S.ORM.NewUpdate().Table(tableName).Where("id = ?", doc.ID).Model(&data).Exec(ctx)
 	if err != nil {
 		return err
 	}
@@ -710,7 +699,7 @@ func (S *SQLDriver) UpdateDocumentOfProject(ctx context.Context, param *models.C
 		"updated_by": param.UserID,
 	}
 
-	err = S.Gorm.Table("meta").Where("doc_id = ?", doc.ID).Updates(metaData).Error
+	_, err = S.ORM.NewUpdate().Table("meta").Where("doc_id = ?", doc.ID).Model(&metaData).Exec(ctx)
 	if err != nil {
 		return err
 	}
@@ -722,7 +711,7 @@ func (S *SQLDriver) DeleteDocumentFromProject(ctx context.Context, param *models
 
 	tableName := utility.SingularResourceName(param.Model.Name)
 
-	err := S.Gorm.Table(tableName).Where("id = ?", param.DocumentID).Delete(nil).Error
+	_, err := S.ORM.NewDelete().Table(tableName).Where("id = ?", param.DocumentID).Exec(ctx)
 	if err != nil {
 		return err
 	}

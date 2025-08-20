@@ -1,12 +1,9 @@
 package system
 
 import (
-	"context"
 	"errors"
-
 	_const "github.com/apito-io/engine/const"
-	"github.com/apito-io/engine/database/system/driver/badger"
-	"github.com/apito-io/engine/database/system/driver/sql"
+	"github.com/apito-io/engine/database/system/driver/bbolt"
 	"github.com/apito-io/engine/interfaces"
 	"github.com/apito-io/engine/models"
 )
@@ -26,23 +23,14 @@ func GetSystemDriver(engineConfig *models.DriverCredentials, conf *models.Config
 		}
 	}
 
-	// Fall back to default core drivers
-	ctx := context.Background()
-
 	var db interfaces.ApitoSystemDB
 	var err error
 
 	switch engineConfig.Engine {
-	case _const.PostgreSQLDriver, _const.MySQLDriver, _const.MariaDBDriver:
-		db, err = sql.GetSystemSQLDriver(engineConfig)
-		if err != nil {
-			return nil, err
-		}
-		err = db.RunMigration(ctx)
-	case _const.EmbeddedDB:
-		db, err = badger.GetSystemBadgerDriver(engineConfig)
+	case _const.CoreDB:
+		db, err = bbolt.GetSystemBBoltDriver(engineConfig, nil)
 	default: // default set embedded database
-		db, err = badger.GetSystemBadgerDriver(engineConfig)
+		db, err = bbolt.GetSystemBBoltDriver(engineConfig, nil)
 	}
 	if err != nil {
 		return nil, err

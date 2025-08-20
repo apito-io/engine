@@ -65,6 +65,8 @@ github.com/andybalholm/cascadia v1.3.3 h1:AG2YHrzJIm4BZ19iwJ/DAua6Btl3IwJX+VI4kk
 github.com/andybalholm/cascadia v1.3.3/go.mod h1:xNd9bqTn98Ln4DwST8/nG+H0yuB8Hmgu1YHNnWw0GeA=
 github.com/apito-cms/wsgraphql v1.5.3 h1:zjBL1ieXQaAlZsB4laoOPEoRBURB6r9SUWfsAQGNn/Q=
 github.com/apito-cms/wsgraphql v1.5.3/go.mod h1:HWf0dXbrcz7UHWgorLGqlewFg3kSMA/2cZac332LU9w=
+github.com/apito-io/apitoBolt v0.1.1 h1:8St+nfHlBvy162T1IbgbkR/+QCrQ1Jt/o7j/38WQYEY=
+github.com/apito-io/apitoBolt v0.1.1/go.mod h1:olvZH2mtMxYaOFTVyloTlkypdPmXeH0XINaGrqX4AXo=
 github.com/apito-io/databasedriver v0.0.9 h1:AB8HXGC8x47IcTErBK7KEJl93mQn+ElqVmOLk0B3oY4=
 github.com/apito-io/databasedriver v0.0.9/go.mod h1:iPpEJyoKpmW7N5QrG5A1g/yJvvkHsjGi9KosrDs5cp4=
 github.com/apito-io/go-apito-plugin-sdk v0.1.21 h1:SQdWZ2YdjRr/AqlZNy4snM8+QIKlOxlUn8fSJJMl35Q=
@@ -544,6 +546,8 @@ github.com/yuin/goldmark v1.7.13 h1:GPddIs617DnBLFFVJFgpo1aBfe/4xcvMc3SB5t/D0pA=
 github.com/yuin/goldmark v1.7.13/go.mod h1:ip/1k0VRfGynBgxOz0yCqHrbZXhcjxyuS66Brc7iBKg=
 github.com/zeebo/errs v1.4.0 h1:XNdoD/RRMKP7HD0UhJnIzUy74ISdGGxURlYG8HSWSfM=
 github.com/zeebo/errs v1.4.0/go.mod h1:sgbWHsvVuTPHcqJJGQ1WhI5KbWlHYz+2+2C/LSEtCw4=
+go.etcd.io/bbolt v1.4.2 h1:IrUHp260R8c+zYx/Tm8QZr04CX+qWS5PGfPdevhdm1I=
+go.etcd.io/bbolt v1.4.2/go.mod h1:Is8rSHO/b4f3XigBC0lL0+4FwAQv3HXEEIgFMuKHceM=
 go.mongodb.org/mongo-driver v1.17.4 h1:jUorfmVzljjr0FLzYQsGP8cgN/qzzxlY9Vh0C9KFXVw=
 go.mongodb.org/mongo-driver v1.17.4/go.mod h1:Hy04i7O2kC4RS06ZrhPRqj/u4DTYkFDAAccj+rVKqgQ=
 go.mongodb.org/mongo-driver/v2 v2.2.2 h1:9cYuS3fl1Xhqwpfazso10V7BHQD58kCgtzhfAmJYz9c=

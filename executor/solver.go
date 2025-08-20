@@ -847,9 +847,9 @@ func (s *GraphQLExecutor) HandlePayloadFormatting(ctx context.Context, param *mo
 				if val == nil {
 					dbPayload[identifier] = nil
 				} else {
-					switch val.(type) {
+					switch val := val.(type) {
 					case string:
-						userInput := val.(string)
+						userInput := val
 						_parsedTime, err := time.Parse(time.RFC3339, userInput)
 						if err != nil {
 							var parseError *time.ParseError
@@ -869,7 +869,7 @@ func (s *GraphQLExecutor) HandlePayloadFormatting(ctx context.Context, param *mo
 							dbPayload[identifier] = nil
 						}
 					default:
-						return nil, errors.New(fmt.Sprintf("invalid date input value for %s", f.Identifier))
+						return nil, fmt.Errorf("invalid date input value for %s", f.Identifier)
 					}
 				}
 			}
@@ -910,8 +910,6 @@ func (s *GraphQLExecutor) HandlePayloadFormatting(ctx context.Context, param *mo
 				processed := utility.ProcessMultilineField(userInput)
 				if len(processed) > 0 {
 					dbPayload[identifier] = processed
-				} else {
-					return nil, errors.New("markdown is required for multiline field")
 				}
 			}
 		case _const.ListField:
@@ -926,17 +924,17 @@ func (s *GraphQLExecutor) HandlePayloadFormatting(ctx context.Context, param *mo
 				}
 			} else if f.Validation != nil && f.Validation.FixedListElements != nil { // fixed list
 				if userInput, ok := inputPayload[f.Identifier]; ok && userInput != nil {
-					switch userInput.(type) {
+					switch userInput := userInput.(type) {
 					case string: // sinngle choise dropdown or radio button
 						// validate the user input based on the fixed list elements
 						if utility.ArrayContainsInterface(f.Validation.FixedListElements, userInput) {
-							dbPayload[identifier] = userInput.(string) // assuming the choise is string type
+							dbPayload[identifier] = userInput // assuming the choise is string type
 						} else {
 							return nil, fmt.Errorf("invalid dropdown value %v for %s", userInput, f.Identifier)
 						}
 					case []interface{}: // multi choise checkbox
 						var result []string // assuming the choise is string type
-						for _, item := range userInput.([]interface{}) {
+						for _, item := range userInput {
 							if utility.ArrayContainsInterface(f.Validation.FixedListElements, item) {
 								result = append(result, item.(string))
 							}

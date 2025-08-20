@@ -1,5 +1,12 @@
 package models
 
+
+type ValidIdentifier struct {
+	Label string
+	Identifier string
+	ParentField string
+}
+
 type AuditLogs struct {
 	XKey      string `json:"_key,omitempty" firestore:"_key,omitempty" bson:"_key,omitempty"`
 	ID        string `json:"id,omitempty" firestore:"id,omitempty" bson:"_id,omitempty"`

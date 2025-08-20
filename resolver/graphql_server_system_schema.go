@@ -1384,7 +1384,13 @@ func (s *GraphQLServer) BuildServerQueriesAndMutations() {
 				"is_relation": &graphql.ArgumentConfig{
 					Type: graphql.Boolean,
 				},
+				"known_as": &graphql.ArgumentConfig{
+					Type: graphql.String,
+				},
 				"moved_to": &graphql.ArgumentConfig{
+					Type: graphql.String,
+				},
+				"changed_type": &graphql.ArgumentConfig{
 					Type: graphql.String,
 				},
 			},

@@ -19,7 +19,7 @@ const (
 	FireStore string = "firestore"
 
 	// EmbeddedDB Embedded Database
-	EmbeddedDB string = "embedded"
+	CoreDB string = "coreDB"
 
 	// RedisDriver KeyValue database
 	RedisDriver string = "redis"

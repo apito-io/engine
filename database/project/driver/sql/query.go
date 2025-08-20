@@ -2,6 +2,7 @@ package sql
 
 import (
 	"context"
+	"database/sql"
 	"errors"
 	"fmt"
 	"strings"
@@ -10,9 +11,8 @@ import (
 	"github.com/apito-io/engine/models"
 	"github.com/apito-io/engine/utility"
 	"github.com/apito-io/types"
-	_ "github.com/lib/pq"
 	"github.com/tailor-inc/graphql"
-	"gorm.io/gorm"
+	_ "github.com/uptrace/bun"
 )
 
 func (S *SQLDriver) CountDocOfProject(ctx context.Context, param *models.CommonSystemParams) (interface{}, error) {
@@ -21,7 +21,7 @@ func (S *SQLDriver) CountDocOfProject(ctx context.Context, param *models.CommonS
 		return nil, err
 	}
 
-	err = S.Gorm.Exec(query, nil).Error
+	_, err = S.ORM.NewRaw(query).Exec(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -37,7 +37,7 @@ func (S *SQLDriver) CountDocOfProjectBytes(ctx context.Context, param *models.Co
 		return nil, err
 	}
 
-	err = S.Gorm.Exec(query, nil).Error
+	_, err = S.ORM.NewRaw(query).Exec(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -61,7 +61,7 @@ func (S *SQLDriver) ConnectBuilder(ctx context.Context, param *models.CommonSyst
 					u := map[string]interface{}{
 						fmt.Sprintf(`%s_id`, param.BackwardConnectionType.Model): param.ForwardConnectionID,
 					}
-					err = S.Gorm.Table(tableName).Where("id = ?", id).Updates(u).Error
+					_, err = S.ORM.NewUpdate().Table(tableName).Where("id = ?", id).Model(&u).Exec(ctx)
 					if err != nil {
 						return err
 					}
@@ -72,7 +72,7 @@ func (S *SQLDriver) ConnectBuilder(ctx context.Context, param *models.CommonSyst
 						fmt.Sprintf(`%s_id`, param.BackwardConnectionType.Model): param.ForwardConnectionID,
 						fmt.Sprintf(`%s_id`, param.ForwardConnectionType.Model):  id,
 					}
-					err = S.Gorm.Table(tableName).Where("").Create(u).Error
+					_, err = S.ORM.NewInsert().Table(tableName).Model(&u).Exec(ctx)
 					if err != nil {
 						return err
 					}
@@ -86,7 +86,7 @@ func (S *SQLDriver) ConnectBuilder(ctx context.Context, param *models.CommonSyst
 					u := map[string]interface{}{
 						fmt.Sprintf(`%s_id`, param.BackwardConnectionType.Model): param.ForwardConnectionID,
 					}
-					err = S.Gorm.Table(tableName).Where("id = ?", id).Updates(u).Error
+					_, err = S.ORM.NewUpdate().Table(tableName).Where("id = ?", id).Model(&u).Exec(ctx)
 					if err != nil {
 						return err
 					}
@@ -97,7 +97,7 @@ func (S *SQLDriver) ConnectBuilder(ctx context.Context, param *models.CommonSyst
 						fmt.Sprintf(`%s_id`, param.BackwardConnectionType.Model): param.ForwardConnectionID,
 						fmt.Sprintf(`%s_id`, param.ForwardConnectionType.Model):  id,
 					}
-					err = S.Gorm.Table(tableName).Create(u).Error
+					_, err = S.ORM.NewInsert().Table(tableName).Model(&u).Exec(ctx)
 					if err != nil {
 						return err
 					}
@@ -120,20 +120,22 @@ func (S *SQLDriver) CheckProjectExists(ctx context.Context, projectId string) (b
 
 	switch S.DriverCredential.Engine {
 	case _const.MySQLDriver:
-		res := S.Gorm.Table("information_schema.SCHEMATA").
-			Where("SCHEMA_NAME = ?", projectId).Count(&result)
-		if res.Error != nil {
-			return false, res.Error
+		count, err := S.ORM.NewSelect().Table("information_schema.SCHEMATA").
+			Where("SCHEMA_NAME = ?", projectId).Count(ctx)
+		if err != nil {
+			return false, err
 		}
+		result = int64(count)
 		if result == 1 {
 			return true, nil
 		}
 	case _const.PostgreSQLDriver:
-		res := S.Gorm.Table("pg_database").
-			Where("datname = ?", projectId).Count(&result)
-		if res.Error != nil {
-			return false, res.Error
+		count, err := S.ORM.NewSelect().Table("pg_database").
+			Where("datname = ?", projectId).Count(ctx)
+		if err != nil {
+			return false, err
 		}
+		result = int64(count)
 		if result == 1 {
 			return true, nil
 		}
@@ -149,9 +151,9 @@ func (S *SQLDriver) GetAllPreviewDocumentsByModel(param models.CommonSystemParam
 	}
 
 	var results []map[string]interface{}
-	err = S.Gorm.Raw(*query).Scan(&results).Error
+	err = S.ORM.NewRaw(*query).Scan(ctx, &results)
 	if err != nil {
-		if err == gorm.ErrRecordNotFound {
+		if errors.Is(err, sql.ErrNoRows) {
 			return []*models.PreviewMode{}, nil
 		} else {
 			return nil, err
@@ -200,9 +202,9 @@ func (S *SQLDriver) GetSingleProjectDocumentBytes(ctx context.Context, param *mo
 	tableName := utility.SingularResourceName(param.Model.Name)
 	result := map[string]interface{}{}
 	query := fmt.Sprintf("SELECT %s FROM `%s` AS x LEFT JOIN meta as y on y.doc_id = x.id WHERE x.id = '%s'", strings.Join(returnType, ", "), tableName, param.DocumentID)
-	err := S.Gorm.Raw(query).Scan(&result).Error
+	err := S.ORM.NewRaw(query).Scan(ctx, &result)
 	if err != nil {
-		if err == gorm.ErrRecordNotFound {
+		if errors.Is(err, sql.ErrNoRows) {
 			return []byte{}, nil
 		} else {
 			return nil, err
@@ -232,9 +234,9 @@ func (S *SQLDriver) GetSingleProjectDocument(ctx context.Context, param *models.
 	tableName := utility.SingularResourceName(param.Model.Name)
 	result := map[string]interface{}{}
 	query := fmt.Sprintf("SELECT %s FROM `%s` AS x LEFT JOIN meta as y on y.doc_id = x.id WHERE x.id = '%s'", strings.Join(returnType, ", "), tableName, param.DocumentID)
-	err := S.Gorm.Raw(query).Scan(&result).Error
+	err := S.ORM.NewRaw(query).Scan(ctx, &result)
 	if err != nil {
-		if err == gorm.ErrRecordNotFound {
+		if errors.Is(err, sql.ErrNoRows) {
 			return &types.DefaultDocumentStructure{}, nil
 		} else {
 			return nil, err
@@ -301,9 +303,9 @@ func (S *SQLDriver) GetSingleRawDocumentFromProject(ctx context.Context, param *
 	tableName := utility.SingularResourceName(param.Model.Name)
 	result := map[string]interface{}{}
 	query := fmt.Sprintf("SELECT %s FROM `%s` AS x LEFT JOIN meta as y on y.doc_id = x.id WHERE x.id = '%s'", returnType, tableName, param.DocumentID)
-	err := S.Gorm.Raw(query).Scan(&result).Error
+	err := S.ORM.NewRaw(query).Scan(ctx, &result)
 	if err != nil {
-		if err == gorm.ErrRecordNotFound {
+		if errors.Is(err, sql.ErrNoRows) {
 			return &types.DefaultDocumentStructure{}, nil
 		} else {
 			return nil, err
@@ -327,7 +329,7 @@ func (s *SQLDriver) GetAllRelationDocumentsOfSingleDocument_AUTOGEN(ctx context.
 
 	// Get all table names to find relation tables
 	var tables []string
-	err := s.Gorm.Raw("SHOW TABLES").Pluck("Tables_in_"+arg.ProjectID, &tables).Error
+	err := s.ORM.NewRaw("SHOW TABLES").Scan(ctx, &tables)
 	if err != nil {
 		return nil, err
 	}
@@ -341,7 +343,7 @@ func (s *SQLDriver) GetAllRelationDocumentsOfSingleDocument_AUTOGEN(ctx context.
 				// Query for relations where this document is the source
 				var results []map[string]interface{}
 				query1 := fmt.Sprintf("SELECT * FROM `%s` WHERE %s_id = ?", table, parts[0])
-				s.Gorm.Raw(query1, from).Scan(&results)
+				s.ORM.NewRaw(query1, from).Scan(ctx, &results)
 
 				for _, result := range results {
 					relations = append(relations, result)
@@ -349,7 +351,7 @@ func (s *SQLDriver) GetAllRelationDocumentsOfSingleDocument_AUTOGEN(ctx context.
 
 				// Query for relations where this document is the target
 				query2 := fmt.Sprintf("SELECT * FROM `%s` WHERE %s_id = ?", table, parts[1])
-				s.Gorm.Raw(query2, from).Scan(&results)
+				s.ORM.NewRaw(query2, from).Scan(ctx, &results)
 
 				for _, result := range results {
 					relations = append(relations, result)
@@ -373,7 +375,7 @@ func (S *SQLDriver) GetAllRelationDocumentsOfSingleDocument(ctx context.Context,
 	switch *relationType {
 	case "has_many":
 		var result []map[string]interface{}
-		err = S.Gorm.Raw(*query).Take(&result).Error
+		err = S.ORM.NewRaw(*query).Scan(ctx, &result)
 		if err != nil {
 			return nil, err
 		}
@@ -401,7 +403,7 @@ func (S *SQLDriver) GetAllRelationDocumentsOfSingleDocument(ctx context.Context,
 		return docs, nil
 	case "has_one":
 		result := map[string]interface{}{}
-		err = S.Gorm.Raw(*query).First(&result).Error
+		err = S.ORM.NewRaw(*query).Scan(ctx, &result)
 		if err != nil {
 			return nil, err
 		}
@@ -439,7 +441,7 @@ func (S *SQLDriver) ListMedias(ctx context.Context, projectId string, param *gra
 	}
 
 	var result []map[string]interface{}
-	err = S.Gorm.Raw(query).Scan(&result).Error
+	err = S.ORM.NewRaw(query).Scan(ctx, &result)
 	if err != nil {
 		return nil, err
 	}
@@ -464,7 +466,7 @@ func (f *SQLDriver) CountMultiDocumentOfProject(ctx context.Context, param *mode
 	}
 
 	var result int64
-	err = f.Gorm.Raw(query).Count(&result).Error
+	err = f.ORM.NewRaw(query).Scan(ctx, &result)
 	if err != nil {
 		return 0, err
 	}
@@ -486,9 +488,9 @@ func (S *SQLDriver) QueryMultiDocumentOfProjectBytes(ctx context.Context, param 
 	}
 
 	var result []map[string]interface{}
-	err = S.Gorm.Raw(query).Take(&result).Error
+	err = S.ORM.NewRaw(query).Scan(ctx, &result)
 	if err != nil {
-		if errors.Is(err, gorm.ErrRecordNotFound) { // send empty response for table
+		if errors.Is(err, sql.ErrNoRows) { // send empty response for table
 			return []byte{}, nil
 		}
 		return nil, err
@@ -517,9 +519,9 @@ func (S *SQLDriver) QueryMultiDocumentOfProject(ctx context.Context, param *mode
 	}
 
 	var result []map[string]interface{}
-	err = S.Gorm.Raw(query).Scan(&result).Error
+	err = S.ORM.NewRaw(query).Scan(ctx, &result)
 	if err != nil {
-		if errors.Is(err, gorm.ErrRecordNotFound) { // send empty response for table
+		if errors.Is(err, sql.ErrNoRows) { // send empty response for table
 			return []*types.DefaultDocumentStructure{}, nil
 		}
 		return nil, err

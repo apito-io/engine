@@ -740,7 +740,7 @@ func (g *GraphCtrl) publicSchemaBuilder(ctx context.Context, cache *models.Appli
 		// logic for custom resolver / functions
 		for _, s := range filteredFunctions {
 			// if permitted in the role then add to query
-			if utility.StringContains(role.LogicExecutions, s.Name) || role.IsAdmin {
+			if utility.ArrayContains(role.LogicExecutions, s.Name) || role.IsAdmin {
 				if s.Request != nil && s.Response != nil {
 					var _argType graphql.Input
 					switch s.Request.Model {
@@ -752,13 +752,11 @@ func (g *GraphCtrl) publicSchemaBuilder(ctx context.Context, cache *models.Appli
 						return nil, errors.New("not Supported Yet")
 					case "JSON":
 						_argType = scaler.ScalarJSONWithRequest(s.Name, cache.GraphqlRequest)
-						break
 					default:
 						_argType = graphql.NewInputObject(graphql.InputObjectConfig{
 							Name:   s.Name + "_Input_Payload",
 							Fields: updateMutationFieldsArguments[s.Request.Model],
 						})
-						break
 					}
 
 					var _arg graphql.FieldConfigArgument
@@ -789,7 +787,6 @@ func (g *GraphCtrl) publicSchemaBuilder(ctx context.Context, cache *models.Appli
 								},
 							},
 						})
-						break
 					default:
 						if s.Response.IsArray {
 							_type = graphql.NewList(graphql.NewObject(graphql.ObjectConfig{

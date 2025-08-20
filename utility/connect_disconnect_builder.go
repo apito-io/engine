@@ -81,12 +81,10 @@ func ConnectDisconnectParamBuilder(project *models.Project, uid string, connecti
 				if !strings.HasSuffix(k, "_ids") {
 					return nil, errors.New("Has Many Relation doesnt support _id, try _ids instead")
 				}
-				break
 			case "has_one":
 				if !strings.HasSuffix(k, "_id") {
 					return nil, errors.New("Has one Relation doesnt support _ids, try _id instead")
 				}
-				break
 			}
 		} else {
 			return nil, errors.New(fmt.Sprintf("Invalid Relation %s", k))
@@ -102,11 +100,19 @@ func ConnectDisconnectParamBuilder(project *models.Project, uid string, connecti
 				connParam.ConnectionType = connection.Type
 				connParam.BackwardConnectionType = connection
 				if connection.Relation == "has_one" {
+
+					var identifier string
+					if knownAs != "" {
+						identifier = fmt.Sprintf(`system_%s_as_%s_id`, connection.Model, knownAs)
+					} else {
+						identifier = fmt.Sprintf(`system_%s_id`, connection.Model)
+					}
+
 					ij := &models.InjectableHasOneConnection{
 						ModelName: modelType.Name,
 						IDs:       []string{uid},
 						Data: map[string]string{
-							"system_" + connection.Model + "_id": ids[0],
+							identifier: ids[0],
 						},
 					}
 					if connParam.InjectableHasOneConnects == nil {
@@ -130,11 +136,19 @@ func ConnectDisconnectParamBuilder(project *models.Project, uid string, connecti
 						connParam.BackwardConnectionModelType = forwardModelType
 						connParam.ForwardConnectionType = _connection
 						if _connection.Relation == "has_one" {
+
+							var identifier string
+							if knownAs != "" {
+								identifier = fmt.Sprintf(`system_%s_as_%s_id`, _connection.Model, knownAs)
+							} else {
+								identifier = fmt.Sprintf(`system_%s_id`, _connection.Model)
+							}
+
 							ij := &models.InjectableHasOneConnection{
 								ModelName: relationTo,
 								IDs:       ids,
 								Data: map[string]string{
-									"system_" + _connection.Model + "_id": uid,
+									identifier: uid,
 								},
 							}
 							if connParam.InjectableHasOneConnects == nil {
@@ -159,11 +173,19 @@ func ConnectDisconnectParamBuilder(project *models.Project, uid string, connecti
 				connParam.ConnectionType = connection.Type
 				connParam.ForwardConnectionType = connection
 				if connection.Relation == "has_one" {
+
+					var identifier string
+					if knownAs != "" {
+						identifier = fmt.Sprintf(`system_%s_as_%s_id`, connection.Model, knownAs)
+					} else {
+						identifier = fmt.Sprintf(`system_%s_id`, connection.Model)
+					}
+
 					ij := &models.InjectableHasOneConnection{
 						ModelName: modelType.Name,
 						IDs:       []string{uid},
 						Data: map[string]string{
-							"system_" + connection.Model + "_id": ids[0],
+							identifier: ids[0],
 						},
 					}
 					if connParam.InjectableHasOneConnects == nil {
@@ -185,11 +207,19 @@ func ConnectDisconnectParamBuilder(project *models.Project, uid string, connecti
 						connParam.BackwardConnectionModelType = backwardModelType
 						connParam.BackwardConnectionType = _connection
 						if _connection.Relation == "has_one" {
+
+							var identifier string
+							if knownAs != "" {
+								identifier = fmt.Sprintf(`system_%s_as_%s_id`, _connection.Model, knownAs)
+							} else {
+								identifier = fmt.Sprintf(`system_%s_id`, _connection.Model)
+							}
+
 							ij := &models.InjectableHasOneConnection{
 								ModelName: relationTo,
 								IDs:       ids,
 								Data: map[string]string{
-									"system_" + _connection.Model + "_id": uid,
+									identifier: uid,
 								},
 							}
 							if connParam.InjectableHasOneConnects == nil {

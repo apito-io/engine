@@ -26,7 +26,7 @@ func (S *SQLDriver) RelationshipDataLoaderBytes(ctx context.Context, param *mode
 	}
 
 	queryResults := []map[string]interface{}{}
-	err = S.Gorm.Raw(*query).Scan(&queryResults).Error
+	err = S.ORM.NewRaw(*query).Scan(ctx, &queryResults)
 	if err != nil {
 		return nil, err
 	}
@@ -98,7 +98,7 @@ func (S *SQLDriver) RelationshipDataLoader(ctx context.Context, param *models.Co
 	}
 
 	queryResults := []map[string]interface{}{}
-	err = S.Gorm.Raw(*query).Scan(&queryResults).Error
+	err = S.ORM.NewRaw(*query).Scan(ctx, &queryResults)
 	if err != nil {
 		return nil, err
 	}

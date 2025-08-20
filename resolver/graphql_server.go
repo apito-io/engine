@@ -118,7 +118,7 @@ func BuildGraphQL(ctx context.Context, cfg *models.Config, extensionRouter *echo
 	switch cfg.KVStorageEngine {
 	case _const.RedisDriver:
 		kvStorage, err = kvRedis.GetKVRedisDriver(ctx, cfg)
-	case _const.EmbeddedDB:
+	case _const.CoreDB:
 		kvStorage, err = kvBadger.GetKVBadgerDriver(cfg)
 	case _const.MemoryDB:
 		kvStorage, err = kvMemory.GetKVMemoryDriver(cfg)

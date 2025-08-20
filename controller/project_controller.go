@@ -28,22 +28,22 @@ func (a *authCtrl) ProjectCreation(c echo.Context) error {
 	var req map[string]interface{}
 	if err := c.Bind(&req); err != nil {
 		return c.JSON(http.StatusBadRequest, &models.HttpResponse{
-			Message: "Bad boy, Jason ...",
+			Message: err.Error(),
 			Code:    http.StatusBadRequest,
 		})
 	}
 
-	userId := c.Get("user")
-	if userId == nil {
+	userID := c.Get("user")
+	if userID == nil {
 		return c.JSON(http.StatusBadRequest, &models.HttpResponse{
-			Message: "Nope, Can't Do it..! User!",
+			Message: "user is missing in the request",
 			Code:    http.StatusBadRequest,
 		})
 	}
 
 	ctx := c.Request().Context()
 
-	user, err := a.graphQLServer.SystemDriver.GetSystemUser(ctx, userId.(string))
+	user, err := a.graphQLServer.SystemDriver.GetSystemUser(ctx, userID.(string))
 	if err != nil {
 		return c.JSON(http.StatusInternalServerError, &models.HttpResponse{
 			Message: captureInternalServerError(err).Error(),
@@ -52,7 +52,7 @@ func (a *authCtrl) ProjectCreation(c echo.Context) error {
 	}
 
 	// query projects
-	projects, err := a.graphQLServer.SystemDriver.FindUserProjectsWithRoles(ctx, userId.(string))
+	projects, err := a.graphQLServer.SystemDriver.FindUserProjectsWithRoles(ctx, userID.(string))
 	if err != nil {
 		return c.JSON(http.StatusInternalServerError, &models.HttpResponse{
 			Message: captureInternalServerError(err).Error(),
@@ -195,7 +195,7 @@ func (a *authCtrl) ProjectCreation(c echo.Context) error {
 		}
 	}
 
-	_project, err := a.graphQLServer.SystemDriver.CreateProject(ctx, userId.(string), project)
+	_project, err := a.graphQLServer.SystemDriver.CreateProject(ctx, userID.(string), project)
 	if err != nil {
 		return c.JSON(http.StatusInternalServerError, &models.HttpResponse{
 			Message: captureInternalServerError(err).Error(),
@@ -287,7 +287,7 @@ func (a *authCtrl) ProjectCreation(c echo.Context) error {
 			})
 		}
 
-		err = projectDriver.TransferProject(ctx, userId.(string), _project.ProjectTemplate, _project.ID)
+		err = projectDriver.TransferProject(ctx, userID.(string), _project.ProjectTemplate, _project.ID)
 		if err != nil {
 			return c.JSON(http.StatusInternalServerError, &models.HttpResponse{
 				Message: captureInternalServerError(err).Error(),
