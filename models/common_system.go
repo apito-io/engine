@@ -128,7 +128,7 @@ type CommonSystemParams struct {
 
 	ReturnOnlyID        bool   `json:"return_only_id,omitempty"`
 	OnlyReturnCount     bool   `json:"only_return_count,omitempty"`
-	OnlyReturnAggregate bool   `json:"only_return_aggregate,omitempty"`
+	IsAggregateQuery    bool   `json:"is_aggregate_query,omitempty"`
 	ReturnOverwrite     string `json:"return_overwrite,omitempty"`
 
 	QuerySelectionSets *ast.SelectionSet `json:"query_selection_sets,omitempty"`

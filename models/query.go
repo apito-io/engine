@@ -82,7 +82,7 @@ type QueryBuilder struct {
 
 	ReturnOnlyID        bool `json:"return_only_id"`
 	ReturnOnlyCount     bool `json:"return_only_count"`
-	ReturnOnlyAggregate bool `json:"return_only_aggregate"`
+	IsAggregateQuery    bool `json:"is_aggregate_query"`
 
 	ProjectType ProjectType `json:"project_type"`
 

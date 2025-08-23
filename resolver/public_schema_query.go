@@ -189,6 +189,7 @@ func (s *GraphQLServer) AggregateResolverFn(p graphql.ResolveParams) (interface{
 		v = p.Context.Value
 		//router = v("router").(echo.Context)
 		cache = v("cache").(*models.ApplicationCache)
+		rootSelectionSet = v("selectionSet").(ast.SelectionSet)
 		ctx   = p.Context
 	)
 
@@ -200,6 +201,14 @@ func (s *GraphQLServer) AggregateResolverFn(p graphql.ResolveParams) (interface{
 	pp := p.Source.(graphql.ResolveParams)
 
 	model := utility.SingularResourceName(pp.Info.FieldName)
+
+	var selectionSet *ast.SelectionSet
+	for _, s := range rootSelectionSet {
+		if val := s.(*ast.Field); utility.SingularResourceName(val.Name) == model {
+			selectionSet = &val.SelectionSet
+			break
+		}
+	}
 
 	var modelType *models.ModelType
 	for _, field := range cache.Project.Schema.Models {
@@ -215,7 +224,10 @@ func (s *GraphQLServer) AggregateResolverFn(p graphql.ResolveParams) (interface{
 	param := s.NewParam(cache.Param)
 	param.Model = modelType
 	param.ResolveParams = &pp
-	param.OnlyReturnAggregate = true
+	param.IsAggregateQuery = true
+
+	// this is must be here for aggregate query
+	param.QuerySelectionSets = selectionSet
 
 	driver, err := s.GraphQLExecutor.GetProjectDriver(ctx)
 	if err != nil {

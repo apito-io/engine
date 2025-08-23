@@ -149,6 +149,29 @@ func _fieldToSelectionBuilder(fields []*models.FieldInfo) ast.SelectionSet {
 	return sections
 }
 
+func ReturnAggregateBuilder(_var string, set ast.SelectionSet) map[string]*models.FieldDetails {
+	fieldInfos := make(map[string]*models.FieldDetails)
+
+	for _, ss := range set {
+		x := ss.(*ast.Field)
+		if x.Name == "__typename" { // skip all the __typename included by client
+			continue
+		}
+		if (x.Name == "aggregate" || x.Name == "groupBy") && x.SelectionSet != nil { // inject the selections if empty, used for `listSingleModelData` query
+			for _, f := range x.SelectionSet {
+				xx := f.(*ast.Field)
+				fieldInfos[xx.Name] = &models.FieldDetails{
+					//Identifier: fmt.Sprintf("`%s`.`%s`", _var, xx.Name),
+					Identifier: xx.Name,
+					Kind:       reflect.Float64,
+					FieldType:  "number",
+				}
+			}
+		}
+	}
+	return fieldInfos
+}
+
 func ReturnBuilder(_var string, local string, _fields *models.FieldDetails, set ast.SelectionSet) map[string]*models.FieldDetails {
 
 	fieldInfos := make(map[string]*models.FieldDetails)
