@@ -241,7 +241,10 @@ func (a *authCtrl) GoogleCallback(c echo.Context) error {
 	})
 
 	// Redirect to frontend with success
-	return c.Redirect(http.StatusTemporaryRedirect, a.Cfg.CORSOrigin)
+	return c.JSON(http.StatusOK, &models.HttpResponse{
+		Message: "Login successful",
+		Code:    http.StatusOK,
+	})
 }
 
 func fetchGitHubUserEmail(client *http.Client) (string, error) {
@@ -419,5 +422,8 @@ func (a *authCtrl) GithubCallback(c echo.Context) error {
 	})
 
 	// Redirect to frontend with success
-	return c.Redirect(http.StatusTemporaryRedirect, a.Cfg.CORSOrigin)
+	return c.JSON(http.StatusOK, &models.HttpResponse{
+		Message: "Login successful",
+		Code:    http.StatusOK,
+	})
 }

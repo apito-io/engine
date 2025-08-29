@@ -26,6 +26,8 @@ type ModelType struct {
 	HasConnections  bool              `json:"has_connections,omitempty" firestore:"has_connections,omitempty" bson:"has_connections,omitempty"`
 	IsTenantModel   bool              `json:"is_tenant_model,omitempty" firestore:"is_tenant_model,omitempty" bson:"is_tenant_model,omitempty"`
 	EnableRevision  bool              `json:"enable_revision,omitempty" firestore:"enable_revision,omitempty" bson:"enable_revision,omitempty"`
+	// is common model is used in saas application where inserting or querying data from this model doesnt require tenant id
+	IsCommonModel   bool              `json:"is_common_model,omitempty" firestore:"is_common_model,omitempty" bson:"is_common_model,omitempty"`
 	RevisionFilter  []*KeyValue       `json:"revision_filter,omitempty" firestore:"revision_filter,omitempty" bson:"revision_filter,omitempty"`
 }
 

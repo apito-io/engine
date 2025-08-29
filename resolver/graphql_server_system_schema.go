@@ -1103,6 +1103,9 @@ func (s *GraphQLServer) BuildServerQueriesAndMutations() {
 				"single_page_model": &graphql.ArgumentConfig{
 					Type: graphql.Boolean,
 				},
+				"is_common_model": &graphql.ArgumentConfig{
+					Type: graphql.Boolean,
+				},
 			},
 			Resolve: s.UpdateModelResolverFn,
 		},

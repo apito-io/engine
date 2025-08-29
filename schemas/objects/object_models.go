@@ -160,6 +160,7 @@ func (s *SchemaObjects) GetModelTypeObject(fieldInfoObj, connectionTypeObj *grap
 			"single_page_uuid": &graphql.Field{Type: graphql.String},
 			"has_connections":  &graphql.Field{Type: graphql.Boolean},
 			"is_tenant_model":  &graphql.Field{Type: graphql.Boolean},
+			"is_common_model":  &graphql.Field{Type: graphql.Boolean},
 			"enable_revision":  &graphql.Field{Type: graphql.Boolean},
 			"revision_filter": &graphql.Field{Type: graphql.NewList(graphql.NewObject(graphql.ObjectConfig{
 				Name: "RevisionFilter",

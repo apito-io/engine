@@ -47,6 +47,21 @@ func (e *CodedError) Error() string {
 	return fmt.Sprintf("HTTP %d: %s", e.Code, e.Message)
 }
 
+// GraphQLError represents a GraphQL error with extensions (mirrors GraphQL spec)
+type GraphQLError struct {
+	Message    string                   `json:"message"`
+	Extensions map[string]interface{}   `json:"extensions,omitempty"`
+	Path       []interface{}            `json:"path,omitempty"`
+	Locations  []map[string]interface{} `json:"locations,omitempty"`
+}
+
+func (e *GraphQLError) Error() string {
+	if code, exists := e.Extensions["code"]; exists {
+		return fmt.Sprintf("GraphQL %v: %s", code, e.Message)
+	}
+	return fmt.Sprintf("GraphQL: %s", e.Message)
+}
+
 // extractErrorCode attempts to extract HTTP status code from error message
 func extractErrorCode(err error) int {
 	if err == nil {
@@ -862,6 +877,53 @@ func (s *GraphQLServer) executePluginRESTHandler(ctx context.Context, pluginID s
 				log.Printf("🎯 [ENGINE] Detected struct value from plugin %s", pluginID)
 				// Convert protobuf Struct to Go map
 				result := structValue.AsMap()
+
+				// Check if this is a GraphQL error from the plugin
+				if isGraphQLError, exists := result["is_graphql_error"]; exists && isGraphQLError == true {
+					log.Printf("🚨 [ENGINE] Detected GraphQL error from plugin %s", pluginID)
+
+					// Extract and deserialize the GraphQL errors
+					if graphqlErrorsJSON, exists := result["graphql_errors"]; exists {
+						if errorJSONStr, ok := graphqlErrorsJSON.(string); ok {
+							var graphqlErrors []map[string]interface{}
+							if err := json.Unmarshal([]byte(errorJSONStr), &graphqlErrors); err == nil {
+								log.Printf("✅ [ENGINE] Successfully deserialized GraphQL errors from plugin %s", pluginID)
+
+								// Return only the first error as a proper GraphQL error
+								if len(graphqlErrors) > 0 {
+									firstError := graphqlErrors[0]
+
+									gqlErr := &GraphQLError{
+										Message: "Unknown GraphQL error",
+									}
+
+									if msg, exists := firstError["message"]; exists {
+										if msgStr, ok := msg.(string); ok {
+											gqlErr.Message = msgStr
+										}
+									}
+
+									if ext, exists := firstError["extensions"]; exists {
+										if extMap, ok := ext.(map[string]interface{}); ok {
+											gqlErr.Extensions = extMap
+										}
+									}
+
+									return nil, gqlErr
+								}
+							}
+						}
+					}
+
+					// Fallback GraphQL error
+					return nil, &GraphQLError{
+						Message: "Plugin returned malformed GraphQL error",
+						Extensions: map[string]interface{}{
+							"code": "PLUGIN_ERROR_MALFORMED",
+						},
+					}
+				}
+
 				log.Printf("✅ [ENGINE] Successfully parsed struct from plugin %s", pluginID)
 				return result, nil
 			} else if _, isNumber := resultValue.GetKind().(*structpb.Value_NumberValue); isNumber {
@@ -1150,6 +1212,57 @@ func (s *GraphQLServer) executePluginGraphQLResolver(ctx context.Context, plugin
 					log.Printf("🎯 [ENGINE-DEBUG] Detected StructValue in JSON data")
 					convertedStruct := convertProtobufValueToGo(jsonData)
 					log.Printf("✅ [ENGINE-DEBUG] Successfully parsed and converted StructValue")
+
+					// Check if this is a GraphQL error from the plugin
+					if structMap, ok := convertedStruct.(map[string]interface{}); ok {
+						if isGraphQLError, exists := structMap["is_graphql_error"]; exists && isGraphQLError == true {
+							log.Printf("🚨 [ENGINE-DEBUG] Detected GraphQL error from plugin %s", pluginID)
+
+							// Extract and deserialize the GraphQL errors
+							if graphqlErrorsJSON, exists := structMap["graphql_errors"]; exists {
+								if errorJSONStr, ok := graphqlErrorsJSON.(string); ok {
+									var graphqlErrors []map[string]interface{}
+									if err := json.Unmarshal([]byte(errorJSONStr), &graphqlErrors); err == nil {
+										log.Printf("✅ [ENGINE-DEBUG] Successfully deserialized GraphQL errors from plugin %s", pluginID)
+
+										// Return only the first error as a proper GraphQL error
+										if len(graphqlErrors) > 0 {
+											firstError := graphqlErrors[0]
+
+											gqlErr := &GraphQLError{
+												Message: "Unknown GraphQL error",
+											}
+
+											if msg, exists := firstError["message"]; exists {
+												if msgStr, ok := msg.(string); ok {
+													gqlErr.Message = msgStr
+												}
+											}
+
+											if ext, exists := firstError["extensions"]; exists {
+												if extMap, ok := ext.(map[string]interface{}); ok {
+													gqlErr.Extensions = extMap
+												}
+											}
+
+											return nil, gqlErr
+										}
+									} else {
+										log.Printf("❌ [ENGINE-DEBUG] Failed to deserialize GraphQL errors: %v", err)
+									}
+								}
+							}
+
+							// Fallback GraphQL error
+							return nil, &GraphQLError{
+								Message: "Plugin returned malformed GraphQL error",
+								Extensions: map[string]interface{}{
+									"code": "PLUGIN_ERROR_MALFORMED",
+								},
+							}
+						}
+					}
+
 					return convertedStruct, nil
 				}
 
@@ -1181,6 +1294,67 @@ func (s *GraphQLServer) executePluginGraphQLResolver(ctx context.Context, plugin
 		if err := response.Result.UnmarshalTo(&resultStruct); err == nil {
 			resultMap := resultStruct.AsMap()
 
+			// 🚨 FIRST: Check if this is a GraphQL error from the plugin
+			if isGraphQLError, exists := resultMap["is_graphql_error"]; exists && isGraphQLError == true {
+				log.Printf("🚨 [ENGINE] Detected GraphQL error from plugin %s", pluginID)
+
+				// Extract and deserialize the GraphQL errors
+				if graphqlErrorsJSON, exists := resultMap["graphql_errors"]; exists {
+					if errorJSONStr, ok := graphqlErrorsJSON.(string); ok {
+						var graphqlErrors []map[string]interface{}
+						if err := json.Unmarshal([]byte(errorJSONStr), &graphqlErrors); err == nil {
+							log.Printf("✅ [ENGINE] Successfully deserialized GraphQL errors from plugin %s", pluginID)
+
+							// Return only the first error as a proper GraphQL error
+							// (GraphQL resolvers typically return single errors)
+							if len(graphqlErrors) > 0 {
+								firstError := graphqlErrors[0]
+
+								gqlErr := &GraphQLError{
+									Message: "Unknown GraphQL error",
+								}
+
+								if msg, exists := firstError["message"]; exists {
+									if msgStr, ok := msg.(string); ok {
+										gqlErr.Message = msgStr
+									}
+								}
+
+								if ext, exists := firstError["extensions"]; exists {
+									if extMap, ok := ext.(map[string]interface{}); ok {
+										gqlErr.Extensions = extMap
+									}
+								}
+
+								if path, exists := firstError["path"]; exists {
+									if pathSlice, ok := path.([]interface{}); ok {
+										gqlErr.Path = pathSlice
+									}
+								}
+
+								if locs, exists := firstError["locations"]; exists {
+									if locsSlice, ok := locs.([]map[string]interface{}); ok {
+										gqlErr.Locations = locsSlice
+									}
+								}
+
+								return nil, gqlErr
+							}
+						} else {
+							log.Printf("❌ [ENGINE] Failed to deserialize GraphQL errors: %v", err)
+						}
+					}
+				}
+
+				// Fallback GraphQL error
+				return nil, &GraphQLError{
+					Message: "Plugin returned malformed GraphQL error",
+					Extensions: map[string]interface{}{
+						"code": "PLUGIN_ERROR_MALFORMED",
+					},
+				}
+			}
+
 			// Check if this is JSON-serialized complex data
 			if serialization, exists := resultMap["serialization"]; exists && serialization == "json_bytes" {
 				log.Printf("🎯 [ENGINE] Detected JSON-serialized complex data from plugin %s", pluginID)
@@ -1189,7 +1363,7 @@ func (s *GraphQLServer) executePluginGraphQLResolver(ctx context.Context, plugin
 				}
 			} else {
 				// Regular struct data - check for error conditions first
-				if data, exists := resultMap["data"]; exists {
+				if data, exists := resultMap["data"]; exists && data != nil {
 					// Check if the data contains error information
 					if dataMap, ok := data.(map[string]interface{}); ok {
 						// Check for success field indicating error
@@ -1262,6 +1436,53 @@ func (s *GraphQLServer) executePluginGraphQLResolver(ctx context.Context, plugin
 				log.Printf("🎯 [ENGINE] Detected struct value from plugin %s", pluginID)
 				// Convert protobuf Struct to Go map
 				result := structValue.AsMap()
+
+				// Check if this is a GraphQL error from the plugin
+				if isGraphQLError, exists := result["is_graphql_error"]; exists && isGraphQLError == true {
+					log.Printf("🚨 [ENGINE] Detected GraphQL error from plugin %s", pluginID)
+
+					// Extract and deserialize the GraphQL errors
+					if graphqlErrorsJSON, exists := result["graphql_errors"]; exists {
+						if errorJSONStr, ok := graphqlErrorsJSON.(string); ok {
+							var graphqlErrors []map[string]interface{}
+							if err := json.Unmarshal([]byte(errorJSONStr), &graphqlErrors); err == nil {
+								log.Printf("✅ [ENGINE] Successfully deserialized GraphQL errors from plugin %s", pluginID)
+
+								// Return only the first error as a proper GraphQL error
+								if len(graphqlErrors) > 0 {
+									firstError := graphqlErrors[0]
+
+									gqlErr := &GraphQLError{
+										Message: "Unknown GraphQL error",
+									}
+
+									if msg, exists := firstError["message"]; exists {
+										if msgStr, ok := msg.(string); ok {
+											gqlErr.Message = msgStr
+										}
+									}
+
+									if ext, exists := firstError["extensions"]; exists {
+										if extMap, ok := ext.(map[string]interface{}); ok {
+											gqlErr.Extensions = extMap
+										}
+									}
+
+									return nil, gqlErr
+								}
+							}
+						}
+					}
+
+					// Fallback GraphQL error
+					return nil, &GraphQLError{
+						Message: "Plugin returned malformed GraphQL error",
+						Extensions: map[string]interface{}{
+							"code": "PLUGIN_ERROR_MALFORMED",
+						},
+					}
+				}
+
 				log.Printf("✅ [ENGINE] Successfully parsed struct from plugin %s", pluginID)
 				return result, nil
 			} else if _, isNumber := resultValue.GetKind().(*structpb.Value_NumberValue); isNumber {

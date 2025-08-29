@@ -639,7 +639,7 @@ func (g *GraphCtrl) publicSchemaBuilder(ctx context.Context, cache *models.Appli
 					Type: graphql.Boolean,
 				}
 				updateArgs["deltaUpdate"] = &graphql.ArgumentConfig{
-					Type: graphql.Boolean,
+					Type:        graphql.Boolean,
 					Description: "Delta update mode. Use if to upate array with _id",
 				}
 				// copy the common with it

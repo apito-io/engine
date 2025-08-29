@@ -734,14 +734,26 @@ func (s *GraphQLServer) GetApplicationCache(router echo.Context) (*models.Applic
 		Param:   param,
 	}
 
-	// Load project-specific plugins into the cache
-	fmt.Printf("[DEBUG] GetApplicationCache: About to load project-specific plugins for project %s\n", _project.ID)
-	err = s.LoadProjectSpecificPlugins(ctx, cache)
-	if err != nil {
-		// Log error but don't fail - plugins are optional
-		fmt.Printf("[ERROR] GetApplicationCache: Failed to load project-specific plugins for project %s: %v\n", _project.ID, err)
+	// Try to reuse previously cached plugin schemas (per project) to avoid re-registering every request
+	if existing, err := s.ProjectCache.GetAppCache(ctx, projectID); err == nil && existing != nil && existing.RawSchemas != nil {
+		cache.RawSchemas = existing.RawSchemas
+	}
+
+	// Load project-specific plugins into the cache only when not already cached
+	if cache.RawSchemas == nil || (len(cache.RawSchemas.Queries) == 0 && len(cache.RawSchemas.Mutations) == 0) {
+		fmt.Printf("[DEBUG] GetApplicationCache: Loading project-specific plugins for project %s\n", _project.ID)
+		err = s.LoadProjectSpecificPlugins(ctx, cache)
+		if err != nil {
+			// Log error but don't fail - plugins are optional
+			fmt.Printf("[ERROR] GetApplicationCache: Failed to load project-specific plugins for project %s: %v\n", _project.ID, err)
+		} else {
+			// Persist only the plugin schema section to the app cache for reuse
+			_ = s.ProjectCache.PutAppCache(ctx, projectID, &models.ApplicationCache{RawSchemas: cache.RawSchemas})
+			fmt.Printf("[DEBUG] GetApplicationCache: Project-specific plugins loaded and cached for project %s\n", _project.ID)
+		}
 	} else {
-		fmt.Printf("[DEBUG] GetApplicationCache: Successfully loaded project-specific plugins for project %s\n", _project.ID)
+		// Using cached plugin schemas
+		fmt.Printf("[DEBUG] GetApplicationCache: Using cached project-specific plugin schemas for project %s\n", _project.ID)
 	}
 
 	return cache, nil

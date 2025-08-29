@@ -5,6 +5,10 @@ import "github.com/tailor-inc/graphql"
 var UpdateModelTypeEnum = graphql.NewEnum(graphql.EnumConfig{
 	Name: "UpdateModelTypeEnum",
 	Values: graphql.EnumValueConfigMap{
+		"update": &graphql.EnumValueConfig{
+			Value:       "update",
+			Description: "",
+		},
 		"rename": &graphql.EnumValueConfig{
 			Value:       "rename",
 			Description: "",

@@ -146,6 +146,10 @@ func (s *GraphQLServer) updateAndConnectDocument(ctx context.Context, cache *mod
 
 func (s *GraphQLServer) createAndConnectDocument(ctx context.Context, cache *models.ApplicationCache, param *models.CommonSystemParams, hooks []*models.Webhook, payload map[string]interface{}, connections map[string]interface{}) (*types.DefaultDocumentStructure, error) {
 
+	if param.Model == nil {
+		return nil, errors.New("model is required for create operation")
+	}
+
 	if len(payload) == 0 {
 		return nil, errors.New("payload is required")
 	}
@@ -156,7 +160,6 @@ func (s *GraphQLServer) createAndConnectDocument(ctx context.Context, cache *mod
 		Key:      _id,
 		ID:       _id,
 		Type:     param.Model.Name,
-		TenantID: types.ID(param.TenantID),
 		Meta: &types.MetaField{
 			CreatedAt: utility.GetCurrentTime(),
 			UpdatedAt: utility.GetCurrentTime(),
@@ -170,6 +173,11 @@ func (s *GraphQLServer) createAndConnectDocument(ctx context.Context, cache *mod
 			},
 			Status: param.DocPublishStatus,
 		},
+	}
+
+	// ignore tenant id for common models
+	if !param.Model.IsCommonModel {
+		doc.TenantID = types.ID(param.TenantID)
 	}
 
 	input := param.ResolveParams.Args
@@ -297,8 +305,8 @@ func (s *GraphQLServer) MutationResolverFn(p graphql.ResolveParams) (interface{}
 
 	var hooks []*models.Webhook
 	// call in the webhook
-	for _, hookId := range modelType.HookIds {
-		hook, err := s.SystemDriver.GetWebHook(ctx, param.ProjectID, hookId)
+	for _, hookID := range modelType.HookIds {
+		hook, err := s.SystemDriver.GetWebHook(ctx, param.ProjectID, hookID)
 		if err != nil {
 			return nil, err
 		}

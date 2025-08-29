@@ -126,10 +126,10 @@ type CommonSystemParams struct {
 	SkipWhereFilter   bool `json:"skip_filter,omitempty"`         // used in intersection of two collections, where filter is not needed
 	SkipDefaultFilter bool `json:"skip_default_filter,omitempty"` // if you want to skip the default filter
 
-	ReturnOnlyID        bool   `json:"return_only_id,omitempty"`
-	OnlyReturnCount     bool   `json:"only_return_count,omitempty"`
-	IsAggregateQuery    bool   `json:"is_aggregate_query,omitempty"`
-	ReturnOverwrite     string `json:"return_overwrite,omitempty"`
+	ReturnOnlyID     bool   `json:"return_only_id,omitempty"`
+	OnlyReturnCount  bool   `json:"only_return_count,omitempty"`
+	IsAggregateQuery bool   `json:"is_aggregate_query,omitempty"`
+	ReturnOverwrite  string `json:"return_overwrite,omitempty"`
 
 	QuerySelectionSets *ast.SelectionSet `json:"query_selection_sets,omitempty"`
 

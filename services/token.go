@@ -6,6 +6,14 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
+	"net/http"
+	"reflect"
+	"runtime"
+	"strconv"
+	"strings"
+	"time"
+
 	goBatch "github.com/RashadAnsari/go-batch/v2"
 	ae "github.com/apito-io/engine/err"
 	"github.com/apito-io/engine/interfaces"
@@ -13,13 +21,6 @@ import (
 	"github.com/apito-io/engine/utility"
 	"github.com/gorilla/websocket"
 	"github.com/labstack/echo/v4"
-	"io"
-	"net/http"
-	"reflect"
-	"runtime"
-	"strings"
-	"sync"
-	"time"
 )
 
 type ApitoTokenService struct {
@@ -29,12 +30,14 @@ type ApitoTokenService struct {
 	blankaService *BrankaToken
 	authService   AuthServiceInterface
 	Batch         *goBatch.Batch[models.ProjectApiTracking]
-	dbWriteLock   sync.Mutex
+	// Removed dbWriteLock - channels are thread-safe
+	ctx    context.Context
+	cancel context.CancelFunc
 }
 
 func NewApitoTokenService(cfg *models.Config, auth AuthServiceInterface, driver interfaces.ApitoSystemDB) (*ApitoTokenService, error) {
 
-	ctx, _ := context.WithCancel(context.Background())
+	ctx, cancel := context.WithCancel(context.Background())
 
 	batch := goBatch.New[models.ProjectApiTracking](
 		goBatch.WithSize(100),
@@ -44,18 +47,119 @@ func NewApitoTokenService(cfg *models.Config, auth AuthServiceInterface, driver 
 
 	apiKeyManager, err := NewAPIKeyManager(cfg, driver)
 	if err != nil {
+		cancel()
 		return nil, err
 	}
 
-	return &ApitoTokenService{
+	service := &ApitoTokenService{
 		cfg:           cfg,
 		systemDB:      driver,
 		blankaService: GetBrankaToken(cfg, driver),
 		apiKeyManager: apiKeyManager,
 		authService:   auth,
 		Batch:         batch,
-		dbWriteLock:   sync.Mutex{},
-	}, nil
+		ctx:           ctx,
+		cancel:        cancel,
+	}
+
+	// Start batch processing in a goroutine
+	go service.batchProcessor()
+
+	return service, nil
+}
+
+// batchProcessor runs in a separate goroutine to consume batch data
+func (t *ApitoTokenService) batchProcessor() {
+	defer func() {
+		if r := recover(); r != nil {
+			fmt.Printf("🚨 [BATCH-PROCESSOR] Panic recovered: %v\n", r)
+		}
+		fmt.Println("🔍 [BATCH-PROCESSOR] Batch processor stopped")
+	}()
+
+	fmt.Println("🔍 [BATCH-PROCESSOR] Starting batch processor")
+
+	for {
+		select {
+		case <-t.ctx.Done():
+			fmt.Println("🔍 [BATCH-PROCESSOR] Context cancelled, stopping batch processor")
+			return
+		case data, ok := <-t.Batch.Output:
+			if !ok {
+				fmt.Println("🔍 [BATCH-PROCESSOR] Batch output channel closed")
+				return
+			}
+
+			// Process the batched data
+			t.processBatchData(data)
+		}
+	}
+}
+
+// processBatchData handles the actual processing of batched tracking data
+func (t *ApitoTokenService) processBatchData(batch []models.ProjectApiTracking) {
+	if len(batch) == 0 {
+		return
+	}
+
+	// Aggregate tracking data by project to reduce DB operations
+	aggregated := make(map[string]*models.ApiTracking)
+
+	for _, item := range batch {
+		for projectID, tracking := range item {
+			if existing, exists := aggregated[projectID]; exists {
+				existing.Increment += tracking.Increment
+				existing.Bandwidth += tracking.Bandwidth
+			} else {
+				aggregated[projectID] = &models.ApiTracking{
+					Increment: tracking.Increment,
+					Bandwidth: tracking.Bandwidth,
+				}
+			}
+		}
+	}
+
+	// Process aggregated data with timeout
+	ctx, cancel := context.WithTimeout(t.ctx, 30*time.Second)
+	defer cancel()
+
+	for projectID, tracking := range aggregated {
+		select {
+		case <-ctx.Done():
+			fmt.Printf("⚠️ [BATCH-PROCESSOR] Processing timeout for remaining projects\n")
+			return
+		default:
+			// Process each project's tracking data
+			err := t.processProjectTracking(ctx, projectID, tracking)
+			if err != nil {
+				// Log error but continue processing other projects
+				fmt.Printf("❌ [BATCH-PROCESSOR] Error processing tracking for project %s: %v\n", projectID, err)
+			}
+		}
+	}
+
+	fmt.Printf("✅ [BATCH-PROCESSOR] Successfully processed batch with %d projects\n", len(aggregated))
+}
+
+// processProjectTracking handles individual project tracking data
+func (t *ApitoTokenService) processProjectTracking(ctx context.Context, projectID string, tracking *models.ApiTracking) error {
+	// TODO: Implement your actual database update logic here
+	// This is where you would update your tracking database
+	fmt.Printf("📊 [BATCH-PROCESSOR] Processing tracking for project %s: increment=%d, bandwidth=%.2f MB\n",
+		projectID, tracking.Increment, tracking.Bandwidth)
+
+	// Example implementation (replace with your actual DB logic):
+	// return t.systemDB.UpdateProjectTracking(ctx, projectID, tracking)
+
+	return nil
+}
+
+// Shutdown gracefully stops the batch processor
+func (t *ApitoTokenService) Shutdown() error {
+	if t.cancel != nil {
+		t.cancel()
+	}
+	return nil
 }
 
 // CustomResponseWriter is a wrapper around the standard http.ResponseWriter
@@ -107,7 +211,7 @@ func (t *ApitoTokenService) ApitoTokenHandler(next echo.HandlerFunc) echo.Handle
 
 		var token *string
 		var err error
-		var projectId string
+		var projectID string
 		var userID string
 
 		var req models.GraphQLIncomingRequest
@@ -144,7 +248,7 @@ func (t *ApitoTokenService) ApitoTokenHandler(next echo.HandlerFunc) echo.Handle
 					return ctx.JSON(http.StatusForbidden, map[string]interface{}{"message": ae.InvalidToken})
 				}
 			}
-			projectId = verifiedToken.ProjectID
+			projectID = verifiedToken.ProjectID
 			userID = verifiedToken.UserID
 
 		} else if useTokenFlag == "false" {
@@ -166,7 +270,7 @@ func (t *ApitoTokenService) ApitoTokenHandler(next echo.HandlerFunc) echo.Handle
 				return ctx.JSON(http.StatusForbidden, map[string]interface{}{"message": ae.InvalidToken})
 			}
 
-			projectId = tokenClaims.ProjectID
+			projectID = tokenClaims.ProjectID
 			userID = tokenClaims.UserID
 
 		} else {
@@ -209,7 +313,7 @@ func (t *ApitoTokenService) ApitoTokenHandler(next echo.HandlerFunc) echo.Handle
 				return ctx.JSON(http.StatusForbidden, map[string]interface{}{"message": ae.InvalidToken})
 			}
 
-			projectId = tokenClaims.ProjectID
+			projectID = tokenClaims.ProjectID
 			userID = tokenClaims.UserID
 		}
 
@@ -245,23 +349,44 @@ func (t *ApitoTokenService) ApitoTokenHandler(next echo.HandlerFunc) echo.Handle
 
 		auditLogs := models.AuditLogs{
 			UserID:      userID,
-			ProjectID:   projectId,
+			ProjectID:   projectID,
 			RequestPath: requestPath,
 		}
 		// pass the request
 		err = next(ctx)
 
-		if requestPath == "/secured/graphql" || strings.HasPrefix(requestPath, "/secured/rest/") {
-			go func(batch *goBatch.Batch[models.ProjectApiTracking]) {
-				t.dbWriteLock.Lock()
-				batch.Input <- models.ProjectApiTracking{
-					projectId: models.ApiTracking{
-						Increment: 1,
-						Bandwidth: (float64(ctx.Response().Size) / 1024.0) / 1024.0,
-					},
+		if requestPath == "/secured/graphql" || requestPath == "/secured/graphql/v2" || strings.HasPrefix(requestPath, "/secured/rest/") {
+			// Send to batch channel with timeout to prevent blocking
+			var respBytes int64
+			if ctx.Response().Size > 0 {
+				respBytes = ctx.Response().Size
+			} else {
+				// Fallback to Content-Length header if present
+				cl := ctx.Response().Header().Get("Content-Length")
+				if cl != "" {
+					if n, err := strconv.ParseInt(cl, 10, 64); err == nil {
+						respBytes = n
+					}
 				}
-				t.dbWriteLock.Unlock()
-			}(t.Batch)
+				// As a last resort, use captured response body size (CustomResponseWriter)
+				if respBytes == 0 {
+					if crw, ok := ctx.Response().Writer.(*CustomResponseWriter); ok && crw != nil && crw.Body != nil {
+						respBytes = int64(crw.Body.Len())
+					}
+				}
+			}
+
+			bandwidthMB := (float64(respBytes) / 1024.0) / 1024.0
+			tracking := models.ProjectApiTracking{projectID: models.ApiTracking{Increment: 1, Bandwidth: bandwidthMB}}
+
+			// Non-blocking send with timeout
+			select {
+			case t.Batch.Input <- tracking:
+				// Successfully sent to batch
+			case <-time.After(100 * time.Millisecond):
+				// Log warning if batch is full/slow, but don't block the request
+				fmt.Printf("⚠️ [API-TRACKING] Batch channel full, dropping tracking data for project %s\n", projectID)
+			}
 		} else if requestPath == "/system/graphql" {
 			go func(ctx echo.Context) {
 

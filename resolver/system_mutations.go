@@ -151,7 +151,7 @@ func (s *GraphQLServer) GenerateAPITokenResolverFn(p graphql.ResolveParams) (int
 	if val, ok := p.Args["role"].(string); ok {
 		role = val
 	} else {
-		return nil, errors.New("Role Id Required")
+		return nil, errors.New("role is Required")
 	}
 
 	var duration string
@@ -163,7 +163,13 @@ func (s *GraphQLServer) GenerateAPITokenResolverFn(p graphql.ResolveParams) (int
 
 	project := cache.Project
 
-	parseDuration, _ := time.Parse(time.RFC3339, duration)
+	// Parse the date string and set it to end of day
+	parseDuration, err := time.Parse("2006-01-02", duration)
+	if err != nil {
+		return nil, fmt.Errorf("invalid duration format: %v", err)
+	}
+	// Set to end of day (23:59:59) in UTC
+	parseDuration = time.Date(parseDuration.Year(), parseDuration.Month(), parseDuration.Day(), 23, 59, 59, 0, time.UTC)
 
 	// generate the token
 	apiKey, err := s.ApiKeyManager.GenerateKey(&models.TokenClaims{
@@ -306,9 +312,22 @@ func (s *GraphQLServer) DeleteAPITokenResolverFn(p graphql.ResolveParams) (inter
 		return nil, errors.New("duration is Required")
 	}
 
-	verifiedToken, err := s.BlankaTokenService.Validate(cache.Ctx, token)
-	if err != nil {
-		return nil, ae.InvalidToken
+	var verifiedToken *models.TokenClaims
+	if strings.HasPrefix(token, "ak_") {
+		verifiedToken, err = s.ApiKeyManager.Validate(cache.Ctx, token, false)
+		if err != nil {
+			if err.Error() == "This token is blacklisted" || err.Error() == "key has expired" {
+				// do nothing
+			} else {
+				return nil, err
+			}
+		}
+	} else {
+		// blanka token is used in api key so it might contain tenant id
+		verifiedToken, err = s.BlankaTokenService.Validate(cache.Ctx, token)
+		if err != nil {
+			return nil, ae.InvalidToken
+		}
 	}
 
 	if !param.Role.IsAdmin {
@@ -319,9 +338,9 @@ func (s *GraphQLServer) DeleteAPITokenResolverFn(p graphql.ResolveParams) (inter
 
 	project := cache.Project
 
-	for i, t := range project.APIKeys {
+	for i, t := range project.Tokens {
 		if t.Token == token {
-			project.APIKeys = append(project.APIKeys[:i], project.APIKeys[i+1:]...)
+			project.Tokens = append(project.Tokens[:i], project.Tokens[i+1:]...)
 		}
 	}
 
@@ -331,7 +350,7 @@ func (s *GraphQLServer) DeleteAPITokenResolverFn(p graphql.ResolveParams) (inter
 	}
 
 	parseDuration, _ := time.Parse(time.RFC3339, duration)
-	alreadyExpired := parseDuration.Sub(time.Now()).Hours()
+	alreadyExpired := time.Until(parseDuration).Hours()
 	if alreadyExpired > 0.0 { // expire the token
 		expiredToken := map[string]interface{}{
 			"id":        verifiedToken.TokenUniqueID,
@@ -1417,8 +1436,19 @@ func (s *GraphQLServer) UpdateModelResolverFn(p graphql.ResolveParams) (interfac
 		singlePageModel = val
 	}
 
+	var isCommonModel bool
+	if val, ok := p.Args["is_common_model"].(bool); ok {
+		isCommonModel = val
+	}
+
 	var resp interface{}
 	switch _type {
+	case "update":
+		resp, err = s.updateModel(cache.Ctx, project, modelName, isCommonModel)
+		if err != nil {
+			return nil, err
+		}
+		return resp, nil
 	case "duplicate":
 		var newName string
 		if val, ok := p.Args["new_name"].(string); ok {
@@ -1427,6 +1457,10 @@ func (s *GraphQLServer) UpdateModelResolverFn(p graphql.ResolveParams) (interfac
 			return nil, errors.New(ae.NEW_MODEL_NAME_REQUIRED)
 		}
 		resp, err = s.duplicateModel(cache.Ctx, project, newName, modelName)
+		if err != nil {
+			return nil, err
+		}
+		return resp, nil
 	case "rename":
 		var newName string
 		if val, ok := p.Args["new_name"].(string); ok {
@@ -1435,17 +1469,54 @@ func (s *GraphQLServer) UpdateModelResolverFn(p graphql.ResolveParams) (interfac
 			return nil, errors.New(ae.NEW_MODEL_NAME_REQUIRED)
 		}
 		resp, err = s.renameModel(cache.Ctx, project, newName, modelName, singlePageModel)
+		if err != nil {
+			return nil, err
+		}
+		return resp, nil
 	case "convert":
 		resp, err = s.convertModel(cache.Ctx, project, modelName)
+		if err != nil {
+			return nil, err
+		}
 	case "delete":
 		resp, err = s.deleteModel(cache.Ctx, project, modelName)
+		if err != nil {
+			return nil, err
+		}
+		return resp, nil
 	}
 
+	return nil, errors.New("invalid update model request")
+}
+
+func (s *GraphQLServer) updateModel(ctx context.Context, project *models.Project, modelName string, isCommonModel bool) (*models.ModelType, error) {
+
+	if modelName == "" {
+		return nil, errors.New(ae.MODEL_NAME_REQUIRED)
+	}
+
+	var updatedModel *models.ModelType
+
+	if project.Schema == nil {
+		return nil, errors.New("please create a model first")
+	} else {
+		for _, ct := range project.Schema.Models {
+			if ct.Name == modelName {
+				updatedModel = ct
+				break
+			}
+		}
+	}
+
+	// update its settings
+	updatedModel.IsCommonModel = isCommonModel
+
+	err := s.SystemDriver.UpdateProject(ctx, project, false)
 	if err != nil {
 		return nil, err
 	}
 
-	return resp, nil
+	return updatedModel, nil
 }
 
 func (s *GraphQLServer) duplicateModel(ctx context.Context, project *models.Project, newName, modelName string) (interface{}, error) {

@@ -41,8 +41,6 @@ func main() {
 		if err != nil {
 			ae.EwP(err, "Sentry Init")
 		}
-	} else {
-		fmt.Println(string(fmtConfig(&cfg)))
 	}
 
 	upg, _ := tableflip.New(tableflip.Options{})
