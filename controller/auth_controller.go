@@ -266,7 +266,7 @@ func (a *authCtrl) GenerateAPIKey(c echo.Context) error {
 	userID := c.Get("user")
 	if userID == nil {
 		return c.JSON(http.StatusBadRequest, &models.HttpResponse{
-			Message: "Nope, Can't Do it..! User!",
+			Message: "user is missing in the token payload",
 			Code:    http.StatusBadRequest,
 		})
 	}
@@ -336,7 +336,7 @@ func (a *authCtrl) SyncProject(c echo.Context) error {
 	userId := c.Get("user")
 	if userId == nil {
 		return c.JSON(http.StatusBadRequest, &models.HttpResponse{
-			Message: "Nope, Can't Do it..! User!",
+			Message: "user is missing in the token payload",
 			Code:    http.StatusBadRequest,
 		})
 	}
@@ -396,7 +396,7 @@ func (a *authCtrl) ProjectSwitchV2(c echo.Context) error {
 	userId := c.Get("user")
 	if userId == nil {
 		return c.JSON(http.StatusBadRequest, &models.HttpResponse{
-			Message: "Nope, Can't Do it..! User!",
+			Message: "user is missing in the token payload",
 			Code:    http.StatusBadRequest,
 		})
 	}
@@ -478,7 +478,7 @@ func (a *authCtrl) LogoutV2(c echo.Context) error {
 	userId := c.Get("user")
 	if userId == nil {
 		return c.JSON(http.StatusBadRequest, &models.HttpResponse{
-			Message: "Nope, Can't Do it..! User!",
+			Message: "user is missing in the token payload",
 			Code:    http.StatusBadRequest,
 		})
 	}
@@ -547,7 +547,7 @@ func (a *authCtrl) ChangePasswordV2(c echo.Context) error {
 	userId := c.Get("user")
 	if userId == nil {
 		return c.JSON(http.StatusBadRequest, &models.HttpResponse{
-			Message: "Nope, Can't Do it..! User!",
+			Message: "user is missing in the token payload",
 			Code:    http.StatusBadRequest,
 		})
 	}
@@ -607,7 +607,7 @@ func (a *authCtrl) LoginV2(c echo.Context) error {
 		userId := c.Get("user")
 		if userId == nil {
 			return c.JSON(http.StatusBadRequest, &models.HttpResponse{
-				Message: "Nope, Can't Do it..! User!",
+				Message: "user is missing in the token payload",
 				Code:    http.StatusBadRequest,
 			})
 		}
@@ -721,7 +721,7 @@ func (a *authCtrl) RegisterV2(c echo.Context) error {
 		userId := c.Get("user")
 		if userId == nil {
 			return c.JSON(http.StatusBadRequest, &models.HttpResponse{
-				Message: "Nope, Can't Do it..! User!",
+				Message: "user is missing in the token payload",
 				Code:    http.StatusBadRequest,
 			})
 		}

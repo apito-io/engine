@@ -117,7 +117,8 @@ type Project struct {
 	SystemMessages []*SystemMessage `bun:"rel:has-many" json:"system_messages,omitempty" firestore:"system_messages,omitempty" bson:"system_messages,omitempty"`
 	Workspaces     []*Workspace     `bun:"rel:has-many" json:"workspaces,omitempty" firestore:"workspaces,omitempty" bson:"workspaces,omitempty"`
 
-	ProjectPlan    string `json:"project_plan,omitempty" firestore:"project_plan,omitempty" bson:"project_plan,omitempty"` // free, pro, enterprise
+	PlanType       string `json:"plan_type,omitempty" firestore:"plan_type,omitempty" bson:"plan_type,omitempty"` // dedicated, byod
+	TireType       string `json:"tire_type,omitempty" firestore:"tire_type,omitempty" bson:"tire_type,omitempty"` // free, pro, business
 	TrialEnds      string `json:"trial_ends,omitempty" firestore:"trial_ends,omitempty" bson:"trial_ends,omitempty"`
 	PaymentDueDate string `json:"payment_due_date,omitempty" firestore:"payment_due_date,omitempty" bson:"payment_due_date,omitempty"`
 

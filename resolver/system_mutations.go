@@ -3435,8 +3435,6 @@ func (s *GraphQLServer) CreateConnectionTypeResolverFn(p graphql.ResolveParams) 
 			return nil, err
 		}
 
-		// for ui purpose
-		toConnectionInfo.Model = toResource
 		connections = append(connections, toConnectionInfo)
 	}
 

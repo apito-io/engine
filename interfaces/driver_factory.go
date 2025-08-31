@@ -1,7 +1,10 @@
 package interfaces
 
 import (
+	"context"
+
 	"github.com/apito-io/engine/models"
+	"github.com/labstack/echo/v4"
 )
 
 // DatabaseDriverFactory interface for creating database drivers
@@ -15,4 +18,14 @@ type DatabaseDriverFactory interface {
 
 	// SupportsEngine returns true if this factory can create drivers for the given engine
 	SupportsEngine(engine string) bool
+}
+
+// GraphQLServerFactory interface for creating GraphQL servers
+// This allows pro version to inject its own enhanced GraphQL server while keeping core intact
+type GraphQLServerFactory interface {
+	// SupportsVersion returns true if this factory can create servers for the given version/edition
+	SupportsVersion(version string) bool
+
+	// CreateGraphQLServer creates a GraphQL server instance
+	CreateGraphQLServer(ctx context.Context, cfg *models.Config, extensionRouter *echo.Group, mainEcho *echo.Echo) (GraphQLServerInterface, error)
 }

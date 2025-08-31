@@ -38,6 +38,47 @@ import (
 	"gopkg.in/h2non/filetype.v1"
 )
 
+// CoreGraphQLServerFactory implements GraphQLServerFactory for open-core version
+type CoreGraphQLServerFactory struct{}
+
+// NewCoreGraphQLServerFactory creates a new core GraphQL server factory
+func NewCoreGraphQLServerFactory() interfaces.GraphQLServerFactory {
+	return &CoreGraphQLServerFactory{}
+}
+
+// SupportsVersion returns true if this factory can create servers for the given version/edition
+func (f *CoreGraphQLServerFactory) SupportsVersion(version string) bool {
+	return version == "core" || version == "open-source"
+}
+
+// CreateGraphQLServer creates a core GraphQL server instance
+func (f *CoreGraphQLServerFactory) CreateGraphQLServer(ctx context.Context, cfg *models.Config, extensionRouter *echo.Group, mainEcho *echo.Echo) (interfaces.GraphQLServerInterface, error) {
+	return BuildGraphQL(ctx, cfg, extensionRouter, mainEcho)
+}
+
+// Global factory variable that can be overridden by pro version
+var globalGraphQLServerFactory interfaces.GraphQLServerFactory
+
+// SetGraphQLServerFactory allows pro version to inject its own factory
+func SetGraphQLServerFactory(factory interfaces.GraphQLServerFactory) {
+	globalGraphQLServerFactory = factory
+}
+
+// GetGraphQLServerFactory returns the appropriate factory (pro if available, otherwise core)
+func GetGraphQLServerFactory() interfaces.GraphQLServerFactory {
+	if globalGraphQLServerFactory != nil {
+		return globalGraphQLServerFactory
+	}
+	return NewCoreGraphQLServerFactory()
+}
+
+// BuildGraphQLWithFactory creates a GraphQL server using the factory pattern
+// This is the main entry point that routers should use
+func BuildGraphQLWithFactory(ctx context.Context, cfg *models.Config, extensionRouter *echo.Group, mainEcho *echo.Echo) (interfaces.GraphQLServerInterface, error) {
+	factory := GetGraphQLServerFactory()
+	return factory.CreateGraphQLServer(ctx, cfg, extensionRouter, mainEcho)
+}
+
 type GraphQLServer struct {
 	sync.Mutex
 	wg sync.WaitGroup
@@ -455,13 +496,9 @@ func (s *GraphQLServer) PublicFunctionRouteAuthorize() echo.MiddlewareFunc {
 	}
 }
 
-type QueryBuilderInformation struct {
-	DataObjects      graphql.Fields
-	AggregateObjects graphql.Fields
-	//ConnectionParamObjects map[string]*graphql.InputObject
-	WhereParamObjects graphql.InputObjectConfigFieldMap
-	SortParamObjects  graphql.InputObjectConfigFieldMap
-}
+// QueryBuilderInformation moved to interfaces package for compatibility
+// Keeping this as alias for backward compatibility
+type QueryBuilderInformation = interfaces.QueryBuilderInformation
 
 func (s *GraphQLServer) GetCacheGraphQLFieldsGeneration(ctx context.Context, projectId string, modelName string) (*QueryBuilderInformation, error) {
 	id := s.cacheId(projectId, modelName)
@@ -1133,4 +1170,25 @@ func (s *GraphQLServer) isPluginRoute(path string) bool {
 // WaitForPluginsToLoad waits for all plugins to finish loading
 func (s *GraphQLServer) WaitForPluginsToLoad() {
 	s.wg.Wait()
+}
+
+// GetHashiCorpPluginIDs returns the list of loaded HashiCorp plugin IDs
+func (s *GraphQLServer) GetHashiCorpPluginIDs() []string {
+	var pluginIDs []string
+	for pluginID := range s.HashiCorpPluginCache {
+		pluginIDs = append(pluginIDs, pluginID)
+	}
+	return pluginIDs
+}
+
+// SetPluginMonitor sets the plugin monitor
+func (s *GraphQLServer) SetPluginMonitor(monitor interface{}) {
+	if pm, ok := monitor.(*PluginMonitor); ok {
+		s.PluginMonitor = pm
+	}
+}
+
+// GetConcreteServer returns the concrete server instance for controller compatibility
+func (s *GraphQLServer) GetConcreteServer() interface{} {
+	return s
 }

@@ -78,7 +78,7 @@ func InitRouter(cfg *models.Config) (*echo.Echo, error) {
 
 	fmt.Println("building graphql server instance")
 	ctx := context.Background()
-	server, err := resolver.BuildGraphQL(ctx, cfg, extensionRoute, router)
+	server, err := resolver.BuildGraphQLWithFactory(ctx, cfg, extensionRoute, router)
 	if err != nil {
 		fmt.Println(err.Error())
 		return nil, err
@@ -101,10 +101,10 @@ func InitRouter(cfg *models.Config) (*echo.Echo, error) {
 
 	fmt.Println(" ---> initializing plugin health monitor <--- ")
 	// Create and start the plugin monitor
-	pluginMonitor := resolver.NewPluginMonitor(server)
+	pluginMonitor := resolver.NewPluginMonitor(server.GetConcreteServer().(*resolver.GraphQLServer))
 
 	// Register all loaded HashiCorp plugins for monitoring
-	for pluginID := range server.HashiCorpPluginCache {
+	for _, pluginID := range server.GetHashiCorpPluginIDs() {
 		pluginMonitor.RegisterPlugin(pluginID)
 		fmt.Printf("🔍 [PLUGIN-MONITOR] Registered plugin for monitoring: %s\n", pluginID)
 	}
@@ -115,7 +115,7 @@ func InitRouter(cfg *models.Config) (*echo.Echo, error) {
 	}()
 
 	// Store the monitor in the server for later access (optional)
-	server.PluginMonitor = pluginMonitor
+	server.SetPluginMonitor(pluginMonitor)
 
 	fmt.Println(" ---> initializing goroutine monitor <--- ")
 	// Create and start goroutine monitoring
@@ -125,8 +125,8 @@ func InitRouter(cfg *models.Config) (*echo.Echo, error) {
 	}()
 
 	fmt.Println("initializing graphql & auth controller")
-	graphCtrl := controller.GetGraphQLController(cfg, server)
-	authCtrl := controller.GetAuthController(cfg, server)
+	graphCtrl := controller.GetGraphQLController(cfg, server.GetConcreteServer().(*resolver.GraphQLServer))
+	authCtrl := controller.GetAuthController(cfg, server.GetConcreteServer().(*resolver.GraphQLServer))
 
 	startRoutes := router.Group("journey")
 	{

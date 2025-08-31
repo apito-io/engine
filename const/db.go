@@ -1,6 +1,9 @@
 package _const
 
 const (
+	// Apito DefaultCloud Database
+	ApitoDB string = "apitoDB"
+
 	// SQL driver
 	MySQLDriver   string = "mysql"
 	MariaDBDriver string = "mariadb"

@@ -4,14 +4,16 @@ import (
 	"context"
 	"encoding/csv"
 	"fmt"
-	"github.com/apito-io/engine/models"
-	"github.com/apito-io/engine/utility"
-	"github.com/google/uuid"
-	"github.com/labstack/echo/v4"
 	"net/http"
 	"os"
 	"strings"
 	"time"
+
+	_const "github.com/apito-io/engine/const"
+	"github.com/apito-io/engine/models"
+	"github.com/apito-io/engine/utility"
+	"github.com/google/uuid"
+	"github.com/labstack/echo/v4"
 )
 
 func contains(arr []string, str string) bool {
@@ -75,19 +77,27 @@ func (a *authCtrl) ProjectCreation(c echo.Context) error {
 		})
 	}
 
+	// prepare the project skeleton
 	var _projectID string
 	if val, ok := req["id"]; ok && val != nil {
 		_projectID = val.(string)
 	}
 
-	projectId := strings.TrimSpace(strings.ToLower(strings.ReplaceAll(_projectID, " ", "_")))
+	var projectName string
+	if val, ok := req["name"]; ok && val != nil {
+		projectName = val.(string)
+	} else {
+		return c.JSON(http.StatusBadRequest, &models.HttpResponse{
+			Message: "Project name is required",
+			Code:    http.StatusBadRequest,
+		})
+	}
 
+	projectID := strings.TrimSpace(strings.ToLower(strings.ReplaceAll(_projectID, " ", "_")))
 	project := &models.Project{
-		XKey:         projectId,
-		ID:           projectId,
-		Name:         req["name"].(string),
-		Description:  req["description"].(string),
-		ProjectPlan:  req["project_plan"].(string),
+		XKey:         projectID,
+		ID:           projectID,
+		Name:         projectName,
 		Organization: user.DefaultOrganization,
 		// generate a project secret key and add default role
 		Roles: map[string]*models.Role{ // default role
@@ -103,60 +113,117 @@ func (a *authCtrl) ProjectCreation(c echo.Context) error {
 		Teams:            []*models.Team{user.DefaultTeam},
 	}
 
-	ust := c.Get("ust")
-	if ust == nil {
+	var planType string
+	if val, ok := req["plan_type"]; ok && val != nil {
+		planType = val.(string)
+	} else {
 		return c.JSON(http.StatusBadRequest, &models.HttpResponse{
-			Message: "Nope, Can't Do it..! User!",
+			Message: "Plan type is required",
 			Code:    http.StatusBadRequest,
 		})
 	}
+
+	switch planType {
+	case "dedicated":
+
+		project.PlanType = "dedicated"
+		if val, ok := req["tier_name"]; ok && val != nil {
+			project.TireType = val.(string)
+		} else {
+			return c.JSON(http.StatusBadRequest, &models.HttpResponse{
+				Message: "Tier name is required",
+				Code:    http.StatusBadRequest,
+			})
+		}
+
+		if project.TireType == "free" && createdProject >= 1 {
+			return c.JSON(http.StatusBadRequest, &models.HttpResponse{
+				Message: "You can not create more than 1 project with free tier",
+				Code:    http.StatusBadRequest,
+			})
+		}
+	case "byod":
+		var databaseType string
+		if val, ok := req["database_type"]; ok && val != nil {
+			databaseType = val.(string)
+		} else {
+			return c.JSON(http.StatusBadRequest, &models.HttpResponse{
+				Message: "Database type is required",
+				Code:    http.StatusBadRequest,
+			})
+		}
+		project.PlanType = "byod"
+		project.Driver = &models.DriverCredentials{
+			Engine: databaseType,
+		}
+	}
+
+	if val, ok := req["description"]; ok && val != nil {
+		project.Description = val.(string)
+	}
+
+	/* ust := c.Get("ust")
+	if ust == nil {
+		return c.JSON(http.StatusBadRequest, &models.HttpResponse{
+			Message: "user is missing in the token payload",
+			Code:    http.StatusBadRequest,
+		})
+	} */
 
 	switch strings.ToLower(req["project_type"].(string)) {
 	case "regular", "general":
 		project.ProjectType = models.ProjectType_General
 	case "saas":
 		project.ProjectType = models.ProjectType_SaaS
-		// saas is just in trail mode right now for 7 days
-		project.TrialEnds = time.Now().AddDate(0, 0, 7).UTC().Format(time.RFC3339)
 
+		var tenantModelName string
 		if val, ok := req["tenant_model_name"]; ok && val != nil {
-			tenantModelName := utility.SingularResourceName(val.(string))
-			project.TenantModelName = tenantModelName
-			project.Schema = &models.ProjectSchema{
-				Models: []*models.ModelType{
-					{
-						Name:          tenantModelName,
-						IsTenantModel: true,
-						Fields: []*models.FieldInfo{
-							{
-								Identifier:  "name",
-								Description: fmt.Sprintf("%s Name", strings.Title(tenantModelName)),
-								FieldType:   "text",
-								InputType:   "string",
-								Serial:      1,
-								Label:       "Name",
-								//SystemGenerated: true,
-							},
-							{
-								Identifier:  "logo",
-								Description: fmt.Sprintf("%s Logo", strings.Title(tenantModelName)),
-								InputType:   "string",
-								FieldType:   "media",
-								Serial:      2,
-								Label:       "Logo",
-								//SystemGenerated: true,
-							},
+			tenantModelName = val.(string)
+		} else {
+			return c.JSON(http.StatusBadRequest, &models.HttpResponse{
+				Message: "Tenant model name is required for SaaS project",
+				Code:    http.StatusBadRequest,
+			})
+		}
+
+		// saas is just in trail mode right now for 7 days
+		//project.TrialEnds = time.Now().AddDate(0, 0, 7).UTC().Format(time.RFC3339)
+		project.TenantModelName = utility.SingularResourceName(tenantModelName)
+		project.Schema = &models.ProjectSchema{
+			Models: []*models.ModelType{
+				{
+					Name:          tenantModelName,
+					IsTenantModel: true,
+					Fields: []*models.FieldInfo{
+						{
+							Identifier:  "name",
+							Description: fmt.Sprintf("%s Name", strings.Title(tenantModelName)),
+							FieldType:   "text",
+							InputType:   "string",
+							Serial:      1,
+							Label:       "Name",
+							//SystemGenerated: true,
+						},
+						{
+							Identifier:  "logo",
+							Description: fmt.Sprintf("%s Logo", strings.Title(tenantModelName)),
+							InputType:   "string",
+							FieldType:   "media",
+							Serial:      2,
+							Label:       "Logo",
+							//SystemGenerated: true,
 						},
 					},
 				},
-			}
+			},
 		}
 	default:
 		project.ProjectType = models.ProjectType_General
 	}
 
 	if project.Driver == nil {
-		project.Driver = &models.DriverCredentials{
+		cfg := &models.DriverCredentials{
+			ProjectID: projectID, // this is must be passed from here
 			Engine:   a.Cfg.DefaultProjectDatabaseEngine,
 			Host:     a.Cfg.DefaultProjectDBHost,
 			Port:     a.Cfg.DefaultProjectDBPort,
@@ -164,13 +231,17 @@ func (a *authCtrl) ProjectCreation(c echo.Context) error {
 			Database: a.Cfg.DefaultProjectDBName,
 			Password: a.Cfg.DefaultProjectDBPassword,
 		}
+		// only save the engine
+		project.Driver = &models.DriverCredentials{
+			Engine: _const.ApitoDB,
+		}
 		// inject driver credential to connection manager
-		a.graphQLServer.GraphQLExecutor.SetProjectDriverCredential(ctx, project.Driver)
+		a.graphQLServer.GraphQLExecutor.SetProjectDriverCredential(ctx, cfg)
 	}
 
 	if project.ProjectType != models.ProjectType_SaaS {
 		//inject project_id via context
-		ctx = context.WithValue(ctx, "project_id", projectId)
+		ctx = context.WithValue(ctx, "project_id", projectID)
 		projectDriver, err := a.graphQLServer.GraphQLExecutor.GetProjectDriver(ctx)
 		if err != nil {
 			return c.JSON(http.StatusInternalServerError, &models.HttpResponse{
@@ -179,7 +250,7 @@ func (a *authCtrl) ProjectCreation(c echo.Context) error {
 			})
 		}
 		err = projectDriver.AddCollection(ctx, &models.CommonSystemParams{
-			ProjectID:   projectId,
+			ProjectID:   projectID,
 			UserID:      user.ID,
 			ProjectType: project.ProjectType,
 		}, false)
@@ -188,10 +259,6 @@ func (a *authCtrl) ProjectCreation(c echo.Context) error {
 				Message: captureInternalServerError(err).Error(),
 				Code:    http.StatusInternalServerError,
 			})
-		}
-		// update the engine of the project
-		if project.Driver != nil {
-			project.Driver.Database = a.Cfg.DefaultProjectDBName
 		}
 	}
 
@@ -219,9 +286,9 @@ func (a *authCtrl) ProjectCreation(c echo.Context) error {
 			CreatedBy:   user.ID,
 			Users: []*models.SystemUser{
 				{
-					ID:           user.ID,
-					Role:         "admin",
-					IsAdmin:      true,
+					ID:      user.ID,
+					Role:    "admin",
+					IsAdmin: true,
 				},
 			},
 		}
@@ -251,9 +318,9 @@ func (a *authCtrl) ProjectCreation(c echo.Context) error {
 			},
 			Users: []*models.SystemUser{
 				{
-					ID:           user.ID,
-					Role:         "admin",
-					IsAdmin:      true,
+					ID:      user.ID,
+					Role:    "admin",
+					IsAdmin: true,
 				},
 			},
 		}
@@ -316,7 +383,7 @@ func (a *authCtrl) DemoProjectSwitch(c echo.Context) error {
 	var req *models.ProjectCreateRequest
 	if err := c.Bind(&req); err != nil {
 		return c.JSON(http.StatusBadRequest, &models.HttpResponse{
-			Message: "Badboy, Jason ...",
+			Message: err.Error(),
 			Code:    http.StatusBadRequest,
 		})
 	}
@@ -339,7 +406,7 @@ func (a *authCtrl) DemoProjectSwitch(c echo.Context) error {
 	userId := c.Get("user")
 	if userId == nil {
 		return c.JSON(http.StatusBadRequest, &models.HttpResponse{
-			Message: "Nope, Can't Do it..! User!",
+			Message: "user is missing in the token payload",
 			Code:    http.StatusBadRequest,
 		})
 	}
@@ -356,7 +423,7 @@ func (a *authCtrl) DemoProjectSwitch(c echo.Context) error {
 
 	user.CurrentProjectID = req.ID
 	user.ReadOnlyProject = true
-	
+
 	err = a.graphQLServer.SystemDriver.UpdateSystemUser(ctx, user, false)
 	if err != nil {
 		return c.JSON(http.StatusInternalServerError, &models.HttpResponse{
@@ -391,7 +458,7 @@ func (a *authCtrl) ProjectNameCheck(c echo.Context) error {
 	var req *models.ProjectCreateRequest
 	if err := c.Bind(&req); err != nil {
 		return c.JSON(http.StatusBadRequest, &models.HttpResponse{
-			Message: "Badboy, Jason ...",
+			Message: err.Error(),
 			Code:    http.StatusBadRequest,
 		})
 	}
@@ -406,7 +473,7 @@ func (a *authCtrl) ProjectNameCheck(c echo.Context) error {
 	userId := c.Get("user")
 	if userId == nil {
 		return c.JSON(http.StatusBadRequest, &models.HttpResponse{
-			Message: "Nope, Can't Do it..! User!",
+			Message: "user is missing in the token payload",
 			Code:    http.StatusBadRequest,
 		})
 	}
@@ -433,7 +500,7 @@ func (a *authCtrl) ProjectList(c echo.Context) error {
 	userId := c.Get("user")
 	if userId == nil {
 		return c.JSON(http.StatusBadRequest, &models.HttpResponse{
-			Message: "Nope, Can't Do it..! User!",
+			Message: "user is missing in the token payload",
 			Code:    http.StatusBadRequest,
 		})
 	}
@@ -474,7 +541,7 @@ func (a *authCtrl) CSVTempGen(c echo.Context) error {
 	var req *models.CSVTemplateGenerator
 	if err := c.Bind(&req); err != nil {
 		return c.JSON(http.StatusBadRequest, &models.HttpResponse{
-			Message: "Badboy, Jason ...",
+			Message: err.Error(),
 			Code:    http.StatusBadRequest,
 		})
 	}
@@ -482,7 +549,7 @@ func (a *authCtrl) CSVTempGen(c echo.Context) error {
 	projectID := c.Get("project")
 	if projectID == nil {
 		return c.JSON(http.StatusBadRequest, &models.HttpResponse{
-			Message: "Nope, Can't Do it..! User!",
+			Message: "project id is missing in the token payload",
 			Code:    http.StatusBadRequest,
 		})
 	}
@@ -586,7 +653,7 @@ func (a *authCtrl) UpdateProfile(c echo.Context) error {
 	var req *models.SystemUser
 	if err := c.Bind(&req); err != nil {
 		return c.JSON(http.StatusBadRequest, &models.HttpResponse{
-			Message: "Badboy, Jason ...",
+			Message: err.Error(),
 			Code:    http.StatusBadRequest,
 		})
 	}
@@ -630,7 +697,7 @@ func (a *authCtrl) ProjectDelete(c echo.Context) error {
 	var req *models.ProjectCreateRequest
 	if err := c.Bind(&req); err != nil {
 		return c.JSON(http.StatusBadRequest, &models.HttpResponse{
-			Message: "Badboy, Jason ...",
+			Message: err.Error(),
 			Code:    http.StatusBadRequest,
 		})
 	}
@@ -656,20 +723,20 @@ func (a *authCtrl) ProjectDelete(c echo.Context) error {
 
 	if req.ID == "" {
 		return c.JSON(http.StatusBadRequest, &models.HttpResponse{
-			Message: "What are you doing?",
+			Message: "project id is missing",
 			Code:    http.StatusBadRequest,
 		})
 	}
 
-	userId := c.Get("user")
-	if userId == nil {
+	userID := c.Get("user")
+	if userID == nil {
 		return c.JSON(http.StatusBadRequest, &models.HttpResponse{
-			Message: "Nope, Can't Do it..! User!",
+			Message: "user is missing in the token payload",
 			Code:    http.StatusBadRequest,
 		})
 	}
 
-	user, err := a.graphQLServer.SystemDriver.GetSystemUser(ctx, userId.(string))
+	user, err := a.graphQLServer.SystemDriver.GetSystemUser(ctx, userID.(string))
 	if err != nil {
 		return c.JSON(http.StatusInternalServerError, &models.HttpResponse{
 			Message: captureInternalServerError(err).Error(),

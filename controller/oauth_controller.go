@@ -132,7 +132,7 @@ func (a *authCtrl) GoogleCallback(c echo.Context) error {
 		userId := c.Get("user")
 		if userId == nil {
 			return c.JSON(http.StatusBadRequest, &models.HttpResponse{
-				Message: "Nope, Can't Do it..! User!",
+				Message: "user is missing in the token payload",
 				Code:    http.StatusBadRequest,
 			})
 		}
