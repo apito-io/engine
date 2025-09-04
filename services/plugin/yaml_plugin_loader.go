@@ -1,3 +1,5 @@
+// Package plugin provides functionality for loading and managing HashiCorp plugins
+// from individual config.yml files in plugin directories.
 package plugin
 
 import (
@@ -13,9 +15,14 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-// YAMLPluginConfig represents the structure of the plugins.yml file
+// YAMLPluginConfig represents the structure of the individual plugin config.yml file
 type YAMLPluginConfig struct {
-	Plugins map[string]YAMLPlugin `yaml:"plugins"`
+	Plugin YAMLPlugin `yaml:"plugin"`
+}
+
+// YAMLUIConfig represents the UI configuration in YAML
+type YAMLUIConfig struct {
+	EntryPath string `yaml:"entry_path"`
 }
 
 // YAMLPlugin represents a single plugin configuration in YAML
@@ -36,6 +43,7 @@ type YAMLPlugin struct {
 	Branch           string              `yaml:"branch"`
 	BinaryPath       string              `yaml:"binary_path"`
 	HandshakeConfig  YAMLHandshakeConfig `yaml:"handshake_config"`
+	UIConfig         *YAMLUIConfig       `yaml:"ui_config,omitempty"`
 	EnvVars          []YAMLEnvVar        `yaml:"env_vars"`
 }
 
@@ -52,37 +60,51 @@ type YAMLEnvVar struct {
 	Value string `yaml:"value"`
 }
 
-// LoadHashiCorpPluginRegistryFromYAML loads plugin configurations from plugins.yml
+// LoadHashiCorpPluginRegistryFromYAML loads plugin configurations from individual config.yml files
 func LoadHashiCorpPluginRegistryFromYAML(cfg *models.Config) (map[string]*protobuff.PluginDetails, error) {
-	// Get the plugins.yml file path
-	pluginsYAMLPath := filepath.Join(cfg.PluginPath, "plugins.yml")
-
-	// Check if file exists
-	if _, err := os.Stat(pluginsYAMLPath); os.IsNotExist(err) {
-		return nil, fmt.Errorf("plugins.yml not found at %s", pluginsYAMLPath)
-	}
-
-	// Read the YAML file
-	data, err := os.ReadFile(pluginsYAMLPath)
-	if err != nil {
-		return nil, fmt.Errorf("failed to read plugins.yml: %w", err)
-	}
-
-	// Parse YAML
-	var config YAMLPluginConfig
-	if err := yaml.Unmarshal(data, &config); err != nil {
-		return nil, fmt.Errorf("failed to parse plugins.yml: %w", err)
-	}
-
-	// Convert YAML config to protobuf PluginDetails
 	plugins := make(map[string]*protobuff.PluginDetails)
 
-	for pluginID, yamlPlugin := range config.Plugins {
-		pluginDetails, err := convertYAMLPluginToProtobuf(yamlPlugin)
-		if err != nil {
-			return nil, fmt.Errorf("failed to convert plugin %s: %w", pluginID, err)
+	// Read the plugin directory
+	entries, err := os.ReadDir(cfg.PluginPath)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read plugin directory %s: %w", cfg.PluginPath, err)
+	}
+
+	// Scan each subdirectory for config.yml files
+	for _, entry := range entries {
+		if !entry.IsDir() {
+			continue // Skip files, only process directories
 		}
-		plugins[pluginID] = pluginDetails
+
+		pluginDir := entry.Name()
+		configPath := filepath.Join(cfg.PluginPath, pluginDir, "config.yml")
+
+		// Check if config.yml exists in this plugin directory
+		if _, err := os.Stat(configPath); os.IsNotExist(err) {
+			// No config.yml found, skip this directory (not a plugin)
+			continue
+		}
+
+		// Read the config.yml file
+		data, err := os.ReadFile(configPath)
+		if err != nil {
+			return nil, fmt.Errorf("failed to read config.yml in plugin %s: %w", pluginDir, err)
+		}
+
+		// Parse the individual plugin config
+		var config YAMLPluginConfig
+		if err := yaml.Unmarshal(data, &config); err != nil {
+			return nil, fmt.Errorf("failed to parse config.yml in plugin %s: %w", pluginDir, err)
+		}
+
+		// Convert YAML config to protobuf PluginDetails
+		pluginDetails, err := convertYAMLPluginToProtobuf(config.Plugin)
+		if err != nil {
+			return nil, fmt.Errorf("failed to convert plugin %s: %w", pluginDir, err)
+		}
+
+		// Use plugin ID from config as the key
+		plugins[config.Plugin.ID] = pluginDetails
 	}
 
 	return plugins, nil

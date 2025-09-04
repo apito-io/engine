@@ -5,13 +5,32 @@ import (
 	"fmt"
 	"regexp"
 	"strings"
+
 	"github.com/apito-io/engine/models"
 )
 
 func IsValidIdentifier(identifier string) (*models.ValidIdentifier, error) {
 	label := strings.TrimSpace(identifier)
-	m := regexp.MustCompile("[^A-Za-z0-9]+")
-	identifier = strings.TrimSpace(strings.ToLower(m.ReplaceAllString(label, "_")))
+
+	// First, convert to lowercase
+	identifier = strings.ToLower(label)
+
+	// Extract content from parentheses and replace parentheses with underscores
+	// This will convert "Weight (KG)" to "weight_kg"
+	identifier = regexp.MustCompile(`\(([^)]+)\)`).ReplaceAllString(identifier, "_$1")
+
+	// Replace spaces, hyphens, dots, and other common separators with single underscore
+	identifier = regexp.MustCompile(`[\s\-\._]+`).ReplaceAllString(identifier, "_")
+
+	// Remove any remaining non-alphanumeric characters except underscores
+	identifier = regexp.MustCompile(`[^a-z0-9_]`).ReplaceAllString(identifier, "")
+
+	// Clean up multiple consecutive underscores
+	identifier = regexp.MustCompile(`_+`).ReplaceAllString(identifier, "_")
+
+	// Remove leading and trailing underscores
+	identifier = strings.Trim(identifier, "_")
+
 	// check for valid field name. Restrict a few
 	if strings.HasPrefix(identifier, "_") {
 		return nil, errors.New("field can not begin with _")
