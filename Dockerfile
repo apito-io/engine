@@ -1,5 +1,5 @@
 # Build stage with optimizations
-FROM --platform=$BUILDPLATFORM golang:1.23-alpine AS builder
+FROM --platform=$BUILDPLATFORM golang:1.25.0-alpine AS builder
 
 # Install build dependencies
 RUN apk add --update --no-cache ca-certificates git make

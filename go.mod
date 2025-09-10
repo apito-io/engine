@@ -8,7 +8,6 @@ require (
 	github.com/RashadAnsari/go-batch/v2 v2.1.0
 	github.com/apito-cms/wsgraphql v1.5.3
 	github.com/apito-io/apitoBolt v0.1.1
-	github.com/apito-io/go-apito-plugin-sdk v0.1.21
 	github.com/apito-io/oas v1.2.3
 	github.com/apito-io/types v0.1.4
 	github.com/aws/aws-sdk-go-v2 v1.36.5

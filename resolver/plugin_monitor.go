@@ -397,3 +397,9 @@ func (pm *PluginMonitor) GetPluginHealthStatus() map[string]*PluginHealthStatus 
 
 	return status
 }
+
+// RestartPlugin provides a public interface to restart a specific plugin
+// This method is intended for use by controllers and other external components
+func (pm *PluginMonitor) RestartPlugin(ctx context.Context, pluginID string) error {
+	return pm.restartPlugin(ctx, pluginID)
+}

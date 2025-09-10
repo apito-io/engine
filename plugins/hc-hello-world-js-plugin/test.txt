@@ -1,7 +1,0 @@
-APITO_PLUGIN=apito_plugin_magic_cookie_v1 node index.js 2>stderr.log 1>stdout.log &
-PID=$!
-sleep 3
-kill $PID 2>/dev/null
-echo "=== STDOUT ===" && cat stdout.log
-echo "=== STDERR (last 10 lines) ===" && tail -10 stderr.log
-rm -f stdout.log stderr.log

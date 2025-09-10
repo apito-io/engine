@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/apito-io/engine/controller"
+	//"github.com/apito-io/engine/controller/middleware"
 	"github.com/apito-io/engine/models"
 	"github.com/apito-io/engine/resolver"
 	im "github.com/apito-io/engine/router/middleware"
@@ -14,7 +15,7 @@ import (
 	"github.com/jboursiquot/go-proverbs"
 	"github.com/labstack/echo-contrib/pprof"
 	"github.com/labstack/echo/v4"
-	"github.com/labstack/echo/v4/middleware"
+	echoMiddleware "github.com/labstack/echo/v4/middleware"
 )
 
 // InitRouter #todo manage better connection in redis and gRPC
@@ -25,7 +26,7 @@ func InitRouter(cfg *models.Config) (*echo.Echo, error) {
 	fmt.Println("initializing apito engine router")
 	router := echo.New()
 	pprof.Register(router)
-	router.Use(middleware.Recover())
+	router.Use(echoMiddleware.Recover())
 
 	//router.Use(middleware.Logger())
 	/*router.Use(middleware.LoggerWithConfig(middleware.LoggerConfig{
@@ -127,6 +128,7 @@ func InitRouter(cfg *models.Config) (*echo.Echo, error) {
 	fmt.Println("initializing graphql & auth controller")
 	graphCtrl := controller.GetGraphQLController(cfg, server.GetConcreteServer().(*resolver.GraphQLServer))
 	authCtrl := controller.GetAuthController(cfg, server.GetConcreteServer().(*resolver.GraphQLServer))
+	pluginV2Ctrl := controller.NewPluginV2Controller(server.GetConcreteServer().(*resolver.GraphQLServer))
 
 	startRoutes := router.Group("journey")
 	{
@@ -208,7 +210,46 @@ func InitRouter(cfg *models.Config) (*echo.Echo, error) {
 		systemRoutes.POST("/graphql", graphCtrl.SystemGraphQL)
 		systemRoutes.Any("/graphql/subscription", graphCtrl.SubscriptionWrapHandler)
 
+		// Legacy plugin upload (keeping for backwards compatibility)
 		systemRoutes.POST("/plugin/upload", graphCtrl.PluginUpload)
+
+		// Plugin management routes with cloud sync authentication
+		//pluginRoutes := systemRoutes.Group("/plugin", middleware.CloudSyncKeyAuth())
+		pluginRoutes := systemRoutes.Group("/plugin")
+		{
+			// Plugin CRUD operations
+			pluginRoutes.POST("", pluginV2Ctrl.CreateOrUpdatePlugin)    // Create/Update plugin
+			pluginRoutes.PUT("/:id", pluginV2Ctrl.CreateOrUpdatePlugin) // Update specific plugin
+			pluginRoutes.GET("", pluginV2Ctrl.ListPlugins)              // List all plugins
+			pluginRoutes.GET("/:id", pluginV2Ctrl.GetPluginStatus)      // Get plugin status
+			pluginRoutes.DELETE("/:id", pluginV2Ctrl.DeletePlugin)      // Delete plugin
+
+			// Platform compatibility check
+			pluginRoutes.GET("/platform", pluginV2Ctrl.GetPlatformInfo) // Get server platform info
+
+			// Plugin control operations
+			pluginRoutes.POST("/:id/restart", pluginV2Ctrl.RestartPlugin) // Restart plugin
+			pluginRoutes.POST("/:id/stop", pluginV2Ctrl.StopPlugin)       // Stop plugin
+			pluginRoutes.POST("/:id/start", pluginV2Ctrl.RestartPlugin)   // Start plugin (alias for restart)
+		}
+
+		// Plugin health check (no auth required, placed outside the authenticated group)
+		systemRoutes.GET("/plugin/health", func(c echo.Context) error {
+			return c.JSON(200, map[string]interface{}{
+				"success": true,
+				"message": "Plugin management API is healthy",
+				"version": "v2.0.0",
+				"endpoints": map[string]string{
+					"create_update": "POST /system/plugin",
+					"list":          "GET /system/plugin",
+					"status":        "GET /system/plugin/:id",
+					"delete":        "DELETE /system/plugin/:id",
+					"restart":       "POST /system/plugin/:id/restart",
+					"stop":          "POST /system/plugin/:id/stop",
+					"start":         "POST /system/plugin/:id/start",
+				},
+			})
+		})
 	}
 
 	functionDirectEndpoint := router.Group("/function")

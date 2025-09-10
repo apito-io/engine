@@ -1192,3 +1192,9 @@ func (s *GraphQLServer) SetPluginMonitor(monitor interface{}) {
 func (s *GraphQLServer) GetConcreteServer() interface{} {
 	return s
 }
+
+// TryGetPlugin attempts to get a plugin from cache without blocking
+// This provides public access to plugin cache for controllers
+func (s *GraphQLServer) TryGetPlugin(pluginID string) *models.HashiCorpPluginCache {
+	return s.tryGetPluginNoBlock(pluginID)
+}
