@@ -1,4 +1,7 @@
+// Package models contains common data structures and models used throughout the Apito engine
 package models
+
+import "time"
 
 type PictureDeleteRequest struct {
 	Urls      []string `json:"urls,omitempty" firestore:"urls,omitempty" bson:"urls,omitempty"`
@@ -49,7 +52,7 @@ type Request struct {
 	Retry        bool    `json:"retry,omitempty" firestore:"retry,omitempty" bson:"retry,omitempty"`
 }
 
-// File Picker
+// FileLink represents a file link with metadata
 type FileLink struct {
 	Link      string `json:"link,omitempty" firestore:"link,omitempty" bson:"link,omitempty"`
 	Title     string `json:"title,omitempty" firestore:"title,omitempty" bson:"title,omitempty"`
@@ -106,4 +109,44 @@ type InitParams struct {
 type Response struct {
 	Message string `json:"message,omitempty" bson:"message,omitempty"`
 	Code    string `json:"code,omitempty" bson:"code,omitempty"`
+}
+
+// HasScope checks if token has a specific scope
+func (claims *TokenClaims) HasScope(scope string) bool {
+	for _, s := range claims.Scopes {
+		if s == scope {
+			return true
+		}
+	}
+	return false
+}
+
+// HasAnyScope checks if token has any of the specified scopes
+func (claims *TokenClaims) HasAnyScope(scopes []string) bool {
+	for _, requiredScope := range scopes {
+		if claims.HasScope(requiredScope) {
+			return true
+		}
+	}
+	return false
+}
+
+// HasAllScopes checks if token has all of the specified scopes
+func (claims *TokenClaims) HasAllScopes(scopes []string) bool {
+	for _, requiredScope := range scopes {
+		if !claims.HasScope(requiredScope) {
+			return false
+		}
+	}
+	return true
+}
+
+// IsExpired checks if token is expired
+func (claims *TokenClaims) IsExpired() bool {
+	return time.Now().Unix() > claims.ExpireAt
+}
+
+// TimeRemaining returns seconds until token expires
+func (claims *TokenClaims) TimeRemaining() int64 {
+	return claims.ExpireAt - time.Now().Unix()
 }

@@ -64,6 +64,8 @@ type SystemUser struct {
 
 	IsPaymentDue bool `json:"is_payment_due,omitempty" firestore:"is_payment_due,omitempty" bson:"is_payment_due,omitempty"`
 
+	SyncTokens []*SyncToken   `bun:"rel:has-many" json:"sync_tokens,omitempty" firestore:"sync_tokens,omitempty" bson:"sync_tokens,omitempty"`
+
 	DefaultTeam         *Team         `bun:"rel:belongs-to,join:default_team_id=team_id" json:"default_team,omitempty" firestore:"default_team,omitempty" bson:"default_team,omitempty"`
 	DefaultOrganization *Organization `bun:"rel:belongs-to,join:default_org_id=org_id" json:"default_organization,omitempty" firestore:"default_organization,omitempty" bson:"default_organization,omitempty"`
 
@@ -100,8 +102,7 @@ type Project struct {
 	Plugins     []*protobuff.PluginDetails `bun:"rel:has-many" json:"plugins,omitempty" firestore:"plugins,omitempty" bson:"plugins,omitempty"`
 	Settings    *ProjectSettings           `bun:"rel:belongs-to,join:id=project_id" json:"settings,omitempty"  firestore:"settings,omitempty" bson:"settings,omitempty"`
 
-	Tokens  []*APIToken `bun:"rel:has-many" json:"tokens,omitempty" firestore:"tokens,omitempty" bson:"tokens,omitempty"`
-	APIKeys []*APIKey   `bun:"rel:has-many" json:"api_keys,omitempty" firestore:"api_keys,omitempty" bson:"api_keys,omitempty"`
+	Tokens  []*ProjectToken `bun:"rel:has-many" json:"tokens,omitempty" firestore:"tokens,omitempty" bson:"tokens,omitempty"`
 
 	Roles      map[string]*Role   `bun:"type:jsonb" json:"roles,omitempty" protobuf_key:"bytes,1,opt,name=key,proto3" protobuf_val:"bytes,2,opt,name=value,proto3" firestore:"roles,omitempty" bson:"roles,omitempty"`
 	Driver     *DriverCredentials `bun:"rel:belongs-to,join:id=project_id" json:"driver,omitempty"  firestore:"driver,omitempty" bson:"driver,omitempty"`

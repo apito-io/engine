@@ -477,6 +477,13 @@ func (g *GraphCtrl) PublicGraphQL(i echo.Context) error {
 		})
 	}
 
+	if req.Query == "" {
+		return i.JSON(http.StatusBadRequest, &models.HttpResponse{
+			Message: "Query can not be empty!",
+			Code:    http.StatusBadRequest,
+		})
+	}
+
 	/*fmt.Println(fmt.Sprintf("req %s", req.Query))
 	_var, _ := json.Marshal(req.Variables)
 	fmt.Println(fmt.Sprintf("variable %s", string(_var)))*/
@@ -649,6 +656,30 @@ func (g *GraphCtrl) GetSystemCacheInfo(i echo.Context) error {
 
 	return i.JSON(http.StatusBadRequest, map[string]interface{}{
 		"keys": list,
+	})
+}
+
+func (g *GraphCtrl) SystemHealth(c echo.Context) error {
+
+	userId := c.Get("user")
+	if userId == nil {
+		return c.JSON(http.StatusBadRequest, &models.HttpResponse{
+			Message: "user is missing in the token payload",
+			Code:    http.StatusBadRequest,
+		})
+	}
+
+	if userId.(string) == "" {
+		return c.JSON(http.StatusBadRequest, &models.HttpResponse{
+			Message: "system health check is only allowed for authenticated users",
+			Code:    http.StatusBadRequest,
+		})
+	}
+
+	return c.JSON(http.StatusOK, map[string]interface{}{
+		"success": true,
+		"message": "System is healthy",
+		"version": "v2.0.0",
 	})
 }
 

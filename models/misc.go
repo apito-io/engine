@@ -49,7 +49,7 @@ type DriverCredentials struct {
 	DatabaseDir string `json:"database_dir,omitempty" bson:"database_dir,omitempty"`
 }
 
-type APIToken struct {
+type ProjectToken struct {
 	ProjectID string `json:"project_id,omitempty" firestore:"project_id,omitempty" bson:"project_id,omitempty"`
 	Name      string `json:"name,omitempty" firestore:"name,omitempty" bson:"name,omitempty"`
 	Token     string `json:"token,omitempty" firestore:"token,omitempty" bson:"token,omitempty"`
@@ -57,11 +57,15 @@ type APIToken struct {
 	Expire    string `json:"expire,omitempty" firestore:"expire,omitempty" bson:"expire,omitempty"`
 }
 
-type APIKey struct {
+type SyncToken struct {
 	ProjectID string `json:"project_id,omitempty" firestore:"project_id,omitempty" bson:"project_id,omitempty"`
 	Name      string `json:"name,omitempty" firestore:"name,omitempty" bson:"name,omitempty"`
 	Token     string `json:"token,omitempty" firestore:"token,omitempty" bson:"token,omitempty"`
 	Expire    string `json:"expire,omitempty" firestore:"expire,omitempty" bson:"expire,omitempty"`
+	CreatedAt string `json:"created_at,omitempty" firestore:"created_at,omitempty" bson:"created_at,omitempty"`
+	// extra information
+	ProjectIDs []string `json:"project_ids,omitempty" firestore:"project_ids,omitempty" bson:"project_ids,omitempty"`
+	Scopes     []string `json:"scopes,omitempty" firestore:"scopes,omitempty" bson:"scopes,omitempty"`
 }
 
 type ProjectCreateRequest struct {

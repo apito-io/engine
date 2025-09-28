@@ -780,33 +780,10 @@ func (s *GraphQLServer) BuildServerQueriesAndMutations() {
 			},
 			Resolve: s.GenerateTenantTokenResolverFn,
 		},
-		"generateApiKey": &graphql.Field{
-			Name: "GenerateApiKey",
+		"generateProjectToken": &graphql.Field{
+			Name: "GenerateProjectToken",
 			Type: graphql.NewObject(graphql.ObjectConfig{
-				Name: "GenerateApiKeyResponse",
-				Fields: graphql.Fields{
-					"token": &graphql.Field{
-						Type: graphql.String,
-					},
-					"name": &graphql.Field{
-						Type: graphql.String,
-					},
-				},
-			}),
-			Args: graphql.FieldConfigArgument{
-				"name": &graphql.ArgumentConfig{
-					Type: graphql.NewNonNull(graphql.String),
-				},
-				"duration": &graphql.ArgumentConfig{
-					Type: graphql.NewNonNull(graphql.String),
-				},
-			},
-			Resolve: s.GenerateAPIKeyResolverFn,
-		},
-		"generateApiToken": &graphql.Field{
-			Name: "GenerateApiToken",
-			Type: graphql.NewObject(graphql.ObjectConfig{
-				Name: "GenerateApiTokenResponse",
+				Name: "GenerateProjectTokenResponse",
 				Fields: graphql.Fields{
 					"token": &graphql.Field{
 						Type: graphql.String,
@@ -824,29 +801,9 @@ func (s *GraphQLServer) BuildServerQueriesAndMutations() {
 					Type: graphql.NewNonNull(graphql.String),
 				},
 			},
-			Resolve: s.GenerateAPITokenResolverFn,
+			Resolve: s.GenerateProjectTokenResolverFn,
 		},
-		"deleteApiKey": &graphql.Field{
-			Name: "DeleteApiKey",
-			Type: graphql.NewObject(graphql.ObjectConfig{
-				Name: "DeleteApiKeyResponse",
-				Fields: graphql.Fields{
-					"msg": &graphql.Field{
-						Type: graphql.String,
-					},
-				},
-			}),
-			Args: graphql.FieldConfigArgument{
-				"token": &graphql.ArgumentConfig{
-					Type: graphql.NewNonNull(graphql.String),
-				},
-				"duration": &graphql.ArgumentConfig{
-					Type: graphql.NewNonNull(graphql.String),
-				},
-			},
-			Resolve: s.DeleteAPIKeyResolverFn,
-		},
-		"deleteApiToken": &graphql.Field{
+		"deleteProjectToken": &graphql.Field{
 			Name: "DeleteApiToken",
 			Type: graphql.NewObject(graphql.ObjectConfig{
 				Name: "DeleteApiTokenResponse",
@@ -864,7 +821,7 @@ func (s *GraphQLServer) BuildServerQueriesAndMutations() {
 					Type: graphql.NewNonNull(graphql.String),
 				},
 			},
-			Resolve: s.DeleteAPITokenResolverFn,
+			Resolve: s.DeleteProjectTokenResolverFn,
 		},
 		"createWebHook": &graphql.Field{
 			Name: "CreateWebHook",

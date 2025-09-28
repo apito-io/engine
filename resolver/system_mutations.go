@@ -53,7 +53,7 @@ func (s *GraphQLServer) GenerateTenantTokenResolverFn(p graphql.ResolveParams) (
 		return nil, err
 	}
 
-	_token, err := s.ApiKeyManager.GenerateTenantToken(cache.Ctx, tenantID, token)
+	_token, err := s.ProjectKeyManager.GenerateTenantToken(cache.Ctx, tenantID, token)
 	if err != nil {
 		return nil, err
 	}
@@ -62,69 +62,7 @@ func (s *GraphQLServer) GenerateTenantTokenResolverFn(p graphql.ResolveParams) (
 	}, nil
 }
 
-func (s *GraphQLServer) GenerateAPIKeyResolverFn(p graphql.ResolveParams) (interface{}, error) {
-
-	var (
-		v      = p.Context.Value
-		router = v("router").(echo.Context)
-	)
-
-	s.injectMetaData("GenerateAPIKeyResolverFn", router)
-
-	cache, err := s.GetApplicationCache(router)
-	if err != nil {
-		return nil, err
-	}
-
-	param := s.NewParam(cache.Param)
-
-	userID := param.UserID
-	projectID := param.ProjectID
-
-	var name string
-	if val, ok := p.Args["name"].(string); ok {
-		name = val
-	} else {
-		return nil, errors.New("name is Required")
-	}
-
-	var duration string
-	if val, ok := p.Args["duration"].(string); ok {
-		duration = val
-	} else {
-		return nil, errors.New("duration is Required")
-	}
-
-	project := cache.Project
-
-	parseDuration, _ := time.Parse(time.RFC3339, duration)
-
-	t := services.GetBrankaToken(s.Cfg, s.SystemDriver)
-
-	apiKey, err := t.GenerateAPIKey(cache.Ctx, userID, projectID, "", "api_key", parseDuration.Unix())
-	if err != nil {
-		return nil, err
-	}
-
-	project.APIKeys = append(project.APIKeys, &models.APIKey{
-		ProjectID: projectID,
-		Name:      name,
-		Token:     *apiKey,
-		Expire:    duration,
-	})
-
-	err = s.SystemDriver.UpdateProject(cache.Ctx, project, false)
-	if err != nil {
-		return nil, err
-	}
-
-	return map[string]interface{}{
-		"token": apiKey,
-		"name":  name,
-	}, nil
-}
-
-func (s *GraphQLServer) GenerateAPITokenResolverFn(p graphql.ResolveParams) (interface{}, error) {
+func (s *GraphQLServer) GenerateProjectTokenResolverFn(p graphql.ResolveParams) (interface{}, error) {
 
 	var (
 		v      = p.Context.Value
@@ -161,6 +99,10 @@ func (s *GraphQLServer) GenerateAPITokenResolverFn(p graphql.ResolveParams) (int
 		return nil, errors.New("duration is Required")
 	}
 
+	if cache.Project == nil {
+		return nil, errors.New("project is required for project token generation")
+	}
+
 	project := cache.Project
 
 	// Parse the date string and set it to end of day
@@ -172,17 +114,17 @@ func (s *GraphQLServer) GenerateAPITokenResolverFn(p graphql.ResolveParams) (int
 	parseDuration = time.Date(parseDuration.Year(), parseDuration.Month(), parseDuration.Day(), 23, 59, 59, 0, time.UTC)
 
 	// generate the token
-	apiKey, err := s.ApiKeyManager.GenerateKey(&models.TokenClaims{
+	apiKey, err := s.ProjectKeyManager.GenerateKey(&models.TokenClaims{
 		Role:      role,
 		UserID:    param.UserID,
 		ProjectID: project.ID,
-		ExpireAt:  parseDuration,
+		ExpireAt:  parseDuration.Unix(),
 	})
 	if err != nil {
 		return nil, err
 	}
 
-	project.Tokens = append(project.Tokens, &models.APIToken{
+	project.Tokens = append(project.Tokens, &models.ProjectToken{
 		Name:   name,
 		Token:  apiKey,
 		Role:   role,
@@ -199,90 +141,7 @@ func (s *GraphQLServer) GenerateAPITokenResolverFn(p graphql.ResolveParams) (int
 	}, nil
 }
 
-func (s *GraphQLServer) DeleteAPIKeyResolverFn(p graphql.ResolveParams) (interface{}, error) {
-
-	var (
-		v      = p.Context.Value
-		router = v("router").(echo.Context)
-	)
-
-	s.injectMetaData("DeleteApiKeyResolverFn", router)
-
-	cache, err := s.GetApplicationCache(router)
-	if err != nil {
-		return nil, err
-	}
-
-	param := s.NewParam(cache.Param)
-
-	var token string
-	if val, ok := p.Args["token"].(string); ok {
-		token = val
-	} else {
-		return nil, ae.TokenIsRequired
-	}
-
-	var duration string
-	if val, ok := p.Args["duration"].(string); ok {
-		duration = val
-	} else {
-		return nil, errors.New("duration is Required")
-	}
-
-	var verifiedToken *models.TokenClaims
-	if strings.HasPrefix(token, "ak_") {
-		verifiedToken, err = s.ApiKeyManager.Validate(cache.Ctx, token, false)
-		if err != nil {
-			return nil, ae.InvalidToken
-		}
-	} else {
-		verifiedToken, err = s.BlankaTokenService.Validate(cache.Ctx, token)
-		if err != nil {
-			return nil, ae.InvalidToken
-		}
-	}
-
-	if !param.Role.IsAdmin {
-		if verifiedToken.UserID != param.UserID {
-			return nil, errors.New("its none of your business, Pal ")
-		}
-	}
-
-	project := cache.Project
-
-	for i, t := range project.Tokens {
-		if t.Token == token {
-			project.Tokens = append(project.Tokens[:i], project.Tokens[i+1:]...)
-		}
-	}
-
-	err = s.SystemDriver.UpdateProject(cache.Ctx, project, true)
-	if err != nil {
-		return nil, err
-	}
-
-	parseDuration, _ := time.Parse(time.RFC3339, duration)
-	alreadyExpired := time.Until(parseDuration).Hours()
-	if alreadyExpired > 0.0 { // expire the token
-		expiredToken := map[string]interface{}{
-			"id":        verifiedToken.TokenUniqueID,
-			"_key":      verifiedToken.TokenUniqueID,
-			"expire_at": duration,
-		}
-
-		err = s.SystemDriver.BlacklistAToken(cache.Ctx, expiredToken)
-		if err != nil {
-			return nil, err
-		}
-	}
-
-	return map[string]interface{}{
-		"msg": "Token Deleted",
-	}, nil
-
-}
-
-func (s *GraphQLServer) DeleteAPITokenResolverFn(p graphql.ResolveParams) (interface{}, error) {
+func (s *GraphQLServer) DeleteProjectTokenResolverFn(p graphql.ResolveParams) (interface{}, error) {
 
 	var (
 		v      = p.Context.Value
@@ -314,7 +173,7 @@ func (s *GraphQLServer) DeleteAPITokenResolverFn(p graphql.ResolveParams) (inter
 
 	var verifiedToken *models.TokenClaims
 	if strings.HasPrefix(token, "ak_") {
-		verifiedToken, err = s.ApiKeyManager.Validate(cache.Ctx, token, false)
+		verifiedToken, err = s.ProjectKeyManager.Validate(cache.Ctx, token, false)
 		if err != nil {
 			if err.Error() == "This token is blacklisted" || err.Error() == "key has expired" {
 				// do nothing
@@ -1478,6 +1337,7 @@ func (s *GraphQLServer) UpdateModelResolverFn(p graphql.ResolveParams) (interfac
 		if err != nil {
 			return nil, err
 		}
+		return resp, nil
 	case "delete":
 		resp, err = s.deleteModel(cache.Ctx, project, modelName)
 		if err != nil {
@@ -1702,7 +1562,7 @@ func (s *GraphQLServer) convertModel(ctx context.Context, project *models.Projec
 func (s *GraphQLServer) deleteModel(ctx context.Context, project *models.Project, modelName string) (interface{}, error) {
 
 	if modelName == "user" {
-		return nil, errors.New("Can not delete User Model. If you dont want it then remove User Addons")
+		return nil, errors.New("can not delete User Model. If you dont want it then remove User Addons")
 	}
 
 	driver, err := s.GraphQLExecutor.GetProjectDriver(ctx)
@@ -1710,12 +1570,13 @@ func (s *GraphQLServer) deleteModel(ctx context.Context, project *models.Project
 		return nil, err
 	}
 
+	var _model *models.ModelType
+
 	// if schema not found then create
 	if project.Schema == nil {
 		return nil, errors.New("nothing to Delete")
 	} else {
 		var index int
-		var _model *models.ModelType
 		for i, ct := range project.Schema.Models {
 			if ct.Name == modelName {
 				_model = ct
@@ -1724,30 +1585,28 @@ func (s *GraphQLServer) deleteModel(ctx context.Context, project *models.Project
 			}
 		}
 
-		if _model != nil {
-			// drop the model from schema
-			project.Schema.Models = append(project.Schema.Models[:index], project.Schema.Models[index+1:]...)
-
-			if project.ProjectType == models.ProjectType_SaaS {
-				// for saas it creates additional collection, if model dropped all the data is gone
-				err := driver.DropModel(ctx, project, _model.Name)
-				if err != nil {
-					return nil, err
-				}
-			} else {
-				// delete all the data connected to this model
-				err := driver.DeleteDocumentsFromProject(ctx, &models.CommonSystemParams{ProjectID: project.ID, Model: _model})
-				if err != nil {
-					return nil, err
-				}
-			}
-		} else {
+		if _model == nil {
 			return nil, errors.New("could not find model to delete")
 		}
+
+		if project.ProjectType == models.ProjectType_SaaS {
+			// for saas it creates additional collection, if model dropped all the data is gone
+			err := driver.DropModel(ctx, project, _model.Name)
+			if err != nil {
+				return nil, err
+			}
+		} else {
+			// delete all the data connected to this model
+			err := driver.DeleteDocumentsFromProject(ctx, &models.CommonSystemParams{ProjectID: project.ID, Model: _model})
+			if err != nil {
+				return nil, err
+			}
+		}
+		// drop the model from schema
+		project.Schema.Models = append(project.Schema.Models[:index], project.Schema.Models[index+1:]...)
 	}
 
 	// also remove all its relations
-
 	for _, m := range project.Schema.Models {
 		for i, c := range m.Connections {
 			if c.Model == modelName {
@@ -1764,7 +1623,7 @@ func (s *GraphQLServer) deleteModel(ctx context.Context, project *models.Project
 		return nil, err
 	}
 
-	return project.Schema.Models[len(project.Schema.Models)-1], nil
+	return _model, nil
 }
 
 func (s *GraphQLServer) UpsertFunctionToProjectResolverFn(p graphql.ResolveParams) (interface{}, error) {

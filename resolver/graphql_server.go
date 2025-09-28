@@ -103,7 +103,7 @@ type GraphQLServer struct {
 	//ProjectRawSchemas *protobuff.ProjectSchema
 
 	BlankaTokenService *services.BrankaToken
-	ApiKeyManager      *services.APIKeyManager
+	ProjectKeyManager      *services.ProjectKeyManager
 
 	ApitoTokenService *services.ApitoTokenService
 	JWTTokenService   *services.JWTService
@@ -458,11 +458,11 @@ func BuildGraphQL(ctx context.Context, cfg *models.Config, extensionRouter *echo
 		srv.BlankaTokenService = services.GetBrankaToken(cfg, systemDB)
 
 		fmt.Println("initializing api key manager")
-		apiKeyManager, err := services.NewAPIKeyManager(cfg, systemDB)
+		apiKeyManager, err := services.NewProjectKeyManager(cfg, systemDB)
 		if err != nil {
 			panic(err)
 		}
-		srv.ApiKeyManager = apiKeyManager
+		srv.ProjectKeyManager = apiKeyManager
 
 		fmt.Println("initializing apito token service")
 		tokenWg.Wait() // depends on systemDb & part of apito token service

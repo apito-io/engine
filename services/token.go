@@ -24,12 +24,13 @@ import (
 )
 
 type ApitoTokenService struct {
-	cfg           *models.Config
-	systemDB      interfaces.ApitoSystemDB
-	apiKeyManager *APIKeyManager
-	blankaService *BrankaToken
-	authService   AuthServiceInterface
-	Batch         *goBatch.Batch[models.ProjectApiTracking]
+	cfg            *models.Config
+	systemDB       interfaces.ApitoSystemDB
+	apiKeyManager  *ProjectKeyManager
+	syncKeyManager *BrankaTokenOptimized
+	blankaService  *BrankaToken
+	authService    AuthServiceInterface
+	Batch          *goBatch.Batch[models.ProjectApiTracking]
 	// Removed dbWriteLock - channels are thread-safe
 	ctx    context.Context
 	cancel context.CancelFunc
@@ -45,21 +46,24 @@ func NewApitoTokenService(cfg *models.Config, auth AuthServiceInterface, driver 
 		goBatch.WithContext(ctx),
 	)
 
-	apiKeyManager, err := NewAPIKeyManager(cfg, driver)
+	apiKeyManager, err := NewProjectKeyManager(cfg, driver)
 	if err != nil {
 		cancel()
 		return nil, err
 	}
 
+	syncKeyManager := GetBrankaTokenOptimized(cfg, driver)
+
 	service := &ApitoTokenService{
-		cfg:           cfg,
-		systemDB:      driver,
-		blankaService: GetBrankaToken(cfg, driver),
-		apiKeyManager: apiKeyManager,
-		authService:   auth,
-		Batch:         batch,
-		ctx:           ctx,
-		cancel:        cancel,
+		cfg:            cfg,
+		systemDB:       driver,
+		blankaService:  GetBrankaToken(cfg, driver),
+		apiKeyManager:  apiKeyManager,
+		syncKeyManager: syncKeyManager,
+		authService:    auth,
+		Batch:          batch,
+		ctx:            ctx,
+		cancel:         cancel,
 	}
 
 	// Start batch processing in a goroutine
@@ -218,9 +222,10 @@ func (t *ApitoTokenService) ApitoTokenHandler(next echo.HandlerFunc) echo.Handle
 
 		requestPath := ctx.Request().URL.Path
 
-		useTokenFlag := ctx.Request().Header.Get("X-Use-Cookies")
+		useCookies := ctx.Request().Header.Get("X-Use-Cookies")
 		apitoKey := ctx.Request().Header.Get("X-Apito-Key")
-		if apitoKey != "" || ((requestPath == "/secured/graphql" || requestPath == "/secured/graphql/v2") || strings.HasPrefix(requestPath, "/secured/rest/") || strings.HasPrefix(requestPath, "/secured/upload/file")) && useTokenFlag == "" {
+		syncKey := ctx.Request().Header.Get("X-Apito-Sync-Key")
+		if apitoKey != "" || ((requestPath == "/secured/graphql" || requestPath == "/secured/graphql/v2") || strings.HasPrefix(requestPath, "/secured/rest/") || strings.HasPrefix(requestPath, "/secured/upload/file")) && useCookies == "" {
 			var token *string
 			if apitoKey != "" {
 				token = &apitoKey
@@ -251,30 +256,38 @@ func (t *ApitoTokenService) ApitoTokenHandler(next echo.HandlerFunc) echo.Handle
 			projectID = verifiedToken.ProjectID
 			userID = verifiedToken.UserID
 
-		} else if useTokenFlag == "false" {
-			token, err = tokenFromBearer(ctx.Request())
-			if err != nil {
-				return ctx.JSON(http.StatusUnauthorized, map[string]interface{}{"message": "invalid auth header or auth header missing"})
-			}
-			tokenClaims, err := t.authService.VerifyIDToken(ctx.Request().Context(), *token)
-			if err != nil {
-				return ctx.JSON(http.StatusForbidden, map[string]interface{}{"message": ae.InvalidToken})
+		} else if useCookies == "false" || syncKey != "" {
+			var verifiedToken *models.TokenClaims
+			if strings.HasPrefix(syncKey, "cl-") {
+				verifiedToken, err = t.syncKeyManager.ValidateSyncTokenOptimized(ctx.Request().Context(), syncKey)
+				if err != nil {
+					return ctx.JSON(http.StatusForbidden, map[string]interface{}{"message": ae.InvalidToken})
+				}
+			} else {
+				token, err = tokenFromBearer(ctx.Request())
+				if err != nil {
+					return ctx.JSON(http.StatusUnauthorized, map[string]interface{}{"message": "invalid auth header or auth header missing"})
+				}
+				verifiedToken, err = t.authService.VerifyIDToken(ctx.Request().Context(), *token)
+				if err != nil {
+					return ctx.JSON(http.StatusForbidden, map[string]interface{}{"message": ae.InvalidToken})
+				}
 			}
 
 			/* if t.cfg.ProjectInjectId != "" {
 				tokenClaims.ProjectID = t.cfg.ProjectInjectId
 			} */
 
-			err = utility.SetTokenClaimsToRouter(ctx, tokenClaims)
+			err = utility.SetTokenClaimsToRouter(ctx, verifiedToken)
 			if err != nil {
 				return ctx.JSON(http.StatusForbidden, map[string]interface{}{"message": ae.InvalidToken})
 			}
 
-			projectID = tokenClaims.ProjectID
-			userID = tokenClaims.UserID
+			projectID = verifiedToken.ProjectID
+			userID = verifiedToken.UserID
 
 		} else {
-			// web app cookie token handler
+			// apito console cookie token handler
 			_ctx := ctx.Request().Context()
 			tokens, err := tokenFromCookies(ctx.Request())
 			if err != nil {

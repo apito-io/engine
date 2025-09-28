@@ -183,7 +183,9 @@ func InitRouter(cfg *models.Config) (*echo.Echo, error) {
 
 		syncRoutes := systemRoutes.Group("/sync")
 		{
-			syncRoutes.POST("/api/key", authCtrl.GenerateAPIKey)
+			syncRoutes.GET("/token/list", authCtrl.ListSyncTokens)
+			syncRoutes.POST("/token/create", authCtrl.GenerateSyncToken)
+			syncRoutes.POST("/token/delete", authCtrl.DeleteSyncToken)
 			syncRoutes.POST("/project", authCtrl.SyncProject)
 		}
 
@@ -211,7 +213,9 @@ func InitRouter(cfg *models.Config) (*echo.Echo, error) {
 		systemRoutes.Any("/graphql/subscription", graphCtrl.SubscriptionWrapHandler)
 
 		// Legacy plugin upload (keeping for backwards compatibility)
-		systemRoutes.POST("/plugin/upload", graphCtrl.PluginUpload)
+		//systemRoutes.POST("/plugin/upload", graphCtrl.PluginUpload) deprecated
+
+		systemRoutes.GET("/health", graphCtrl.SystemHealth)
 
 		// Plugin management routes with cloud sync authentication
 		//pluginRoutes := systemRoutes.Group("/plugin", middleware.CloudSyncKeyAuth())

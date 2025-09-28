@@ -449,13 +449,13 @@ func (s *SchemaObjects) GetSettingsObject() *graphql.Object {
 	return obj
 }
 
-// GetAPITokenObject retrieves the GraphQL object for APIToken
-func (s *SchemaObjects) GetAPITokenObject() *graphql.Object {
-	obj, _ := utility.GetGraphQLObject(models.APIToken{})
+// GetProjectTokenObject retrieves the GraphQL object for ProjectToken
+func (s *SchemaObjects) GetProjectTokenObject() *graphql.Object {
+	obj, _ := utility.GetGraphQLObject(models.ProjectToken{})
 	return obj
 }
 
-// GetMetaObject retrieves the GraphQL object for APIToken
+// GetMetaObject retrieves the GraphQL object for ProjectToken
 func (s *SchemaObjects) GetMetaObject() *graphql.Object {
 	return graphql.NewObject(graphql.ObjectConfig{
 		Name: "MetaField",

@@ -1,9 +1,5 @@
 package models
 
-import (
-	"time"
-)
-
 type JWTTokens struct {
 	AccessToken  string `json:"access_token"`
 	IDToken      string `json:"id_token"`
@@ -29,7 +25,8 @@ type TokenClaims struct {
 	TokenType      string `json:"token_type"`       // access_token or id_token
 	PaymentDueDate string `json:"payment_due_date"` // used if the user dosnt pay
 
-	ExpireAt time.Time `json:"expire_at"` // unix timestamp
+	ExpireAt int64 `json:"expire_at"` // unix timestamp
 
-	Scopes []string `json:"scopes"` // ['read', 'write']
+	ProjectIDs []string `json:"project_ids"` // ['project_id_1', 'project_id_2']
+	Scopes     []string `json:"scopes"`      // ['read', 'write']
 }

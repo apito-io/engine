@@ -26,14 +26,14 @@ var (
 	ErrInvalidPayload = errors.New("invalid payload")
 )
 
-// APIKeyManager handles API key operations with optimized performance
-type APIKeyManager struct {
+// ProjectKeyManager handles API key operations with optimized performance
+type ProjectKeyManager struct {
 	cipher cipher.Block
 	gcm    cipher.AEAD
 	driver interfaces.ApitoSystemDB
 }
 
-func NewAPIKeyManager(cfg *models.Config, driver interfaces.ApitoSystemDB) (*APIKeyManager, error) {
+func NewProjectKeyManager(cfg *models.Config, driver interfaces.ApitoSystemDB) (*ProjectKeyManager, error) {
 	key := []byte(cfg.BrankaKey)
 	if len(key) != 32 {
 		return nil, fmt.Errorf("key must be 32 bytes")
@@ -49,14 +49,14 @@ func NewAPIKeyManager(cfg *models.Config, driver interfaces.ApitoSystemDB) (*API
 		return nil, err
 	}
 
-	return &APIKeyManager{
+	return &ProjectKeyManager{
 		cipher: block,
 		gcm:    gcm,
 		driver: driver,
 	}, nil
 }
 
-func NewAPIKeyManagerNoDB(cfg *models.Config) (*APIKeyManager, error) {
+func NewProjectKeyManagerNoDB(cfg *models.Config) (*ProjectKeyManager, error) {
 	key := []byte(cfg.BrankaKey)
 	if len(key) != 32 {
 		return nil, fmt.Errorf("key must be 32 bytes")
@@ -72,13 +72,13 @@ func NewAPIKeyManagerNoDB(cfg *models.Config) (*APIKeyManager, error) {
 		return nil, err
 	}
 
-	return &APIKeyManager{
+	return &ProjectKeyManager{
 		cipher: block,
 		gcm:    gcm,
 	}, nil
 }
 
-func (m *APIKeyManager) GenerateKey(payload *models.TokenClaims) (string, error) {
+func (m *ProjectKeyManager) GenerateKey(payload *models.TokenClaims) (string, error) {
 
 	if payload.TokenUniqueID == "" {
 		payload.TokenUniqueID = utility.RandomStringGenerator(12)
@@ -114,7 +114,7 @@ func (m *APIKeyManager) GenerateKey(payload *models.TokenClaims) (string, error)
 
 	// ExpireAt (8 bytes)
 	expBytes := make([]byte, 8)
-	binary.LittleEndian.PutUint64(expBytes, uint64(payload.ExpireAt.Unix()))
+	binary.LittleEndian.PutUint64(expBytes, uint64(payload.ExpireAt))
 	data = append(data, expBytes...)
 
 	// Scopes
@@ -134,7 +134,7 @@ func (m *APIKeyManager) GenerateKey(payload *models.TokenClaims) (string, error)
 	return fmt.Sprintf("ak_%s", base32.StdEncoding.WithPadding(base32.NoPadding).EncodeToString(encrypted)), nil
 }
 
-func (m *APIKeyManager) Validate(ctx context.Context, key string, skipDBCheck bool) (*models.TokenClaims, error) {
+func (m *ProjectKeyManager) Validate(ctx context.Context, key string, skipDBCheck bool) (*models.TokenClaims, error) {
 	if len(key) < 3 || key[:3] != "ak_" {
 		return nil, ErrInvalidKey
 	}
@@ -216,7 +216,7 @@ func (m *APIKeyManager) Validate(ctx context.Context, key string, skipDBCheck bo
 	if offset+8 > len(data) {
 		return nil, ErrInvalidPayload
 	}
-	payload.ExpireAt = time.Unix(int64(binary.LittleEndian.Uint64(data[offset:offset+8])), 0)
+	payload.ExpireAt = int64(binary.LittleEndian.Uint64(data[offset:offset+8]))
 	offset += 8
 
 	// Scopes (remaining data)
@@ -227,14 +227,14 @@ func (m *APIKeyManager) Validate(ctx context.Context, key string, skipDBCheck bo
 	payload.Scopes = scopes
 
 	// Check expiration
-	if time.Now().After(payload.ExpireAt) {
+	if time.Now().Unix() > payload.ExpireAt {
 		return nil, ErrExpiredKey
 	}
 
 	return payload, nil
 }
 
-func (m *APIKeyManager) ValidateAndSetContext(c echo.Context, token string) (*models.TokenClaims, error) {
+func (m *ProjectKeyManager) ValidateAndSetContext(c echo.Context, token string) (*models.TokenClaims, error) {
 
 	ctx := c.Request().Context()
 
@@ -271,7 +271,7 @@ func (m *APIKeyManager) ValidateAndSetContext(c echo.Context, token string) (*mo
 	return tokenObj, nil
 }
 
-func (m *APIKeyManager) GenerateTenantToken(ctx context.Context, tenantID, token string) (string, error) {
+func (m *ProjectKeyManager) GenerateTenantToken(ctx context.Context, tenantID, token string) (string, error) {
 
 	claims, err := m.Validate(ctx, token, true)
 	if err != nil {
@@ -289,7 +289,7 @@ func (m *APIKeyManager) GenerateTenantToken(ctx context.Context, tenantID, token
 	claims.TenantID = tenantID
 	//claims.TenantID = "2a7cd0c3-d263-4d25-8b6a-263692879fc6"
 	claims.TokenType = "tenant"
-	claims.ExpireAt = time.Now().Add(time.Hour * 24 * 30) // 30 days
+	claims.ExpireAt = time.Now().Unix() + (int64(time.Hour) * 24 * 30) // 30 days
 	return m.GenerateKey(claims)
 }
 

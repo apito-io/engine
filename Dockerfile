@@ -59,7 +59,6 @@ WORKDIR /app
 COPY --from=builder /build/engine .
 
 # Copy required directories with proper ownership
-COPY --chown=apito:apito plugins ./plugins/
 COPY --chown=apito:apito keys ./keys/
 
 # Make binary executable

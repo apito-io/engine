@@ -2,16 +2,18 @@ package services
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
+	"strconv"
+	"strings"
+	"time"
+
 	"github.com/apito-io/engine/interfaces"
 	"github.com/apito-io/engine/models"
 	"github.com/apito-io/engine/utility"
 	"github.com/hako/branca"
 	"github.com/labstack/echo/v4"
-	"strconv"
-	"strings"
-	"time"
 )
 
 type BrankaToken struct {
@@ -53,11 +55,17 @@ func (t *BrankaToken) GenerateProjectToken(claims *models.TokenClaims, ttl uint3
 	return &token, nil
 }
 
-func (t *BrankaToken) GenerateAPIKey(ctx context.Context, userID, projectID, tenantID, tokenType string, expireAt int64) (*string, error) {
+func (t *BrankaToken) GenerateSyncToken(ctx context.Context, userID, payload interface{}, tokenType string, expireAt int64) (*string, error) {
+	
+	jsonPayload, err := json.Marshal(payload)
+	if err != nil {
+		return nil, err
+	}
+
 	number := utility.RandomStringGenerator(18)
 	// Encode String to Branca Token.
-	// userID|projectID|tenantID|randomNumber|tokenType|expireAt
-	tokenPayload := fmt.Sprintf("%s|%s|%s|%s|%s|%d", userID, projectID, tenantID, number, tokenType, expireAt)
+	// userID|randomNumber|tokenType|expireAt
+	tokenPayload := fmt.Sprintf("%s|%s|%s|%s|%d", userID, jsonPayload, number, tokenType, expireAt)
 	token, err := t.Token.EncodeToString(tokenPayload)
 	if err != nil {
 		return nil, err

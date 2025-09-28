@@ -85,7 +85,7 @@ func (s *SchemaObjects) InitPrivateObjects() *ObjectModels {
 	userDefinedSchemaObject := s.GetUserDefinedSchemaObject(modelTypeObject, cloudFunctionObject)
 
 	settingsObject := s.GetSettingsObject()
-	apiTokenObject := s.GetAPITokenObject()
+	apiTokenObject := s.GetProjectTokenObject()
 	driverCredObject := s.GetDriverCredentialObject()
 
 	systemMessageObject := s.GetSystemMessageObject("")
