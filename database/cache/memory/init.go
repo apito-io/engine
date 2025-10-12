@@ -1,5 +1,5 @@
 // Package memoryCache provides an in-memory cache driver with TTL support
-package memoryCache
+package memory
 
 import (
 	"context"

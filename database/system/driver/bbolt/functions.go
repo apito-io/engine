@@ -207,10 +207,27 @@ func (d *ProBBoltSystemDriver) CheckProjectWithRoles(ctx context.Context, userId
 		return nil, err
 	}
 
+	user, err := d.GetSystemUser(ctx, userId)
+	if err != nil {
+		return nil, err
+	}
+
+	// it has to return 
+	/*
+	{
+		user: Document('users', @user_id),
+		project: v,
+		role: e.role,
+		permissions: e.permissions
+	}
+	*/
+
 	// Simplified implementation - in production you'd check actual user permissions
 	return &models.ProjectWithRoles{
+		User:    user,
 		Project: project,
 		Role:    "admin", // Default role
+		Permissions: []string{"all"}, // 
 	}, nil
 }
 

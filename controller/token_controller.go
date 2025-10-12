@@ -179,7 +179,7 @@ func (a *authCtrl) SyncProject(c echo.Context) error {
 	var req SyncProjectRequest
 	if err := c.Bind(&req); err != nil {
 		return c.JSON(http.StatusBadRequest, &models.HttpResponse{
-			Message: "Bad boy, Jason ...",
+			Message: err.Error(),
 			Code:    http.StatusBadRequest,
 		})
 	}

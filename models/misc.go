@@ -47,6 +47,8 @@ type DriverCredentials struct {
 	SecretKey string `json:"secret_key,omitempty" bson:"secret_key,omitempty"`
 	// for embedded database
 	DatabaseDir string `json:"database_dir,omitempty" bson:"database_dir,omitempty"`
+	// for sqlite and other file based databases
+	File        string `json:"file,omitempty" bson:"file,omitempty"`
 }
 
 type ProjectToken struct {

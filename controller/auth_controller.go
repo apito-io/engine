@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"strconv"
 	"time"
 
 	"github.com/apito-io/engine/database/project/driver/mongo"
@@ -20,7 +21,6 @@ import (
 	"golang.org/x/oauth2/github"
 	"golang.org/x/oauth2/google"
 )
-
 
 type authCtrl struct {
 	Cfg           *models.Config
@@ -150,15 +150,16 @@ func (a *authCtrl) Journey(c echo.Context) error {
 }
 
 type DatabaseRequest struct {
+	File     string `json:"file"`
 	Type     string `json:"type"`
 	Host     string `json:"host"`
-	Port     string `json:"port"`
+	Port     int    `json:"port"`
 	Database string `json:"database"`
 	Username string `json:"username"`
 	Password string `json:"password"`
 }
 
-func (a *authCtrl) DatabaseTest(c echo.Context) error {
+func (a *authCtrl) DatabaseCheck(c echo.Context) error {
 
 	var req DatabaseRequest
 	if err := c.Bind(&req); err != nil {
@@ -173,7 +174,7 @@ func (a *authCtrl) DatabaseTest(c echo.Context) error {
 		driver, err := mongo.GetMongoDriver(&models.DriverCredentials{
 			Engine:   req.Type,
 			Host:     req.Host,
-			Port:     req.Port,
+			Port:     strconv.Itoa(req.Port),
 			Database: req.Database,
 			User:     req.Username,
 			Password: req.Password,
@@ -198,9 +199,10 @@ func (a *authCtrl) DatabaseTest(c echo.Context) error {
 
 	case "postgresql", "mysql", "sqlite", "sqlServer", "mariadb":
 		driver, err := sql.GetSQLDriver(&models.DriverCredentials{
+			File:     req.File,
 			Engine:   req.Type,
 			Host:     req.Host,
-			Port:     req.Port,
+			Port:     strconv.Itoa(req.Port),
 			Database: req.Database,
 			User:     req.Username,
 			Password: req.Password,
@@ -246,12 +248,11 @@ func (a *authCtrl) errorHandler(router echo.Context, response *models.HttpRespon
 	router.JSON(int(response.Code), response)
 }
 
-
 func (a *authCtrl) ProjectSwitchV2(c echo.Context) error {
 	var req *models.ProjectCreateRequest
 	if err := c.Bind(&req); err != nil {
 		return c.JSON(http.StatusBadRequest, &models.HttpResponse{
-			Message: "Bad boy, Jason ...",
+			Message: err.Error(),
 			Code:    http.StatusBadRequest,
 		})
 	}
@@ -277,6 +278,13 @@ func (a *authCtrl) ProjectSwitchV2(c echo.Context) error {
 	if err != nil {
 		return c.JSON(http.StatusForbidden, &models.HttpResponse{
 			Message: err.Error(),
+			Code:    http.StatusForbidden,
+		})
+	}
+
+	if resp.User == nil {
+		return c.JSON(http.StatusForbidden, &models.HttpResponse{
+			Message: "user is missing in the project with roles",
 			Code:    http.StatusForbidden,
 		})
 	}
@@ -332,7 +340,6 @@ func (a *authCtrl) ProjectSwitchV2(c echo.Context) error {
 	//time.Sleep(time.Second * 2)
 
 	_project.Schema = nil
-	_project.MicroServicePort = ""
 
 	return c.JSON(http.StatusOK, &models.HttpResponse{
 		Message: "Project Switched",

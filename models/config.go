@@ -18,31 +18,36 @@ type Config struct {
 	// Server Information
 	ServePort string `env:"SERVE_PORT" env-default:"5050"` // Server Listening Port
 
-	SystemDatabaseEngine string `env:"APITO_SYSTEM_DB_ENGINE" env-default:"coreDB"`
-
 	// System Database Information
+	SystemDatabaseEngine string `env:"SYSTEM_DB_ENGINE" env-default:"coreDB"`
 	SystemDBUser     string `env:"SYSTEM_DB_USER" env-default:""`
 	SystemDBPassword string `env:"SYSTEM_DB_PASSWORD" env-default:""`
 	SystemDBHost     string `env:"SYSTEM_DB_HOST" env-default:""`
 	SystemDBPort     string `env:"SYSTEM_DB_PORT" env-default:""`
 	SystemDBName     string `env:"SYSTEM_DB_NAME" env-default:"~/.apito/engine-data/apito_system.db"`
 
-	DefaultProjectDatabaseEngine string `env:"APITO_PROJECT_DB_ENGINE" env-default:"coreDB"`
-
+	DefaultProjectDatabaseEngine string `env:"PROJECT_DB_ENGINE" env-default:"coreDB"`
 	DefaultProjectDBUser     string `env:"PROJECT_DB_USER" env-default:""`
 	DefaultProjectDBPassword string `env:"PROJECT_DB_PASSWORD" env-default:""`
 	DefaultProjectDBHost     string `env:"PROJECT_DB_HOST" env-default:""`
 	DefaultProjectDBPort     string `env:"PROJECT_DB_PORT" env-default:""`
-	DefaultProjectDBName     string `env:"PROJECT_DB_NAME" env-default:""`
+	DefaultProjectDBName     string `env:"PROJECT_DB_NAME" env-default:"~/.apito/engine-data/apito_project.db"`
 
-	DefaultSaaSProjectDBName string `env:"DEFAULT_SAAS_PROJECT_DB_NAME" env-default:""`
+	DefaultSaaSProjectDBName string `env:"DEFAULT_SAAS_PROJECT_DB_NAME" env-default:"~/.apito/engine-data/apito_saas_project.db"`
 
-	KVStorageEngine         string `env:"KV_ENGINE" env-default:"memory"`
+	KVStorageEngine         string `env:"KV_ENGINE" env-default:"coreDB"`
 	KVStorageEngineHost     string `env:"KV_HOST" env-default:""`
 	KVStorageEnginePort     string `env:"KV_PORT" env-default:""`
 	KVStorageEngineUser     string `env:"KV_USER" env-default:""`
 	KVStorageEnginePassword string `env:"KV_PASSWORD" env-default:""`
-	KVStorageEngineDatabase string `env:"KV_DATABASE" env-default:"0"`
+	KVStorageEngineDatabase string `env:"KV_DATABASE" env-default:"~/.apito/engine-data/apito_kv.db"`
+
+	QueueStorageEngine string `env:"QUEUE_ENGINE" env-default:"coreDB"`
+	QueueStorageEngineHost string `env:"QUEUE_HOST" env-default:""`
+	QueueStorageEnginePort string `env:"QUEUE_PORT" env-default:""`
+	QueueStorageEngineUser string `env:"QUEUE_USER" env-default:""`
+	QueueStorageEnginePassword string `env:"QUEUE_PASSWORD" env-default:""`
+	QueueStorageEngineDatabase string `env:"QUEUE_DATABASE" env-default:"~/.apito/engine-data/apito_queue.db"`
 
 	// Token Encryption Credential
 	PublicKeyPath  string `env:"PUBLIC_KEY_PATH" env-default:"keys/public.key"`

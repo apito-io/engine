@@ -211,7 +211,7 @@ func (s *JWTService) VerifyIDToken(ctx context.Context, token string) (*models.T
 	}
 
 	// check if token is blacklisted
-	_id, err := s.getTokenSession(ctx, tokenClaims.Email)
+	_id, err := s.GetTokenSession(ctx, tokenClaims.Email)
 	if err != nil {
 		return nil, err
 	}
@@ -309,7 +309,7 @@ func (s *JWTService) GenerateLoginIDToken(ctx context.Context, projectWithRoles 
 	}
 
 	// add to blacklist
-	_, err := s.getTokenSession(ctx, user.Email)
+	_, err := s.GetTokenSession(ctx, user.Email)
 	if err != nil {
 		return nil, err
 	}
@@ -324,7 +324,7 @@ func (s *JWTService) GenerateLoginIDToken(ctx context.Context, projectWithRoles 
 
 	expirationDuration := time.Until(time.Unix(_exp, 0))
 	// store new session
-	err = s.storeTokenSession(ctx, user.Email, _id, expirationDuration)
+	err = s.StoreTokenSession(ctx, user.Email, _id, expirationDuration)
 	if err != nil {
 		return nil, err
 	}
@@ -359,19 +359,6 @@ func (s *JWTService) GenerateLoginIDToken(ctx context.Context, projectWithRoles 
 	if projectWithRoles.Project != nil {
 
 		claims["project_type"] = projectWithRoles.Project.ProjectType
-
-		if projectWithRoles.Project.TrialEnds != "" {
-			/*parseDuration, _ := time.Parse(time.RFC3339, projectWithRoles.Project.TrialEnds)
-			alreadyExpired := parseDuration.Sub(time.Now()).Hours()
-			if alreadyExpired < 0 {
-				return nil, errors.New("trial Period has expired. Upgrade your plan")
-			} else {*/
-			claims["project_trial_ends"] = projectWithRoles.Project.TrialEnds
-		}
-
-		if projectWithRoles.Project.PaymentDueDate != "" {
-			claims["payment_due_date"] = projectWithRoles.Project.PaymentDueDate
-		}
 
 		claims["project_id"] = projectWithRoles.Project.ID
 		claims["project_role"] = projectWithRoles.Role
@@ -438,16 +425,6 @@ func (s *JWTService) GenerateLoginRefreshToken(projectWithRoles *models.ProjectW
 
 	if projectWithRoles.Project != nil {
 
-		if projectWithRoles.Project.TrialEnds != "" {
-			parseDuration, _ := time.Parse(time.RFC3339, projectWithRoles.Project.TrialEnds)
-			alreadyExpired := parseDuration.Sub(time.Now()).Hours()
-			if alreadyExpired < 0 {
-				return nil, errors.New("trial Period has expired. Upgrade your plan")
-			} else {
-				_payload["project_trial_ends"] = projectWithRoles.Project.TrialEnds
-			}
-		}
-
 		_payload["project_id"] = projectWithRoles.Project.ID
 		_payload["project_role"] = projectWithRoles.Role
 
@@ -504,16 +481,16 @@ func (s *JWTService) invalidateTokenSession(ctx context.Context, email string) e
 	return s.kvService.DelValue(ctx, key)
 }
 
-func (s *JWTService) storeTokenSession(ctx context.Context, email string, session string, ttl time.Duration) error {
+func (s *JWTService) StoreTokenSession(ctx context.Context, email string, session string, ttl time.Duration) error {
 	key := fmt.Sprintf("apito_session:%s", email)
 	return s.kvService.SetValue(ctx, key, session, ttl)
 }
 
-func (s *JWTService) getTokenSession(ctx context.Context, email string) (string, error) {
+func (s *JWTService) GetTokenSession(ctx context.Context, email string) (string, error) {
 	key := fmt.Sprintf("apito_session:%s", email)
 	val, err := s.kvService.GetValue(ctx, key)
 	if err != nil {
-		if err.Error() == "key not found" || errors.Is(err, redis.Nil) {
+		if err.Error() == "key not found" || err.Error() == "key expired" || errors.Is(err, redis.Nil) {
 			return "", nil
 		} else {
 			return "", err

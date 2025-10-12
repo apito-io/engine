@@ -130,13 +130,6 @@ func InitRouter(cfg *models.Config) (*echo.Echo, error) {
 	authCtrl := controller.GetAuthController(cfg, server.GetConcreteServer().(*resolver.GraphQLServer))
 	pluginV2Ctrl := controller.NewPluginV2Controller(server.GetConcreteServer().(*resolver.GraphQLServer))
 
-	startRoutes := router.Group("journey")
-	{
-
-		startRoutes.GET("/start", authCtrl.Journey)
-		startRoutes.POST("/dbTest", authCtrl.DatabaseTest)
-	}
-
 	/*authv3Routes := router.Group("auth/v3")
 	{
 		authv3Routes.POST("/login", authCtrl.LoginV3)
@@ -203,6 +196,12 @@ func InitRouter(cfg *models.Config) (*echo.Echo, error) {
 			projectRoutes.POST("/name/check", authCtrl.ProjectNameCheck)
 			projectRoutes.POST("/list", authCtrl.ProjectList)
 			projectRoutes.POST("/delete", authCtrl.ProjectDelete)
+		}
+
+		databaseRoutes := systemRoutes.Group("/database")
+		{
+	
+			databaseRoutes.POST("/check", authCtrl.DatabaseCheck)
 		}
 
 		systemRoutes.GET("/cache/list", graphCtrl.GetSystemCacheInfo)

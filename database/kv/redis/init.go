@@ -16,7 +16,7 @@ type KVRedisService struct {
 	client *redis.Client
 }
 
-func GetKVRedisDriver(ctx context.Context, cfg *models.Config) (*KVRedisService, error) {
+func GetKVRedisDriver(cfg *models.Config) (*KVRedisService, error) {
 
 	dbNo, err := strconv.Atoi(cfg.KVStorageEngineDatabase)
 	if err != nil {
@@ -27,6 +27,8 @@ func GetKVRedisDriver(ctx context.Context, cfg *models.Config) (*KVRedisService,
 		Password: cfg.KVStorageEnginePassword, // no password set
 		DB:       dbNo,                        // use default DB
 	})
+
+	ctx := context.Background()
 
 	err = client.Ping(ctx).Err()
 	if err != nil {

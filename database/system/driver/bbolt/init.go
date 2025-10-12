@@ -12,13 +12,12 @@ import (
 	"math/big"
 	"os"
 	"path/filepath"
-	"strings"
-
 	apitobolt "github.com/apito-io/apitoBolt"
 	oci "github.com/apito-io/engine/interfaces"
 	"github.com/apito-io/engine/models"
 	"github.com/apito-io/engine/utility"
 	"github.com/google/uuid"
+	"golang.org/x/crypto/bcrypt"
 )
 
 type ProBBoltSystemDriver struct {
@@ -37,31 +36,15 @@ type MigrationStatus struct {
 	UpdatedAt string `json:"updated_at"`
 }
 
-// expandPath expands ~ to home directory and converts to absolute path.
-// If the path starts with ./ or ../, it resolves relative to the current working directory.
-func expandPath(path string) (string, error) {
-	if strings.HasPrefix(path, "~/") {
-		homeDir, err := os.UserHomeDir()
-		if err != nil {
-			return "", err
-		}
-		path = filepath.Join(homeDir, path[2:])
-	} else if strings.HasPrefix(path, "./") || strings.HasPrefix(path, "../") {
-		// Leave as-is; filepath.Abs will resolve relative to current working directory
-		// No transformation needed
-	}
-	return filepath.Abs(path)
-}
-
 func GetSystemBBoltDriver(driverCred *models.DriverCredentials, cacheDriver oci.CacheDBInterface) (*ProBBoltSystemDriver, error) {
 	dbPath := driverCred.Database
 	if dbPath == "" {
-		dbPath = "./apito_system.db" // default database file
+		dbPath = "~/.apito/engine-data/apito_system.db" // default database file
 	}
 
 	// Expand path (handles ~ and converts to absolute path)
 	var err error
-	dbPath, err = expandPath(dbPath)
+	dbPath, err = utility.ExpandPath(dbPath)
 	if err != nil {
 		return nil, fmt.Errorf("failed to expand database path %s: %v", driverCred.Database, err)
 	}
@@ -72,7 +55,7 @@ func GetSystemBBoltDriver(driverCred *models.DriverCredentials, cacheDriver oci.
 		return nil, fmt.Errorf("failed to create database directory %s: %v", dbDir, err)
 	}
 
-	log.Printf("Opening BBolt database at: %s", dbPath)
+	log.Printf("Opening System BBolt database at: %s", dbPath)
 
 	// Open the BBolt database using ApitoBolt
 	store, err := apitobolt.Open(dbPath)
@@ -191,9 +174,6 @@ func (d *ProBBoltSystemDriver) createDefaultAdminUser(ctx context.Context) error
 		return nil
 	}
 
-	// Generate random password
-	password := generatePassword()
-
 	// Create the admin user
 	adminUser := &models.SystemUser{
 		XKey:                      uuid.New().String(),
@@ -201,14 +181,20 @@ func (d *ProBBoltSystemDriver) createDefaultAdminUser(ctx context.Context) error
 		LastName:                  "Administrator",
 		Email:                     "admin@apito.io",
 		Username:                  "admin",
-		Secret:                    password, // In production, this should be hashed
+		//Secret:                    password, // In production, this should be hashed
 		IsAdmin:                   true,
-		ProjectLimit:              100, // Give admin generous project limit
 		AdministrativePermissions: []string{"all"},
 		CreatedAt:                 utility.GetCurrentTime(),
 		UpdatedAt:                 utility.GetCurrentTime(),
 	}
 
+	// Generate random password
+	password := generatePassword()
+	hash, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
+	if err != nil {
+		return err
+	}
+	adminUser.Secret = string(hash)
 	adminUser.ID = adminUser.XKey
 
 	// Save the admin user

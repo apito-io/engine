@@ -8,8 +8,6 @@ import (
 	"os"
 	"strings"
 	"time"
-
-	_const "github.com/apito-io/engine/const"
 	"github.com/apito-io/engine/models"
 	"github.com/apito-io/engine/utility"
 	"github.com/google/uuid"
@@ -70,13 +68,6 @@ func (a *authCtrl) ProjectCreation(c echo.Context) error {
 		createdProject++
 	}
 
-	if createdProject >= int32(user.ProjectLimit) {
-		return c.JSON(http.StatusBadRequest, &models.HttpResponse{
-			Message: "You can not create more projects. Please upgrade your plan",
-			Code:    http.StatusBadRequest,
-		})
-	}
-
 	// prepare the project skeleton
 	var _projectID string
 	if val, ok := req["id"]; ok && val != nil {
@@ -113,62 +104,53 @@ func (a *authCtrl) ProjectCreation(c echo.Context) error {
 		Teams:            []*models.Team{user.DefaultTeam},
 	}
 
-	var planType string
-	if val, ok := req["plan_type"]; ok && val != nil {
-		planType = val.(string)
-	} else {
-		return c.JSON(http.StatusBadRequest, &models.HttpResponse{
-			Message: "Plan type is required",
-			Code:    http.StatusBadRequest,
-		})
-	}
-
-	switch planType {
-	case "dedicated":
-
-		project.PlanType = "dedicated"
-		if val, ok := req["tier_name"]; ok && val != nil {
-			project.TireType = val.(string)
-		} else {
-			return c.JSON(http.StatusBadRequest, &models.HttpResponse{
-				Message: "Tier name is required",
-				Code:    http.StatusBadRequest,
-			})
-		}
-
-		if project.TireType == "free" && createdProject >= 1 {
-			return c.JSON(http.StatusBadRequest, &models.HttpResponse{
-				Message: "You can not create more than 1 project with free tier",
-				Code:    http.StatusBadRequest,
-			})
-		}
-	case "byod":
-		var databaseType string
-		if val, ok := req["database_type"]; ok && val != nil {
-			databaseType = val.(string)
-		} else {
-			return c.JSON(http.StatusBadRequest, &models.HttpResponse{
-				Message: "Database type is required",
-				Code:    http.StatusBadRequest,
-			})
-		}
-		project.PlanType = "byod"
-		project.Driver = &models.DriverCredentials{
-			Engine: databaseType,
-		}
-	}
-
+	// optional
 	if val, ok := req["description"]; ok && val != nil {
 		project.Description = val.(string)
 	}
 
-	/* ust := c.Get("ust")
-	if ust == nil {
+	var databaseType string
+	if val, ok := req["database_type"]; ok && val != nil {
+		databaseType = val.(string)
+	} else {
 		return c.JSON(http.StatusBadRequest, &models.HttpResponse{
-			Message: "user is missing in the token payload",
+			Message: "Database type is required",
 			Code:    http.StatusBadRequest,
 		})
-	} */
+	}
+
+	var dbConfig map[string]interface{}
+	if val, ok := req["db_config"]; ok && val != nil && len(val.(map[string]interface{})) > 0 {
+		dbConfig = val.(map[string]interface{})
+	} else {
+		return c.JSON(http.StatusBadRequest, &models.HttpResponse{
+			Message: "Database configuration is required",
+			Code:    http.StatusBadRequest,
+		})
+	}
+
+	project.Driver = &models.DriverCredentials{
+		Engine: databaseType,
+	}
+
+	if val, ok := dbConfig["host"]; ok && val != nil {
+		project.Driver.Host = val.(string)
+	}
+	if val, ok := dbConfig["port"]; ok && val != nil {
+		project.Driver.Port = val.(string)
+	}
+	if val, ok := dbConfig["user"]; ok && val != nil {
+		project.Driver.User = val.(string)
+	}
+	if val, ok := dbConfig["password"]; ok && val != nil {
+		project.Driver.Password = val.(string)
+	}
+	if val, ok := dbConfig["database"]; ok && val != nil {
+		project.Driver.Database = val.(string)
+	}
+	if val, ok := dbConfig["file"]; ok && val != nil {
+		project.Driver.File = val.(string)
+	}
 
 	switch strings.ToLower(req["project_type"].(string)) {
 	case "regular", "general":
@@ -222,22 +204,20 @@ func (a *authCtrl) ProjectCreation(c echo.Context) error {
 	}
 
 	if project.Driver == nil {
-		cfg := &models.DriverCredentials{
-			ProjectID: projectID, // this is must be passed from here
-			Engine:   a.Cfg.DefaultProjectDatabaseEngine,
-			Host:     a.Cfg.DefaultProjectDBHost,
-			Port:     a.Cfg.DefaultProjectDBPort,
-			User:     a.Cfg.DefaultProjectDBUser,
-			Database: a.Cfg.DefaultProjectDBName,
-			Password: a.Cfg.DefaultProjectDBPassword,
-		}
-		// only save the engine
 		project.Driver = &models.DriverCredentials{
-			Engine: _const.ApitoDB,
+			ProjectID: projectID, // this is must be passed from here
+			Engine:    a.Cfg.DefaultProjectDatabaseEngine,
+			Host:      a.Cfg.DefaultProjectDBHost,
+			Port:      a.Cfg.DefaultProjectDBPort,
+			User:      a.Cfg.DefaultProjectDBUser,
+			Database:  a.Cfg.DefaultProjectDBName,
+			Password:  a.Cfg.DefaultProjectDBPassword,
 		}
-		// inject driver credential to connection manager
-		a.graphQLServer.GraphQLExecutor.SetProjectDriverCredential(ctx, cfg)
 	}
+
+	// inject driver credential to connection manager
+	project.Driver.ProjectID = projectID // this is a must for connection manager
+	a.graphQLServer.GraphQLExecutor.SetProjectDriverCredential(ctx, project.Driver)
 
 	if project.ProjectType != models.ProjectType_SaaS {
 		//inject project_id via context

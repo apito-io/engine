@@ -57,8 +57,6 @@ type SystemUser struct {
 	ReadOnlyProject bool   `json:"read_only_project,omitempty" firestore:"read_only_project,omitempty" bson:"read_only_project,omitempty"`
 	LastLoggedIn    string `json:"last_logged_in,omitempty" firestore:"last_logged_in,omitempty" bson:"last_logged_in,omitempty"`
 
-	ProjectLimit uint32 `json:"project_limit,omitempty" firestore:"project_limit,omitempty" bson:"project_limit,omitempty"`
-
 	CreatedAt string `bun:"type:timestamp,notnull,default:current_timestamp" json:"created_at,omitempty" firestore:"created_at,omitempty" bson:"created_at,omitempty"`
 	UpdatedAt string `bun:"type:timestamp,notnull" json:"updated_at,omitempty" firestore:"updated_at,omitempty" bson:"updated_at,omitempty"`
 
@@ -117,15 +115,7 @@ type Project struct {
 
 	SystemMessages []*SystemMessage `bun:"rel:has-many" json:"system_messages,omitempty" firestore:"system_messages,omitempty" bson:"system_messages,omitempty"`
 	Workspaces     []*Workspace     `bun:"rel:has-many" json:"workspaces,omitempty" firestore:"workspaces,omitempty" bson:"workspaces,omitempty"`
-
-	PlanType       string `json:"plan_type,omitempty" firestore:"plan_type,omitempty" bson:"plan_type,omitempty"` // dedicated, byod
-	TireType       string `json:"tire_type,omitempty" firestore:"tire_type,omitempty" bson:"tire_type,omitempty"` // free, pro, business
-	TrialEnds      string `json:"trial_ends,omitempty" firestore:"trial_ends,omitempty" bson:"trial_ends,omitempty"`
-	PaymentDueDate string `json:"payment_due_date,omitempty" firestore:"payment_due_date,omitempty" bson:"payment_due_date,omitempty"`
-
-	// for microservice
-	MicroServicePort string `json:"micro_service_port,omitempty" firestore:"micro_service_port,omitempty" bson:"micro_service_port,omitempty"`
-
+	
 	// for sync
 	SyncedProperty *SyncProject `bun:"rel:belongs-to,join:id=project_id" json:"synced_property,omitempty" firestore:"synced_property,omitempty" bson:"synced_property,omitempty"`
 

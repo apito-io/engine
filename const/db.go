@@ -23,6 +23,7 @@ const (
 
 	// EmbeddedDB Embedded Database
 	CoreDB string = "coreDB"
+	BoltDB string = "bbolt"
 
 	// RedisDriver KeyValue database
 	RedisDriver string = "redis"

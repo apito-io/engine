@@ -2,6 +2,8 @@ package resolver
 
 import (
 	"encoding/json"
+
+	"github.com/ThreeDotsLabs/watermill/message"
 	"github.com/apito-io/engine/models"
 	"github.com/labstack/echo/v4"
 	"github.com/tailor-inc/graphql"
@@ -19,15 +21,15 @@ func (s *GraphQLServer) SendEvent(p graphql.ResolveParams) (interface{}, error) 
 		return nil, err
 	}
 
-	var message string
+	var messageText string
 	if val, ok := p.Args["message"].(string); ok {
-		message = val
+		messageText = val
 	}
 
 	data := &models.SubscriptionEvent{
 		ProjectID: param.ProjectID,
 		UserID:    param.UserID,
-		Message:   message,
+		Message:   messageText,
 		Type:      "info",
 	}
 
@@ -36,7 +38,9 @@ func (s *GraphQLServer) SendEvent(p graphql.ResolveParams) (interface{}, error) 
 		return nil, err
 	}
 
-	err = s.PubSubService.Publish(p.Context, "system_notify_channel", payload)
+	// Create Watermill message
+	msg := message.NewMessage(param.UserID, payload)
+	err = s.PubSubService.Publish("system_notify_channel", msg)
 	if err != nil {
 		return nil, err
 	}
@@ -58,9 +62,9 @@ func (s *GraphQLServer) EventSubscription(p graphql.ResolveParams) (interface{},
 		return nil, err
 	}
 
-	userId := param.UserID
+	userID := param.UserID
 
-	subs, err := s.GraphQLSubscription.subscribe(p.Context, userId)
+	subs, err := s.GraphQLSubscription.subscribe(p.Context, userID)
 	if err != nil {
 		return nil, err
 	}

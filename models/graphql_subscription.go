@@ -1,8 +1,11 @@
 package models
 
+import "errors"
+
 type Subscriber struct {
-	Data   chan interface{}
-	UserID string
+	Data     chan interface{}
+	UserID   string
+	IsActive bool
 }
 
 type SubscriptionEvent struct {
@@ -11,3 +14,5 @@ type SubscriptionEvent struct {
 	UserID    string `json:"user_id"`
 	Message   string `json:"message"`
 }
+
+var ErrSubscriberNotFound = errors.New("subscriber not found")

@@ -111,6 +111,42 @@ func (S *SQLDriver) AddCollection(ctx context.Context, param *models.CommonSyste
 		if err != nil {
 			return err
 		}
+	case _const.SQLiteDriver:
+		// SQLite is file-based, no CREATE DATABASE needed, run everything in one transaction like MySQL
+		err := S.ORM.RunInTx(ctx, nil, func(ctx context.Context, tx bun.Tx) error {
+			if _, err := tx.NewRaw(`
+			CREATE TABLE meta(
+				id VARCHAR(36) NOT NULL PRIMARY KEY,
+				doc_id VARCHAR(36) NOT NULL,
+				created_at DATE NOT NULL DEFAULT CURRENT_DATE,
+				updated_at DATE NOT NULL DEFAULT CURRENT_DATE,
+				created_by VARCHAR(36) NOT NULL,
+				updated_by VARCHAR(36),
+				status VARCHAR(36)
+			);`).Exec(ctx); err != nil {
+				return err
+			}
+
+			if _, err := tx.NewRaw(`
+			CREATE TABLE media(
+				id VARCHAR(36) NOT NULL PRIMARY KEY,
+				model VARCHAR(125),
+				media_type VARCHAR(65),
+				file_extension VARCHAR(65),
+				file_name TEXT,
+				size INTEGER,
+				s3_key TEXT,
+				url TEXT,
+				created_at DATE NOT NULL DEFAULT CURRENT_DATE
+			);`).Exec(ctx); err != nil {
+				return err
+			}
+			// return nil will commit the whole transaction
+			return nil
+		})
+		if err != nil {
+			return err
+		}
 	case _const.MySQLDriver, _const.MariaDBDriver:
 		err := S.ORM.RunInTx(ctx, nil, func(ctx context.Context, tx bun.Tx) error {
 			// do some database operations in the transaction (use 'tx' from this point, not 'db')
@@ -164,14 +200,28 @@ func (S *SQLDriver) AddCollection(ctx context.Context, param *models.CommonSyste
 }
 
 func (a *SQLDriver) CheckCollectionExists(ctx context.Context, param *models.CommonSystemParams, isRelationCollection bool) (bool, error) {
-	// check if table exists
-	query := fmt.Sprintf("SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = '%s' AND table_name = '%s'", param.ProjectID, param.Model.Name)
+	var query string
 	var count int64
+
+	switch a.DriverCredential.Engine {
+	case _const.PostgreSQLDriver:
+		// PostgreSQL uses information_schema with table_schema
+		query = fmt.Sprintf("SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = '%s' AND table_name = '%s'", param.ProjectID, param.Model.Name)
+	case _const.MySQLDriver, _const.MariaDBDriver:
+		// MySQL/MariaDB uses information_schema with table_schema
+		query = fmt.Sprintf("SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = '%s' AND table_name = '%s'", param.ProjectID, param.Model.Name)
+	case _const.SQLiteDriver:
+		// SQLite uses sqlite_master (no schema concept, file-based)
+		query = fmt.Sprintf("SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='%s'", param.Model.Name)
+	default:
+		return false, fmt.Errorf("unsupported database engine: %s", a.DriverCredential.Engine)
+	}
+
 	err := a.ORM.NewRaw(query).Scan(ctx, &count)
 	if err != nil {
 		return false, err
 	}
-	return count == 0, nil
+	return count > 0, nil
 }
 
 func (S *SQLDriver) AddModel(ctx context.Context, project *models.Project, model *models.ModelType) (*models.ProjectSchema, error) {
@@ -211,6 +261,10 @@ func (S *SQLDriver) AddModel(ctx context.Context, project *models.Project, model
 		createTableQuery = fmt.Sprintf("`%s`( id VARCHAR(36) NOT NULL PRIMARY KEY )", tableName)
 	case _const.MySQLDriver, _const.MariaDBDriver:
 		createTableQuery = fmt.Sprintf("`%s`( id VARCHAR(36) NOT NULL PRIMARY KEY )", tableName)
+	case _const.SQLiteDriver:
+		createTableQuery = fmt.Sprintf("`%s`( id VARCHAR(36) NOT NULL PRIMARY KEY )", tableName)
+	default:
+		return nil, fmt.Errorf("unsupported database engine: %s", S.DriverCredential.Engine)
 	}
 
 	//Then execute your query for creating table

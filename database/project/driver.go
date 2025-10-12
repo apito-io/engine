@@ -4,7 +4,7 @@ import (
 	"errors"
 
 	_const "github.com/apito-io/engine/const"
-	"github.com/apito-io/engine/database/project/driver/mongo"
+	//"github.com/apito-io/engine/database/project/driver/mongo"
 	"github.com/apito-io/engine/database/project/driver/sql"
 	"github.com/apito-io/engine/interfaces"
 	"github.com/apito-io/engine/models"
@@ -28,10 +28,13 @@ func GetProjectDriverWithConfig(conf *models.Config, engineConfig *models.Driver
 	var db interfaces.ProjectDBInterface
 	var err error
 	switch engineConfig.Engine {
-	case _const.PostgreSQLDriver, _const.MySQLDriver, _const.MariaDBDriver:
+	case //_const.PostgreSQLDriver, 
+	//_const.MySQLDriver, 
+	//_const.MariaDBDriver, 
+	_const.SQLiteDriver:
 		db, err = sql.GetSQLDriver(engineConfig)
-	case _const.MongoDBDriver:
-		db, err = mongo.GetMongoDriver(engineConfig)
+	//case _const.MongoDBDriver:
+	//	db, err = mongo.GetMongoDriver(engineConfig)
 	default:
 		return nil, errors.New("unsupported database driver passed")
 	}

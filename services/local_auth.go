@@ -48,7 +48,6 @@ func (l *LocalAuthService) Signup(ctx context.Context, registerRequest *models.R
 	user.CreatedAt = utility.GetCurrentTime()
 	user.UpdatedAt = utility.GetCurrentTime()
 	user.ReadOnlyProject = false
-	user.ProjectLimit = 1
 
 	// check the existing and the new password are same
 	/*if err := bcrypt.CompareHashAndPassword([]byte(teacherProfile.Secret), []byte(req.NewPassword)); err == nil {

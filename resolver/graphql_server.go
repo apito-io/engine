@@ -10,16 +10,12 @@ import (
 	"regexp"
 	"strings"
 	"sync"
-	"time"
 
+	"github.com/ThreeDotsLabs/watermill/message"
 	_const "github.com/apito-io/engine/const"
-	badgerCache "github.com/apito-io/engine/database/cache/badger"
-	memoryCache "github.com/apito-io/engine/database/cache/memory"
-	redisCache "github.com/apito-io/engine/database/cache/redis"
-	kvBadger "github.com/apito-io/engine/database/kv/badger"
-	kvMemory "github.com/apito-io/engine/database/kv/memory"
-	kvRedis "github.com/apito-io/engine/database/kv/redis"
-	queueRedis "github.com/apito-io/engine/database/queue/redis"
+	"github.com/apito-io/engine/database/cache"
+	"github.com/apito-io/engine/database/kv"
+	"github.com/apito-io/engine/database/queue"
 	"github.com/apito-io/engine/database/system"
 	"github.com/apito-io/engine/executor"
 	"github.com/apito-io/engine/interfaces"
@@ -103,7 +99,7 @@ type GraphQLServer struct {
 	//ProjectRawSchemas *protobuff.ProjectSchema
 
 	BlankaTokenService *services.BrankaToken
-	ProjectKeyManager      *services.ProjectKeyManager
+	ProjectKeyManager  *services.ProjectKeyManager
 
 	ApitoTokenService *services.ApitoTokenService
 	JWTTokenService   *services.JWTService
@@ -133,7 +129,7 @@ type GraphQLServer struct {
 	//LocalPluginRoutes chan []*extensions.ThirdPartyRESTApi
 
 	GraphQLSubscription *GraphQLSubscriptions
-	PubSubService       interfaces.PubSubServiceInterface
+	PubSubService       interfaces.QueueEngineInterface
 	KVService           interfaces.KeyValueServiceInterface
 
 	PluginManagerSwapper *hotswap.PluginManagerSwapper
@@ -154,23 +150,12 @@ func BuildGraphQL(ctx context.Context, cfg *models.Config, extensionRouter *echo
 		),
 	)
 
-	var kvStorage interfaces.KeyValueServiceInterface
-	var err error
-	switch cfg.KVStorageEngine {
-	case _const.RedisDriver:
-		kvStorage, err = kvRedis.GetKVRedisDriver(ctx, cfg)
-	case _const.CoreDB:
-		kvStorage, err = kvBadger.GetKVBadgerDriver(cfg)
-	case _const.MemoryDB:
-		kvStorage, err = kvMemory.GetKVMemoryDriver(cfg)
-	default:
-		kvStorage, err = kvMemory.GetKVMemoryDriver(cfg) // Default to memory instead of badger for local dev
-	}
+	kvStorage, err := kv.CreateKVDriver(cfg.KVStorageEngine, cfg)
 	if err != nil {
 		return nil, err
 	}
 
-	queueRedisService, err := queueRedis.GetRedisQueueDriver(cfg)
+	queueEngine, err := queue.CreateQueueEngine(cfg.QueueStorageEngine, cfg)
 	if err != nil {
 		return nil, err
 	}
@@ -188,7 +173,7 @@ func BuildGraphQL(ctx context.Context, cfg *models.Config, extensionRouter *echo
 		SystemDriverReadyChan: make(chan interfaces.ApitoSystemDB, 1),
 
 		KVService:     kvStorage,
-		PubSubService: queueRedisService,
+		PubSubService: queueEngine,
 
 		//GraphQLExecutor:    _executor,
 		ProjectDBConnPools:  &sync.Map{},
@@ -272,7 +257,11 @@ func BuildGraphQL(ctx context.Context, cfg *models.Config, extensionRouter *echo
 		ctx, cancel := context.WithCancel(context.Background())
 		defer cancel()
 
-		subscriber := srv.PubSubService.Subscribe(ctx, "system_notify_channel")
+		messageChan, err := srv.PubSubService.Subscribe(ctx, "system_notify_channel")
+		if err != nil {
+			fmt.Println(err.Error())
+			return
+		}
 
 		// Add graceful shutdown channel monitoring
 		shutdownChan := make(chan struct{})
@@ -285,28 +274,22 @@ func BuildGraphQL(ctx context.Context, cfg *models.Config, extensionRouter *echo
 				return
 			case <-shutdownChan:
 				return
-			default:
-				msg, err := subscriber.ReceiveMessage(ctx)
-				if err != nil {
-					fmt.Printf("Subscription receive error: %v\n", err)
-					// Exit on persistent errors to prevent goroutine accumulation
-					if ctx.Err() != nil {
-						return
-					}
-					time.Sleep(1 * time.Second) // Brief delay before retry
-					continue
+			case msg, ok := <-messageChan:
+				if !ok {
+					fmt.Println("Message channel closed, exiting subscription loop")
+					return
 				}
 
 				if msg != nil {
 					var data models.SubscriptionEvent
-					err = json.Unmarshal([]byte(msg.Payload), &data)
+					err = json.Unmarshal(msg.Payload, &data)
 					if err != nil {
 						fmt.Printf("Subscription unmarshal error: %v\n", err)
 						continue
 					}
 
-					for userId, sub := range subs.getSubscribers(nil) {
-						if userId == data.UserID {
+					for userID, sub := range subs.getSubscribers(context.TODO()) {
+						if userID == data.UserID {
 							select {
 							case sub.Data <- data:
 							case <-ctx.Done():
@@ -351,30 +334,7 @@ func BuildGraphQL(ctx context.Context, cfg *models.Config, extensionRouter *echo
 
 	// cache driver
 	go func() {
-		var err error
-		var _cache interfaces.CacheDBInterface
-		switch cfg.CacheDriver {
-		case "memory":
-			_cache, err = memoryCache.GetMemoryCacheDriver(cfg)
-			if err != nil {
-				fmt.Println(err.Error())
-			}
-		case "badger":
-			_cache, err = badgerCache.GetBadgerCacheDriver(cfg)
-			if err != nil {
-				fmt.Println(err.Error())
-			}
-		case "redis":
-			_cache, err = redisCache.GetRedisCacheDriver(cfg)
-			if err != nil {
-				fmt.Println(err.Error())
-			}
-		default:
-			_cache, err = memoryCache.GetMemoryCacheDriver(cfg)
-			if err != nil {
-				fmt.Println(err.Error())
-			}
-		}
+		_cache, err := cache.CreateCacheDriver(cfg.CacheDriver, cfg)
 		if err != nil {
 			fmt.Println(err.Error())
 		}
@@ -439,7 +399,7 @@ func BuildGraphQL(ctx context.Context, cfg *models.Config, extensionRouter *echo
 		_executor := executor.GetGraphQLExecutor(cfg, systemDB)
 		err := _executor.Init(ctx, &models.InitParams{
 			SharedDB: &models.DriverCredentials{
-				Engine:   "redis",
+				Engine:   cfg.KVStorageEngine,
 				Host:     cfg.KVStorageEngineHost,
 				Port:     cfg.KVStorageEnginePort,
 				Password: cfg.KVStorageEnginePassword,
@@ -540,7 +500,9 @@ func (s *GraphQLServer) PublishSystemMessage(ctx context.Context, userID string,
 		return err
 	}
 
-	err = s.PubSubService.Publish(ctx, "system_notify_channel", payload)
+	// Create Watermill message
+	msg := message.NewMessage(userID, payload)
+	err = s.PubSubService.Publish("system_notify_channel", msg)
 	if err != nil {
 		return err
 	}
@@ -714,14 +676,6 @@ func (s *GraphQLServer) LoadProjectCache(ctx context.Context, projectID string) 
 		if err != nil {
 			return nil, err
 		}*/
-	}
-
-	if _project.PaymentDueDate != "" {
-		parseDuration, _ := time.Parse(time.RFC3339, _project.PaymentDueDate)
-		alreadyExpired := parseDuration.Sub(time.Now()).Hours()
-		if alreadyExpired <= 0 {
-			return nil, errors.New("payment is due. Please pay to continue or contact administrator")
-		}
 	}
 
 	return _project, nil
