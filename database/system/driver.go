@@ -2,6 +2,8 @@ package system
 
 import (
 	"errors"
+	"log"
+
 	_const "github.com/apito-io/engine/const"
 	"github.com/apito-io/engine/database/system/driver/bbolt"
 	"github.com/apito-io/engine/interfaces"
@@ -25,6 +27,8 @@ func GetSystemDriver(engineConfig *models.DriverCredentials, conf *models.Config
 
 	var db interfaces.ApitoSystemDB
 	var err error
+
+	log.Printf("Getting system driver: %s", engineConfig.Engine)
 
 	switch engineConfig.Engine {
 	case _const.CoreDB:

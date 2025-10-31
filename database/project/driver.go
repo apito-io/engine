@@ -2,6 +2,7 @@ package project
 
 import (
 	"errors"
+	"log"
 
 	_const "github.com/apito-io/engine/const"
 	//"github.com/apito-io/engine/database/project/driver/mongo"
@@ -23,6 +24,8 @@ func GetProjectDriverWithConfig(conf *models.Config, engineConfig *models.Driver
 			}
 		}
 	}
+
+	log.Printf("Getting project driver: %s", engineConfig.Engine)
 
 	// Fall back to default core drivers
 	var db interfaces.ProjectDBInterface

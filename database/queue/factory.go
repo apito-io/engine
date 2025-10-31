@@ -2,6 +2,7 @@ package queue
 
 import (
 	"fmt"
+	"log"
 
 	"github.com/apito-io/engine/database/queue/bbolt"
 	"github.com/apito-io/engine/database/queue/memory"
@@ -12,6 +13,7 @@ import (
 
 // CreateQueueEngine creates a queue engine instance based on the engine type
 func CreateQueueEngine(engineType string, cfg *models.Config) (interfaces.QueueEngineInterface, error) {
+	log.Printf("Creating queue engine: %s", engineType)
 	switch engineType {
 	case "redis":
 		return redis.GetRedisQueueDriver(cfg)

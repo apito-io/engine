@@ -1,6 +1,8 @@
 package cache
 
 import (
+	"log"
+
 	"github.com/apito-io/engine/database/cache/badger"
 	"github.com/apito-io/engine/database/cache/bbolt"
 	"github.com/apito-io/engine/database/cache/memory"
@@ -11,6 +13,7 @@ import (
 
 // CreateCacheDriver creates a cache driver instance based on the engine type
 func CreateCacheDriver(engineType string, cfg *models.Config) (interfaces.CacheDBInterface, error) {
+	log.Printf("Creating cache driver: %s", engineType)
 	switch engineType {
 	case "redis":
 		return redis.GetRedisCacheDriver(cfg)

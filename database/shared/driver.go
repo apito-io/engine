@@ -2,6 +2,7 @@ package shared
 
 import (
 	"errors"
+	"log"
 
 	_const "github.com/apito-io/engine/const"
 	sharedRedis "github.com/apito-io/engine/database/shared/redis"
@@ -15,6 +16,7 @@ func GetSharedDriver(engineConfig *models.DriverCredentials) (interfaces.SharedD
 	if engineConfig == nil { // default db
 		return sharedRedis.GetSharedRedisDriver(engineConfig)
 	}
+	log.Printf("Getting shared driver: %s", engineConfig.Engine)
 	switch engineConfig.Engine {
 	case _const.RedisDriver:
 		db, err = sharedRedis.GetSharedRedisDriver(engineConfig)
