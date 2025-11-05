@@ -6,7 +6,7 @@ import (
 	"fmt"
 
 	"github.com/apito-io/engine/database"
-	shardDB "github.com/apito-io/engine/database/shared"
+	//shardDB "github.com/apito-io/engine/database/shared"
 	"github.com/apito-io/engine/interfaces"
 	"github.com/apito-io/engine/models"
 	"github.com/graph-gophers/dataloader/v7"
@@ -16,7 +16,7 @@ type GraphQLExecutor struct {
 	param *models.InitParams
 	//projectDriver     interfaces.ProjectDBInterface
 	connectionManager *database.ConnectionManager
-	SharedDriver      interfaces.SharedDBInterface
+	//SharedDriver      interfaces.SharedDBInterface no longer needed
 	Dataloaders       *models.DataLoaders
 	Cache             *models.ApplicationCache
 }
@@ -42,14 +42,14 @@ func (s *GraphQLExecutor) Init(ctx context.Context, _driver *models.InitParams) 
 		s.connectionManager.AddDriverCredentials(ctx, _driver.ProjectDB)
 	}
 
-	if s.SharedDriver == nil && _driver.SharedDB != nil {
+	/* if s.SharedDriver == nil && _driver.SharedDB != nil {
 		driver, err := shardDB.GetSharedDriver(_driver.SharedDB)
 		if err != nil {
 			fmt.Println("shared db error:", err.Error())
 			//return err
 		}
 		s.SharedDriver = driver
-	}
+	} */
 
 	if s.Dataloaders == nil {
 		s.Dataloaders = &models.DataLoaders{
@@ -120,17 +120,18 @@ func (s *GraphQLExecutor) SetApplicationCache(ctx context.Context, cache *models
 }
 
 func (s *GraphQLExecutor) GetSharedDBDriver(ctx context.Context) (interfaces.SharedDBInterface, error) {
-	if s.SharedDriver == nil {
+	/* if s.SharedDriver == nil {
 		err := s.Init(ctx, s.param)
 		if err != nil {
 			return nil, err
 		}
 	}
-	return s.SharedDriver, nil
+	return s.SharedDriver, nil */
+	return nil, nil
 }
 
 func (s *GraphQLExecutor) SetSharedDBDriver(ctx context.Context, driver interfaces.SharedDBInterface) error {
-	s.SharedDriver = driver
+	//s.SharedDriver = driver
 	return nil
 }
 

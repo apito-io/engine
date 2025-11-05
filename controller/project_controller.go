@@ -109,16 +109,6 @@ func (a *authCtrl) ProjectCreation(c echo.Context) error {
 		project.Description = val.(string)
 	}
 
-	var databaseType string
-	if val, ok := req["database_type"]; ok && val != nil {
-		databaseType = val.(string)
-	} else {
-		return c.JSON(http.StatusBadRequest, &models.HttpResponse{
-			Message: "Database type is required",
-			Code:    http.StatusBadRequest,
-		})
-	}
-
 	var dbConfig map[string]interface{}
 	if val, ok := req["db_config"]; ok && val != nil && len(val.(map[string]interface{})) > 0 {
 		dbConfig = val.(map[string]interface{})
@@ -129,9 +119,18 @@ func (a *authCtrl) ProjectCreation(c echo.Context) error {
 		})
 	}
 
-	project.Driver = &models.DriverCredentials{
-		Engine: databaseType,
+	project.Driver = &models.DriverCredentials{}
+
+	if val, ok := req["database_type"]; ok && val != nil {
+		project.Driver.Engine = val.(string)
+	} else {
+		return c.JSON(http.StatusBadRequest, &models.HttpResponse{
+			Message: "Database type is required",
+			Code:    http.StatusBadRequest,
+		})
 	}
+
+
 
 	if val, ok := dbConfig["host"]; ok && val != nil {
 		project.Driver.Host = val.(string)

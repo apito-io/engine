@@ -6,6 +6,7 @@ import (
 
 	_const "github.com/apito-io/engine/const"
 	//"github.com/apito-io/engine/database/project/driver/mongo"
+	"github.com/apito-io/engine/database/project/driver/bbolt"
 	"github.com/apito-io/engine/database/project/driver/sql"
 	"github.com/apito-io/engine/interfaces"
 	"github.com/apito-io/engine/models"
@@ -31,10 +32,12 @@ func GetProjectDriverWithConfig(conf *models.Config, engineConfig *models.Driver
 	var db interfaces.ProjectDBInterface
 	var err error
 	switch engineConfig.Engine {
-	case //_const.PostgreSQLDriver, 
-	//_const.MySQLDriver, 
-	//_const.MariaDBDriver, 
-	_const.SQLiteDriver:
+	case _const.CoreDB:
+		db, err = bbolt.GetBBoltDriver(engineConfig)
+	case //_const.PostgreSQLDriver,
+		//_const.MySQLDriver,
+		//_const.MariaDBDriver,
+		_const.SQLiteDriver:
 		db, err = sql.GetSQLDriver(engineConfig)
 	//case _const.MongoDBDriver:
 	//	db, err = mongo.GetMongoDriver(engineConfig)
