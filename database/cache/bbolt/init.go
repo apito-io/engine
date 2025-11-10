@@ -27,17 +27,7 @@ var _ interfaces.CacheDBInterface = (*CacheDriver)(nil)
 
 func GetBoltCacheDriver(cfg *models.Config) (*CacheDriver, error) {
 	// Determine database path
-	var dbPath string
-	if cfg.CacheDriver == "bbolt" && cfg.KVStorageEngineDatabase != "" {
-		dbPath = cfg.KVStorageEngineDatabase
-	} else {
-		// Expand home directory and create default path
-		homeDir, err := os.UserHomeDir()
-		if err != nil {
-			return nil, fmt.Errorf("failed to get user home directory: %w", err)
-		}
-		dbPath = filepath.Join(homeDir, ".apito", "engine-data", "apito_cache.db")
-	}
+	dbPath := filepath.Join(cfg.DefaultDatabaseDir, cfg.CacheDBName)
 
 	// Expand path (handles ~ and converts to absolute path)
 	var err error

@@ -560,7 +560,7 @@ func (s *GraphQLServer) UpdateProjectResolverFn(p graphql.ResolveParams) (interf
 		var err error
 		switch driver["engine"] {
 		case _const.PostgreSQLDriver, _const.MySQLDriver, _const.MariaDBDriver:
-			db, err = sql.GetSQLDriver(&models.DriverCredentials{
+			db, err = sql.GetSQLDriver(s.Cfg, &models.DriverCredentials{
 				Host:     host,
 				Port:     port,
 				Database: database,

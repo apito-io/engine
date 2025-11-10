@@ -117,7 +117,7 @@ Set the engine type to "bbolt" or "bolt" in your driver credentials:
 ```go
 driverCred := &models.DriverCredentials{
     Engine:   "bbolt",
-    Database: "/path/to/project.db", // Optional, defaults to ~/.apito/engine-data/apito_project.db
+    Database: "/path/to/project.db", // Optional, defaults to ~/.apito/db/apito_project.db
 }
 ```
 

@@ -11,6 +11,7 @@ import (
 	"log"
 	"os"
 	"path/filepath"
+
 	apitobolt "github.com/apito-io/apitoBolt"
 	"github.com/apito-io/engine/interfaces"
 	"github.com/apito-io/engine/models"
@@ -19,6 +20,7 @@ import (
 
 // BBoltDriver implements ProjectDBInterface using ApitoBolt in a MongoDB-like fashion
 type BBoltDriver struct {
+	Conf             *models.Config
 	Store            *apitobolt.Store
 	DriverCredential *models.DriverCredentials
 	dbPath           string
@@ -28,11 +30,15 @@ type BBoltDriver struct {
 var _ interfaces.ProjectDBInterface = (*BBoltDriver)(nil)
 
 // GetBBoltDriver creates a new BBolt project driver instance
-func GetBBoltDriver(driverCredentials *models.DriverCredentials) (*BBoltDriver, error) {
+func GetBBoltDriver(cfg *models.Config, driverCredentials *models.DriverCredentials) (*BBoltDriver, error) {
 	// Determine database path
-	dbPath, err := utility.ExpandPath(driverCredentials.File)
+	dbPath := filepath.Join(cfg.DefaultDatabaseDir, driverCredentials.File)
+
+	// Expand path (handles ~ and converts to absolute path)
+	var err error
+	dbPath, err = utility.ExpandPath(dbPath)
 	if err != nil {
-		return nil, fmt.Errorf("failed to expand database path %s: %v", driverCredentials.File, err)
+		return nil, fmt.Errorf("failed to expand database path %s: %v", dbPath, err)
 	}
 
 	// Create directory if it doesn't exist
@@ -49,7 +55,10 @@ func GetBBoltDriver(driverCredentials *models.DriverCredentials) (*BBoltDriver, 
 		return nil, fmt.Errorf("failed to open BBolt database: %v", err)
 	}
 
+	log.Printf("BBolt database opened successfully: %s", dbPath)
+
 	return &BBoltDriver{
+		Conf:             cfg,
 		Store:            store,
 		DriverCredential: driverCredentials,
 		dbPath:           dbPath,

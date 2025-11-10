@@ -10,7 +10,7 @@ import (
 	"github.com/apito-io/engine/models"
 )
 
-func GetSystemDriver(engineConfig *models.DriverCredentials, conf *models.Config) (interfaces.ApitoSystemDB, error) {
+func GetSystemDriver(conf *models.Config, engineConfig *models.DriverCredentials) (interfaces.ApitoSystemDB, error) {
 
 	if engineConfig == nil {
 		return nil, errors.New("please select a system database engine")
@@ -32,9 +32,9 @@ func GetSystemDriver(engineConfig *models.DriverCredentials, conf *models.Config
 
 	switch engineConfig.Engine {
 	case _const.CoreDB:
-		db, err = bbolt.GetSystemBBoltDriver(engineConfig, nil)
+		db, err = bbolt.GetSystemBBoltDriver(conf, engineConfig, nil)
 	default: // default set embedded database
-		db, err = bbolt.GetSystemBBoltDriver(engineConfig, nil)
+		db, err = bbolt.GetSystemBBoltDriver(conf, engineConfig, nil)
 	}
 	if err != nil {
 		return nil, err

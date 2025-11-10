@@ -12,42 +12,50 @@ type Config struct {
 
 	PluginPath string `env:"PLUGIN_PATH" env-default:"plugins"`
 
-	CacheDriver string `env:"CACHE_DRIVER" env-default:"memory"`
-	CacheTTL    string `env:"CACHE_TTL" env-default:"600"`
+	CacheEngine     string `env:"CACHE_DB" env-default:"memory"`
+	CacheDBHost     string `env:"CACHE_DB_HOST" env-default:""`
+	CacheDBPort     string `env:"CACHE_DB_PORT" env-default:""`
+	CacheDBUser     string `env:"CACHE_DB_USER" env-default:""`
+	CacheDBPassword string `env:"CACHE_DB_PASSWORD" env-default:""`
+	CacheDBName     string `env:"CACHE_DB_NAME" env-default:"apito_cache.db"`
+
+	CacheTTL string `env:"CACHE_TTL" env-default:"600"`
 
 	// Server Information
 	ServePort string `env:"SERVE_PORT" env-default:"5050"` // Server Listening Port
 
+	DefaultDatabaseDir string `env:"DEFAULT_DATABASE_DIR" env-default:"~/.apito/db"`
+
 	// System Database Information
 	SystemDatabaseEngine string `env:"SYSTEM_DB_ENGINE" env-default:"coreDB"`
-	SystemDBUser     string `env:"SYSTEM_DB_USER" env-default:""`
-	SystemDBPassword string `env:"SYSTEM_DB_PASSWORD" env-default:""`
-	SystemDBHost     string `env:"SYSTEM_DB_HOST" env-default:""`
-	SystemDBPort     string `env:"SYSTEM_DB_PORT" env-default:""`
-	SystemDBName     string `env:"SYSTEM_DB_NAME" env-default:"~/.apito/engine-data/apito_system.db"`
+	SystemDBUser         string `env:"SYSTEM_DB_USER" env-default:""`
+	SystemDBPassword     string `env:"SYSTEM_DB_PASSWORD" env-default:""`
+	SystemDBHost         string `env:"SYSTEM_DB_HOST" env-default:""`
+	SystemDBPort         string `env:"SYSTEM_DB_PORT" env-default:""`
+	SystemDBName         string `env:"SYSTEM_DB_NAME" env-default:"apito_system.db"`
 
 	DefaultProjectDatabaseEngine string `env:"PROJECT_DB_ENGINE" env-default:"coreDB"`
-	DefaultProjectDBUser     string `env:"PROJECT_DB_USER" env-default:""`
-	DefaultProjectDBPassword string `env:"PROJECT_DB_PASSWORD" env-default:""`
-	DefaultProjectDBHost     string `env:"PROJECT_DB_HOST" env-default:""`
-	DefaultProjectDBPort     string `env:"PROJECT_DB_PORT" env-default:""`
-	DefaultProjectDBName     string `env:"PROJECT_DB_NAME" env-default:"~/.apito/engine-data/apito_project.db"`
+	DefaultProjectDBUser         string `env:"PROJECT_DB_USER" env-default:""`
+	DefaultProjectDBPassword     string `env:"PROJECT_DB_PASSWORD" env-default:""`
+	DefaultProjectDBHost         string `env:"PROJECT_DB_HOST" env-default:""`
+	DefaultProjectDBPort         string `env:"PROJECT_DB_PORT" env-default:""`
+	DefaultProjectDBName         string `env:"PROJECT_DB_NAME" env-default:"apito_project.db"`
 
-	DefaultSaaSProjectDBName string `env:"DEFAULT_SAAS_PROJECT_DB_NAME" env-default:"~/.apito/engine-data/apito_saas_project.db"`
+	DefaultSaaSProjectDBName string `env:"DEFAULT_SAAS_PROJECT_DB_NAME" env-default:"apito_saas_project.db"`
 
 	KVStorageEngine         string `env:"KV_ENGINE" env-default:"coreDB"`
 	KVStorageEngineHost     string `env:"KV_HOST" env-default:""`
 	KVStorageEnginePort     string `env:"KV_PORT" env-default:""`
 	KVStorageEngineUser     string `env:"KV_USER" env-default:""`
 	KVStorageEnginePassword string `env:"KV_PASSWORD" env-default:""`
-	KVStorageEngineDatabase string `env:"KV_DATABASE" env-default:"~/.apito/engine-data/apito_kv.db"`
+	KVStorageEngineDatabase string `env:"KV_DATABASE" env-default:"apito_kv.db"`
 
-	QueueStorageEngine string `env:"QUEUE_ENGINE" env-default:"coreDB"`
-	QueueStorageEngineHost string `env:"QUEUE_HOST" env-default:""`
-	QueueStorageEnginePort string `env:"QUEUE_PORT" env-default:""`
-	QueueStorageEngineUser string `env:"QUEUE_USER" env-default:""`
+	QueueStorageEngine         string `env:"QUEUE_ENGINE" env-default:"coreDB"`
+	QueueStorageEngineHost     string `env:"QUEUE_HOST" env-default:""`
+	QueueStorageEnginePort     string `env:"QUEUE_PORT" env-default:""`
+	QueueStorageEngineUser     string `env:"QUEUE_USER" env-default:""`
 	QueueStorageEnginePassword string `env:"QUEUE_PASSWORD" env-default:""`
-	QueueStorageEngineDatabase string `env:"QUEUE_DATABASE" env-default:"~/.apito/engine-data/apito_queue.db"`
+	QueueStorageEngineDatabase string `env:"QUEUE_DATABASE" env-default:"apito_queue.db"`
 
 	// Token Encryption Credential
 	PublicKeyPath  string `env:"PUBLIC_KEY_PATH" env-default:"keys/public.key"`

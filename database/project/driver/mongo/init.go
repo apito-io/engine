@@ -11,12 +11,13 @@ import (
 )
 
 type MongoDriver struct {
+	Conf             *models.Config
 	Client           *mongo.Client
 	Database         *mongo.Database
 	DriverCredential *models.DriverCredentials
 }
 
-func GetMongoDriver(driverCredentials *models.DriverCredentials) (*MongoDriver, error) {
+func GetMongoDriver(conf *models.Config, driverCredentials *models.DriverCredentials) (*MongoDriver, error) {
 	// Create MongoDB connection string
 	connectionURI := fmt.Sprintf("mongodb+srv://%s:%s@%s/%s?retryWrites=true&w=majority",
 		driverCredentials.User,
@@ -46,6 +47,7 @@ func GetMongoDriver(driverCredentials *models.DriverCredentials) (*MongoDriver, 
 	database := client.Database(driverCredentials.Database)
 
 	return &MongoDriver{
+		Conf:             conf,
 		Client:           client,
 		Database:         database,
 		DriverCredential: driverCredentials,

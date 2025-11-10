@@ -72,7 +72,7 @@ func (S *SQLDriver) AddCollection(ctx context.Context, param *models.CommonSyste
 
 		// reinit the Bun connection
 		S.DriverCredential.Database = projectId
-		db, err := GetSQLDriver(S.DriverCredential)
+		db, err := GetSQLDriver(S.Conf, S.DriverCredential)
 		if err != nil {
 			return err
 		}

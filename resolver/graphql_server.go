@@ -232,7 +232,7 @@ func BuildGraphQL(ctx context.Context, cfg *models.Config, extensionRouter *echo
 			Password: cfg.SystemDBPassword,
 			Database: cfg.SystemDBName,
 		}
-		systemDriver, err := system.GetSystemDriver(&_cred, cfg)
+		systemDriver, err := system.GetSystemDriver(cfg, &_cred)
 		if err != nil {
 			panic(err.Error()) // sure do a panic if system db not there
 		}
@@ -334,7 +334,7 @@ func BuildGraphQL(ctx context.Context, cfg *models.Config, extensionRouter *echo
 
 	// cache driver
 	go func() {
-		_cache, err := cache.CreateCacheDriver(cfg.CacheDriver, cfg)
+		_cache, err := cache.CreateCacheDriver(cfg, cfg.CacheEngine)
 		if err != nil {
 			fmt.Println(err.Error())
 		}

@@ -304,10 +304,19 @@ func (b *BBoltDriver) AddCollection(ctx context.Context, param *models.CommonSys
 			collectionName = fmt.Sprintf("p_%s_%s", param.ProjectID, param.Model.Name)
 		}
 	} else {
-		collectionName = param.Model.Name
-		if isRelationCollection {
-			collectionName = "relation_" + collectionName
+		if param.Model != nil {
+			collectionName = param.Model.Name
+			if isRelationCollection {
+				collectionName = "relation_" + collectionName
+			}
+		} else {
+			// if model is not provided, we don't need to create a collection
+			return nil
 		}
+	}
+
+	if collectionName == "" {
+		return errors.New("collection name must be provided")
 	}
 
 	// Create the collection and indexes
@@ -972,7 +981,7 @@ func (b *BBoltDriver) QueryMultiDocumentOfProject(ctx context.Context, param *mo
 		}
 
 		// Apply tenant filtering for SaaS
-		if param.TenantID != "" {
+		if param.TenantID != "" && !strings.HasPrefix(param.TenantID, "0000") {
 			var filtered []*types.DefaultDocumentStructure
 			for _, doc := range results {
 				if doc.TenantID.String() == param.TenantID {

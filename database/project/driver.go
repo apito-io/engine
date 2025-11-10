@@ -33,12 +33,12 @@ func GetProjectDriverWithConfig(conf *models.Config, engineConfig *models.Driver
 	var err error
 	switch engineConfig.Engine {
 	case _const.CoreDB:
-		db, err = bbolt.GetBBoltDriver(engineConfig)
+		db, err = bbolt.GetBBoltDriver(conf, engineConfig)
 	case //_const.PostgreSQLDriver,
 		//_const.MySQLDriver,
 		//_const.MariaDBDriver,
 		_const.SQLiteDriver:
-		db, err = sql.GetSQLDriver(engineConfig)
+		db, err = sql.GetSQLDriver(conf, engineConfig)
 	//case _const.MongoDBDriver:
 	//	db, err = mongo.GetMongoDriver(engineConfig)
 	default:

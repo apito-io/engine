@@ -136,7 +136,7 @@ New BBolt databases use:
 ```go
 // In .env or config
 PROJECT_DB_ENGINE=bbolt
-PROJECT_DB_DATABASE=~/.apito/engine-data/apito_project.db
+PROJECT_DB_DATABASE=~/.apito/db/apito_project.db
 
 // In code
 driverCred := &models.DriverCredentials{

@@ -472,7 +472,7 @@ func (m *MongoDriver) QueryMultiDocumentOfProject(ctx context.Context, param *mo
 
 	// Build filter
 	filter := bson.M{}
-	if param.TenantID != "" {
+	if param.TenantID != "" && !strings.HasPrefix(param.TenantID, "0000") {
 		filter["tenant_id"] = param.TenantID
 	}
 

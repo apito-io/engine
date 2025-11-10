@@ -7,6 +7,8 @@ import (
 	"strconv"
 	"time"
 
+	_const "github.com/apito-io/engine/const"
+	"github.com/apito-io/engine/database/project/driver/bbolt"
 	"github.com/apito-io/engine/database/project/driver/mongo"
 	"github.com/apito-io/engine/database/project/driver/sql"
 	ae "github.com/apito-io/engine/err"
@@ -170,8 +172,8 @@ func (a *authCtrl) DatabaseCheck(c echo.Context) error {
 	}
 
 	switch req.Type {
-	case "mongodb":
-		driver, err := mongo.GetMongoDriver(&models.DriverCredentials{
+	case _const.MongoDBDriver:
+		driver, err := mongo.GetMongoDriver(a.Cfg, &models.DriverCredentials{
 			Engine:   req.Type,
 			Host:     req.Host,
 			Port:     strconv.Itoa(req.Port),
@@ -197,8 +199,8 @@ func (a *authCtrl) DatabaseCheck(c echo.Context) error {
 			"message": "Database connected successfully",
 		})
 
-	case "postgresql", "mysql", "sqlite", "sqlServer", "mariadb":
-		driver, err := sql.GetSQLDriver(&models.DriverCredentials{
+	case _const.PostgreSQLDriver, _const.MySQLDriver, _const.SQLiteDriver, _const.SQLServerDriver, _const.MariaDBDriver:
+		driver, err := sql.GetSQLDriver(a.Cfg, &models.DriverCredentials{
 			File:     req.File,
 			Engine:   req.Type,
 			Host:     req.Host,
@@ -225,6 +227,24 @@ func (a *authCtrl) DatabaseCheck(c echo.Context) error {
 			"code":    http.StatusOK,
 			"message": "Database connected successfully",
 		})
+	case _const.CoreDB:
+		driver, err := bbolt.GetBBoltDriver(a.Cfg, &models.DriverCredentials{
+			Engine: req.Type,
+			File:   req.File,
+		})
+		if err != nil {
+			return c.JSON(http.StatusInternalServerError, &models.HttpResponse{
+				Message: err.Error(),
+				Code:    http.StatusInternalServerError,
+			})
+		}
+		err = driver.Ping()
+		if err != nil {
+			return c.JSON(http.StatusInternalServerError, &models.HttpResponse{
+				Message: err.Error(),
+				Code:    http.StatusInternalServerError,
+			})
+		}
 	default:
 		return c.JSON(http.StatusBadRequest, &models.HttpResponse{
 			Message: "Invalid database type",

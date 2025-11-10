@@ -23,17 +23,8 @@ var _ interfaces.KeyValueServiceInterface = (*KVBoltService)(nil)
 
 func GetKVBoltDriver(cfg *models.Config) (*KVBoltService, error) {
 	// Determine database path
-	var dbPath string
-	if cfg.KVStorageEngineDatabase != "" {
-		dbPath = cfg.KVStorageEngineDatabase
-	} else {
-		// Expand home directory and create default path
-		homeDir, err := os.UserHomeDir()
-		if err != nil {
-			return nil, fmt.Errorf("failed to get user home directory: %w", err)
-		}
-		dbPath = filepath.Join(homeDir, ".apito", "engine-data", "apito_kv.db")
-	}
+
+	dbPath := filepath.Join(cfg.DefaultDatabaseDir, cfg.KVStorageEngineDatabase)
 
 	// Expand path (handles ~ and converts to absolute path)
 	var err error

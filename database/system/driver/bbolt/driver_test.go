@@ -20,7 +20,7 @@ func TestProBBoltSystemDriver_Basic(t *testing.T) {
 	}
 
 	// Create the BBolt driver
-	driver, err := GetSystemBBoltDriver(driverCred, nil)
+	driver, err := GetSystemBBoltDriver(nil, driverCred, nil)
 	if err != nil {
 		t.Fatalf("Failed to create BBolt driver: %v", err)
 	}
@@ -150,7 +150,7 @@ func TestProBBoltSystemDriver_Migration(t *testing.T) {
 	}
 
 	// Create the BBolt driver
-	driver, err := GetSystemBBoltDriver(driverCred, nil)
+	driver, err := GetSystemBBoltDriver(nil, driverCred, nil)
 	if err != nil {
 		t.Fatalf("Failed to create BBolt driver: %v", err)
 	}
@@ -166,9 +166,9 @@ func TestProBBoltSystemDriver_Migration(t *testing.T) {
 }
 
 func TestDirectoryCreation(t *testing.T) {
-	// Test with nested directory path similar to ~/.apito/engine-data/apito_system.db
+	// Test with nested directory path similar to ~/.apito/db/apito_system.db
 	tmpDir := "/tmp/test_apito_nested"
-	dbPath := filepath.Join(tmpDir, "engine-data", "apito_system.db")
+	dbPath := filepath.Join(tmpDir, "db", "apito_system.db")
 
 	// Cleanup
 	defer os.RemoveAll(tmpDir)
@@ -179,7 +179,7 @@ func TestDirectoryCreation(t *testing.T) {
 	}
 
 	// This should create the nested directories and open the database
-	driver, err := GetSystemBBoltDriver(driverCred, nil)
+	driver, err := GetSystemBBoltDriver(nil, driverCred, nil)
 	if err != nil {
 		t.Fatalf("Failed to create BBolt driver with nested path: %v", err)
 	}
@@ -199,8 +199,8 @@ func TestDirectoryCreation(t *testing.T) {
 }
 
 func TestTildeExpansion(t *testing.T) {
-	// Test with tilde path similar to ~/.apito/engine-data/apito_system.db
-	dbPath := "~/.apito-test/engine-data/apito_system.db"
+	// Test with tilde path similar to ~/.apito/db/apito_system.db
+	dbPath := "~/.apito-test/db/apito_system.db"
 
 	// Get home directory for cleanup
 	homeDir, err := os.UserHomeDir()
@@ -218,14 +218,14 @@ func TestTildeExpansion(t *testing.T) {
 	}
 
 	// This should expand the tilde and create the directories
-	driver, err := GetSystemBBoltDriver(driverCred, nil)
+	driver, err := GetSystemBBoltDriver(nil, driverCred, nil)
 	if err != nil {
 		t.Fatalf("Failed to create BBolt driver with tilde path: %v", err)
 	}
 	defer driver.Close()
 
 	// Verify that the expanded directory was created
-	expectedPath := filepath.Join(homeDir, ".apito-test", "engine-data", "apito_system.db")
+	expectedPath := filepath.Join(homeDir, ".apito-test", "db", "apito_system.db")
 	if _, err := os.Stat(filepath.Dir(expectedPath)); os.IsNotExist(err) {
 		t.Error("Expanded directory was not created")
 	}

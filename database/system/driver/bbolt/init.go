@@ -36,11 +36,8 @@ type MigrationStatus struct {
 	UpdatedAt string `json:"updated_at"`
 }
 
-func GetSystemBBoltDriver(driverCred *models.DriverCredentials, cacheDriver oci.CacheDBInterface) (*ProBBoltSystemDriver, error) {
-	dbPath := driverCred.Database
-	if dbPath == "" {
-		dbPath = "~/.apito/engine-data/apito_system.db" // default database file
-	}
+func GetSystemBBoltDriver(cfg *models.Config, driverCred *models.DriverCredentials, cacheDriver oci.CacheDBInterface) (*ProBBoltSystemDriver, error) {
+	dbPath := filepath.Join(cfg.DefaultDatabaseDir, cfg.SystemDBName)
 
 	// Expand path (handles ~ and converts to absolute path)
 	var err error

@@ -255,8 +255,3 @@ func (c *CacheDriver) getFromCollection(ctx context.Context, collectionName, key
 func (c *CacheDriver) appCacheKey(projectID string) string {
 	return fmt.Sprintf("appcache:%s", projectID)
 }
-
-// idMaker generates a key (for compatibility with badger driver)
-func (c *CacheDriver) idMaker(projectID string) string {
-	return projectID
-}

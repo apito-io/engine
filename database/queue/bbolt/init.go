@@ -28,18 +28,8 @@ var _ interfaces.QueueEngineInterface = (*BoltQueueService)(nil)
 func GetBoltQueueDriver(cfg *models.Config) (*BoltQueueService, error) {
 	logger := watermill.NewStdLogger(false, false)
 
-	// Use system database path as base for queue database
-	var dbPath string
-	if cfg.QueueStorageEngineDatabase != "" {
-		dbPath = cfg.QueueStorageEngineDatabase
-	} else {
-		// Expand home directory and create default path
-		homeDir, err := os.UserHomeDir()
-		if err != nil {
-			return nil, fmt.Errorf("failed to get user home directory: %w", err)
-		}
-		dbPath = filepath.Join(homeDir, ".apito", "engine-data", "apito_queue.db")
-	}
+	// Expand home directory and create default path
+	dbPath := filepath.Join(cfg.DefaultDatabaseDir, cfg.QueueStorageEngineDatabase)
 
 	// Expand path (handles ~ and converts to absolute path)
 	var err error
