@@ -130,8 +130,6 @@ func (a *authCtrl) ProjectCreation(c echo.Context) error {
 		})
 	}
 
-
-
 	if val, ok := dbConfig["host"]; ok && val != nil {
 		project.Driver.Host = val.(string)
 	}

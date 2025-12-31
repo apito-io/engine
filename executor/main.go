@@ -139,6 +139,11 @@ func (s *GraphQLExecutor) GetDataLoaders(ctx context.Context) (*models.DataLoade
 	return s.Dataloaders, nil
 }
 
+// GetConnectionManager returns the connection manager instance
+func (s *GraphQLExecutor) GetConnectionManager() *database.ConnectionManager {
+	return s.connectionManager
+}
+
 func (s *GraphQLExecutor) HandleMediaURL(ctx context.Context, media map[string]interface{}) (interface{}, error) {
 	var fileDetails models.FileDetails
 	if imageUrl, ok := media["url"].(string); ok && imageUrl != "" { // if it's a string then it's from user api

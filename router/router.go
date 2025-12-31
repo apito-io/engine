@@ -7,6 +7,8 @@ import (
 	"strings"
 
 	"github.com/apito-io/engine/controller"
+	"github.com/apito-io/engine/database"
+
 	//"github.com/apito-io/engine/controller/middleware"
 	"github.com/apito-io/engine/models"
 	"github.com/apito-io/engine/resolver"
@@ -118,6 +120,20 @@ func InitRouter(cfg *models.Config) (*echo.Echo, error) {
 	// Store the monitor in the server for later access (optional)
 	server.SetPluginMonitor(pluginMonitor)
 
+	fmt.Println(" ---> initializing connection pool monitor <--- ")
+	// Create and start connection pool monitoring
+	concreteServer := server.GetConcreteServer().(*resolver.GraphQLServer)
+	connectionManager := concreteServer.GetConnectionManager()
+	if connectionManager != nil {
+		connectionMonitor := database.NewConnectionMonitor(connectionManager)
+		go func() {
+			connectionMonitor.StartMonitoring(ctx)
+		}()
+		concreteServer.SetConnectionMonitor(connectionMonitor)
+	} else {
+		fmt.Println("⚠️ [CONNECTION-MONITOR] Connection manager not available, skipping monitor setup")
+	}
+
 	fmt.Println(" ---> initializing goroutine monitor <--- ")
 	// Create and start goroutine monitoring
 	goroutineMonitor := utility.NewGoroutineMonitor()
@@ -200,7 +216,7 @@ func InitRouter(cfg *models.Config) (*echo.Echo, error) {
 
 		databaseRoutes := systemRoutes.Group("/database")
 		{
-	
+
 			databaseRoutes.POST("/check", authCtrl.DatabaseCheck)
 		}
 

@@ -13,6 +13,7 @@ import (
 
 	"github.com/ThreeDotsLabs/watermill/message"
 	_const "github.com/apito-io/engine/const"
+	"github.com/apito-io/engine/database"
 	"github.com/apito-io/engine/database/cache"
 	"github.com/apito-io/engine/database/kv"
 	"github.com/apito-io/engine/database/queue"
@@ -117,6 +118,9 @@ type GraphQLServer struct {
 	HashiCorpPluginCache map[string]*models.HashiCorpPluginCache
 	PluginLoadingState   map[string]bool // Track which plugins are currently being loaded
 	PluginMonitor        *PluginMonitor  // Health monitoring and auto-restart for plugins
+
+	// Connection pool monitoring
+	ConnectionMonitor *database.ConnectionMonitor // Health monitoring for database connections
 
 	InstalledPluginList   []string
 	InstalledHCPluginList []string
@@ -1140,6 +1144,24 @@ func (s *GraphQLServer) SetPluginMonitor(monitor interface{}) {
 	if pm, ok := monitor.(*PluginMonitor); ok {
 		s.PluginMonitor = pm
 	}
+}
+
+// SetConnectionMonitor sets the connection monitor
+func (s *GraphQLServer) SetConnectionMonitor(monitor *database.ConnectionMonitor) {
+	s.ConnectionMonitor = monitor
+}
+
+// GetConnectionMonitor returns the connection monitor
+func (s *GraphQLServer) GetConnectionMonitor() *database.ConnectionMonitor {
+	return s.ConnectionMonitor
+}
+
+// GetConnectionManager returns the connection manager from the executor
+func (s *GraphQLServer) GetConnectionManager() *database.ConnectionManager {
+	if exec, ok := s.GraphQLExecutor.(*executor.GraphQLExecutor); ok {
+		return exec.GetConnectionManager()
+	}
+	return nil
 }
 
 // GetConcreteServer returns the concrete server instance for controller compatibility
