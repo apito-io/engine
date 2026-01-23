@@ -8,7 +8,7 @@ import (
 	"github.com/apito-io/engine/models"
 	"github.com/apito-io/engine/utility"
 	"github.com/k3a/html2text"
-	"github.com/tailor-inc/graphql"
+	"github.com/tailor-platform/graphql"
 )
 
 func (g *GraphCtrl) GetGraphQLAggregateField(name string, field *models.FieldInfo, update bool) *graphql.Field {

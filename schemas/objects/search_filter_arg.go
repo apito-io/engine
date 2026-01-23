@@ -2,10 +2,11 @@ package objects
 
 import (
 	"fmt"
+	"strings"
+
 	"github.com/apito-io/engine/models"
 	"github.com/apito-io/engine/schemas/enums"
-	"github.com/tailor-inc/graphql"
-	"strings"
+	"github.com/tailor-platform/graphql"
 )
 
 func BuildFilterArgument(localEnum *graphql.Enum, name string, connectionArgs *graphql.InputObject, whereArgs graphql.InputObjectConfigFieldMap, whereConnectionArgs *graphql.InputObject, sortArgs graphql.InputObjectConfigFieldMap) graphql.FieldConfigArgument {

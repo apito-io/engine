@@ -1,6 +1,6 @@
 package scaler
 
-import "github.com/tailor-inc/graphql"
+import "github.com/tailor-platform/graphql"
 
 var UpdateModelTypeEnum = graphql.NewEnum(graphql.EnumConfig{
 	Name: "UpdateModelTypeEnum",

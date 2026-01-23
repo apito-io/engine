@@ -11,7 +11,7 @@ import (
 	"github.com/apito-io/engine/models"
 	"github.com/apito-io/types"
 	hcplugin "github.com/hashicorp/go-plugin"
-	"github.com/tailor-inc/graphql"
+	"github.com/tailor-platform/graphql"
 )
 
 func (s *GraphQLServer) HandleApitoFunction(ctx context.Context, cache *models.ApplicationCache, fnName string, args map[string]interface{}) (interface{}, *models.ApitoFunction, error) {

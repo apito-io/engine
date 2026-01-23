@@ -6,7 +6,7 @@ import (
 	"github.com/ThreeDotsLabs/watermill/message"
 	"github.com/apito-io/engine/models"
 	"github.com/labstack/echo/v4"
-	"github.com/tailor-inc/graphql"
+	"github.com/tailor-platform/graphql"
 )
 
 func (s *GraphQLServer) SendEvent(p graphql.ResolveParams) (interface{}, error) {

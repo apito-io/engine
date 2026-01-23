@@ -9,10 +9,10 @@ require (
 	github.com/ThreeDotsLabs/watermill v1.5.0
 	github.com/ThreeDotsLabs/watermill-bolt v1.2.1
 	github.com/ThreeDotsLabs/watermill-redisstream v1.4.4
-	github.com/apito-cms/wsgraphql v1.5.3
 	github.com/apito-io/apitoBolt v0.1.1
 	github.com/apito-io/oas v1.2.3
 	github.com/apito-io/types v0.1.4
+	github.com/apito-io/wsgraphql v1.5.4
 	github.com/aws/aws-sdk-go-v2 v1.36.5
 	github.com/aws/aws-sdk-go-v2/config v1.29.17
 	github.com/aws/aws-sdk-go-v2/credentials v1.17.70
@@ -51,7 +51,7 @@ require (
 	github.com/rabbitmq/amqp091-go v1.10.0
 	github.com/redis/go-redis/v9 v9.12.1
 	github.com/sirupsen/logrus v1.9.3
-	github.com/tailor-inc/graphql v0.5.7
+	github.com/tailor-platform/graphql v0.6.0
 	github.com/teivah/onecontext v1.3.0
 	github.com/tomogoma/go-api-guard v0.0.0-20180312041446-a2bad766ec64
 	github.com/tomogoma/go-typed-errors v0.0.0-20181222204503-0532faf740be

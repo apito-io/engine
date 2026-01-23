@@ -17,10 +17,11 @@ import (
 
 // RedisQueueService implements QueueEngineInterface using Watermill RedisStream
 type RedisQueueService struct {
-	publisher  message.Publisher
-	subscriber message.Subscriber
-	logger     watermill.LoggerAdapter
-	client     *redis.Client
+	publisher     message.Publisher
+	subscriber    message.Subscriber
+	logger        watermill.LoggerAdapter
+	client        *redis.Client
+	consumerGroup string
 }
 
 // Ensure RedisQueueService implements QueueEngineInterface
@@ -52,12 +53,14 @@ func GetRedisQueueDriver(cfg *models.Config) (*RedisQueueService, error) {
 		return nil, fmt.Errorf("failed to create redis publisher: %w", err)
 	}
 
+	consumerGroup := "apito-consumer-group"
+
 	// Create Redis Stream Subscriber
 	subscriber, err := redisstream.NewSubscriber(
 		redisstream.SubscriberConfig{
 			Client:        client,
 			Unmarshaller:  redisstream.DefaultMarshallerUnmarshaller{},
-			ConsumerGroup: "apito-consumer-group",
+			ConsumerGroup: consumerGroup,
 		},
 		logger,
 	)
@@ -66,9 +69,10 @@ func GetRedisQueueDriver(cfg *models.Config) (*RedisQueueService, error) {
 	}
 
 	return &RedisQueueService{
-		publisher:  publisher,
-		subscriber: subscriber,
-		logger:     logger,
-		client:     client,
+		publisher:     publisher,
+		subscriber:    subscriber,
+		logger:        logger,
+		client:        client,
+		consumerGroup: consumerGroup,
 	}, nil
 }

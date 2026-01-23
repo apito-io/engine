@@ -2,7 +2,7 @@ package args
 
 import (
 	"github.com/apito-io/engine/schemas/enums"
-	"github.com/tailor-inc/graphql"
+	"github.com/tailor-platform/graphql"
 )
 
 var FilterArg = &graphql.ArgumentConfig{

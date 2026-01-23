@@ -3,16 +3,18 @@ package scaler
 import (
 	"fmt"
 	"strconv"
+	"unsafe"
 
 	"github.com/apito-io/engine/models"
-	"github.com/tailor-inc/graphql"
-	"github.com/tailor-inc/graphql/language/ast"
+	"github.com/tailor-platform/graphql"
+	"github.com/tailor-platform/graphql/language/ast"
 )
-
-type CustomParseLiteral func(valueAST ast.Value) interface{}
 
 // ScalarJSONWithRequest is a custom scalar type for JSON object
 func ScalarJSONWithRequest(name string, incomingReq *models.GraphQLIncomingRequest) *graphql.Scalar {
+	parseFn := func(valueAST ast.Value) interface{} {
+		return customParseLiteral(incomingReq)(valueAST)
+	}
 	return graphql.NewScalar(graphql.ScalarConfig{
 		Name:        name + "_JSONArgument",
 		Description: "খাটি JSON object, key:value pair",
@@ -22,22 +24,27 @@ func ScalarJSONWithRequest(name string, incomingReq *models.GraphQLIncomingReque
 		ParseValue: func(value interface{}) interface{} {
 			return value
 		},
-		ParseLiteral: graphql.ParseLiteralFn(customParseLiteral(incomingReq)),
+		ParseLiteral: *(*graphql.ParseLiteralFn)(unsafe.Pointer(&parseFn)),
 	})
 }
 
 // ScalarJSON is a custom scalar type for JSON object
-var ScalarJSON = graphql.NewScalar(graphql.ScalarConfig{
-	Name:        "JSON",
-	Description: "খাটি JSON object, key:value pair",
-	Serialize: func(value interface{}) interface{} {
-		return value
-	},
-	ParseValue: func(value interface{}) interface{} {
-		return value
-	},
-	ParseLiteral: graphql.ParseLiteralFn(customParseLiteral(nil)),
-})
+var ScalarJSON = func() *graphql.Scalar {
+	parseFn := func(valueAST ast.Value) interface{} {
+		return customParseLiteral(nil)(valueAST)
+	}
+	return graphql.NewScalar(graphql.ScalarConfig{
+		Name:        "JSON",
+		Description: "খাটি JSON object, key:value pair",
+		Serialize: func(value interface{}) interface{} {
+			return value
+		},
+		ParseValue: func(value interface{}) interface{} {
+			return value
+		},
+		ParseLiteral: *(*graphql.ParseLiteralFn)(unsafe.Pointer(&parseFn)),
+	})
+}()
 
 // ScalarJSONArray is a custom scalar type for JSON array with mixed types
 var ScalarJSONArray = graphql.NewScalar(graphql.ScalarConfig{
@@ -49,10 +56,13 @@ var ScalarJSONArray = graphql.NewScalar(graphql.ScalarConfig{
 	ParseValue: func(value interface{}) interface{} {
 		return value
 	},
-	ParseLiteral: graphql.ParseLiteralFn(customParseArrayLiteral),
+	ParseLiteral: func() graphql.ParseLiteralFn {
+		parseFn := customParseArrayLiteral
+		return *(*graphql.ParseLiteralFn)(unsafe.Pointer(&parseFn))
+	}(),
 })
 
-func customParseLiteral(req *models.GraphQLIncomingRequest) CustomParseLiteral {
+func customParseLiteral(req *models.GraphQLIncomingRequest) func(valueAST ast.Value) interface{} {
 	return func(valueAST ast.Value) interface{} {
 		switch valueAST := valueAST.(type) {
 		case *ast.ObjectValue:

@@ -22,7 +22,7 @@ import (
 	"github.com/hashicorp/go-hclog"
 	hcplugin "github.com/hashicorp/go-plugin"
 	"github.com/labstack/echo/v4"
-	"github.com/tailor-inc/graphql"
+	"github.com/tailor-platform/graphql"
 	"google.golang.org/protobuf/types/known/structpb"
 )
 
@@ -964,8 +964,14 @@ func (s *GraphQLServer) LoadProjectSpecificPlugins(ctx context.Context, cache *m
 	// Collect enabled HashiCorp plugins
 	var enabledPlugins []*protobuff.PluginDetails
 	for _, pluginDetails := range project.Plugins {
-		if pluginDetails.Enable && strings.HasPrefix(pluginDetails.Id, "hc-") {
-			enabledPlugins = append(enabledPlugins, pluginDetails)
+		if pluginDetails.Enable && strings.HasPrefix(pluginDetails.ID, "hc-") {
+			enabledPlugins = append(enabledPlugins, &protobuff.PluginDetails{
+				Id:             pluginDetails.ID,
+				EnvVars:        pluginDetails.EnvVars,
+				ActivateStatus: pluginDetails.ActivateStatus,
+				LoadStatus:     pluginDetails.LoadStatus,
+				Enable:         pluginDetails.Enable,
+			})
 		}
 	}
 

@@ -6,7 +6,7 @@ import (
 	"github.com/apito-io/engine/schemas/args"
 	"github.com/apito-io/engine/schemas/enums"
 	"github.com/apito-io/engine/schemas/objects"
-	"github.com/tailor-inc/graphql"
+	"github.com/tailor-platform/graphql"
 )
 
 func (s *GraphQLServer) BuildServerQueriesAndMutations() {
@@ -190,7 +190,7 @@ func (s *GraphQLServer) BuildServerQueriesAndMutations() {
 					}),
 				},
 			},
-			Resolve: s.ProjectsPlugins,
+			Resolve: s.SystemPlugins,
 		},
 		/*		"listModelData": &graphql.Field{
 				Name: "ListAllDataOfAModel",
@@ -663,7 +663,7 @@ func (s *GraphQLServer) BuildServerQueriesAndMutations() {
 			Args: graphql.FieldConfigArgument{
 				"id": &graphql.ArgumentConfig{
 					Type: graphql.NewNonNull(graphql.String),
-				},
+				},/* 
 				"type": &graphql.ArgumentConfig{
 					Type: enums.PluginTypeEnums,
 				},
@@ -684,35 +684,7 @@ func (s *GraphQLServer) BuildServerQueriesAndMutations() {
 				},
 				"exported_variable": &graphql.ArgumentConfig{
 					Type: graphql.String,
-				},
-				/*							"credentials": &graphql.InputObjectFieldConfig{
-											Type: graphql.NewInputObject(graphql.InputObjectConfig{
-												Name: "PluginCredentialsPayload",
-												Fields: graphql.InputObjectConfigFieldMap{
-													"account_id": &graphql.InputObjectFieldConfig{
-														Type: graphql.String,
-													},
-													"access_key": &graphql.InputObjectFieldConfig{
-														Type: graphql.String,
-													},
-													"secret_key": &graphql.InputObjectFieldConfig{
-														Type: graphql.String,
-													},
-													"api_key": &graphql.InputObjectFieldConfig{
-														Type: graphql.String,
-													},
-													"region": &graphql.InputObjectFieldConfig{
-														Type: graphql.String,
-													},
-													"url": &graphql.InputObjectFieldConfig{
-														Type: graphql.String,
-													},
-													"env": &graphql.InputObjectFieldConfig{
-														Type: graphql.String,
-													},
-												},
-											}),
-										},*/
+				}, */
 				"env_vars": &graphql.ArgumentConfig{
 					Type: graphql.NewList(graphql.NewInputObject(graphql.InputObjectConfig{
 						Name: "PluginConfigEnvVarsPayload",
@@ -728,15 +700,6 @@ func (s *GraphQLServer) BuildServerQueriesAndMutations() {
 				},
 				"enable": &graphql.ArgumentConfig{
 					Type: graphql.Boolean,
-				},
-				"repository_url": &graphql.ArgumentConfig{
-					Type: graphql.String,
-				},
-				"branch": &graphql.ArgumentConfig{
-					Type: graphql.String,
-				},
-				"author": &graphql.ArgumentConfig{
-					Type: graphql.String,
 				},
 				"activate_status": &graphql.ArgumentConfig{
 					Type: enums.PluginActivationType,

@@ -14,7 +14,7 @@ import (
 	"github.com/apito-io/engine/utility"
 	"github.com/apito-io/types"
 	"github.com/graph-gophers/dataloader"
-	"github.com/tailor-inc/graphql"
+	"github.com/tailor-platform/graphql"
 	"github.com/teivah/onecontext"
 	"github.com/vektah/gqlparser/v2/ast"
 )

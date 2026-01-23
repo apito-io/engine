@@ -7,7 +7,7 @@ import (
 	"github.com/apito-io/engine/utility"
 	"github.com/apito-io/types"
 	"github.com/graph-gophers/dataloader"
-	"github.com/tailor-inc/graphql"
+	"github.com/tailor-platform/graphql"
 )
 
 func (s *SchemaObjects) GetAuditLogObject(systemUserObj, projectDetailsObj *graphql.Object) *graphql.Object {
@@ -75,7 +75,7 @@ func (s *SchemaObjects) GetSystemUserObject(prefix string) *graphql.Object {
 			"project_user":               &graphql.Field{Type: graphql.Boolean},
 			"administrative_permissions": &graphql.Field{Type: graphql.NewList(graphql.String)},
 
-			"is_admin":       &graphql.Field{Type: graphql.Boolean},
+			"is_admin": &graphql.Field{Type: graphql.Boolean},
 
 			"read_only_project":      &graphql.Field{Type: graphql.Boolean},
 			"project_limit":          &graphql.Field{Type: graphql.Int},

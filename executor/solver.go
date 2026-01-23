@@ -18,7 +18,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/graph-gophers/dataloader/v7"
 	"github.com/liangyaopei/structmap"
-	"github.com/tailor-inc/graphql"
+	"github.com/tailor-platform/graphql"
 	"github.com/vektah/gqlparser/v2/ast"
 	"golang.org/x/crypto/bcrypt"
 )

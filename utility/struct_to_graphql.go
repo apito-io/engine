@@ -7,7 +7,7 @@ import (
 	"strings"
 
 	"github.com/apito-io/engine/scaler"
-	"github.com/tailor-inc/graphql"
+	"github.com/tailor-platform/graphql"
 )
 
 // GetGraphQLObject Converts struct into graphql object

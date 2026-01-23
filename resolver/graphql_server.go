@@ -31,7 +31,7 @@ import (
 	"github.com/edwingeng/hotswap"
 	svg "github.com/h2non/go-is-svg"
 	"github.com/labstack/echo/v4"
-	"github.com/tailor-inc/graphql"
+	"github.com/tailor-platform/graphql"
 	"gopkg.in/h2non/filetype.v1"
 )
 

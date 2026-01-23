@@ -16,7 +16,7 @@ import (
 	"github.com/elliotchance/pie/pie"
 	"github.com/labstack/echo/v4"
 	graphqlClient "github.com/machinebox/graphql"
-	"github.com/tailor-inc/graphql"
+	"github.com/tailor-platform/graphql"
 )
 
 /*func (s *GraphQLServer) SwitchProjectResolverFn(p graphql.ResolveParams) (interface{}, error) {
@@ -528,22 +528,20 @@ func (s *GraphQLServer) ProjectModelInfoResolverFn(p graphql.ResolveParams) (int
 	return modelType, nil
 }
 
-func (s *GraphQLServer) ProjectsPlugins(p graphql.ResolveParams) (interface{}, error) {
+func (s *GraphQLServer) SystemPlugins(p graphql.ResolveParams) (interface{}, error) {
 
 	s.Lock()
 	defer s.Unlock()
 
-	var (
+	/* var (
 		v      = p.Context.Value
-		router = v("router").(echo.Context)
-	)
+		//router = v("router").(echo.Context)
+	) */
 
-	cache, err := s.GetApplicationCache(router)
-	if err != nil {
-		return nil, err
-	}
-
-	project := cache.Project
+/* 	var projectID string
+	if val, ok := p.Args["_id"].(string); ok {
+		projectID = strings.TrimSpace(utility.SingularResourceName(val))
+	} */
 
 	// Load HashiCorp plugins from registry
 	_hashiCorpPlugins, err := pluginService.LoadHashiCorpPluginRegistry(s.Cfg)
@@ -554,38 +552,37 @@ func (s *GraphQLServer) ProjectsPlugins(p graphql.ResolveParams) (interface{}, e
 	// Convert map to slice
 	var _plugins []*protobuff.PluginDetails
 	for _, plugin := range _hashiCorpPlugins {
-		// Set default storage plugin activation status if needed
-		/* if plugin.Type == models.PluginType_PLUGIN_TYPE_INTERNAL && plugin.Id == project.Settings.DefaultStoragePlugin {
-			plugin.ActivateStatus = models.PluginActivateStatus_PLUGIN_ACTIVATE_STATUS_ACTIVATED
-		} */
-		_plugins = append(_plugins, plugin)
-	}
-
-	return mergePluginLists(project.Plugins, _plugins), nil
-}
-
-func mergePluginLists(projectPlugins, localPlugins []*protobuff.PluginDetails) []*protobuff.PluginDetails {
-	// Create a map to store the local plugins indexed by ID
-	localPluginMap := make(map[string]*protobuff.PluginDetails)
-	for _, plugin := range localPlugins {
-		localPluginMap[plugin.Id] = plugin
-	}
-
-	// Iterate through the project plugins
-	for _, projectPlugin := range projectPlugins {
-		// Check if the plugin exists in the local map
-		if localPlugin, ok := localPluginMap[projectPlugin.Id]; ok {
-			// Update the local plugin with the project plugin's data
-			localPlugin.EnvVars = projectPlugin.EnvVars
-			localPlugin.ActivateStatus = projectPlugin.ActivateStatus
-			localPlugin.LoadStatus = projectPlugin.LoadStatus
-		} else {
-			// If the plugin doesn't exist locally, add it to the list
-			localPlugins = append(localPlugins, projectPlugin)
+		// try to find them in the loaded plugins cache
+		if pluginCache, ok := s.HashiCorpPluginCache[plugin.Id]; ok {
+			// overwrite the plugin configurations with the loaded plugin configurations
+			_plugins = append(_plugins, pluginCache.PluginConfigurations)
+		} else{
+			_plugins = append(_plugins, plugin)
 		}
 	}
 
-	return localPlugins
+	/* // Create a map to store the local plugins indexed by ID
+	localPluginMap := make(map[string]*models.SavedPluginDetails)
+	for _, plugin := range project.Plugins {
+		localPluginMap[plugin.ID] = plugin
+	}
+
+	// Iterate through the project plugins
+	for _, projectPlugin := range project.Plugins {
+		// Check if the plugin exists in the local map
+		if localPlugin, ok := localPluginMap[projectPlugin.ID]; ok {
+			// Update the local plugin with the project plugin's data
+			localPlugin.EnvVars = projectPlugin.EnvVars
+			localPlugin.ActivateStatus = projectPlugin.ActivateStatus
+			localPlugin.Enable = projectPlugin.Enable
+			localPlugin.LoadStatus = projectPlugin.LoadStatus
+		} else {
+			// If the plugin doesn't exist locally, add it to the list
+			project.Plugins = append(project.Plugins, projectPlugin)
+		}
+	} */
+
+	return _plugins, nil
 }
 
 // deprecated

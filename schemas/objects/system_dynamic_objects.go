@@ -4,7 +4,7 @@ import (
 	"github.com/apito-io/engine/interfaces"
 	dl "github.com/apito-io/engine/resolver/dataloader"
 	"github.com/graph-gophers/dataloader"
-	"github.com/tailor-inc/graphql"
+	"github.com/tailor-platform/graphql"
 )
 
 type ObjectModels struct {

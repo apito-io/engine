@@ -224,7 +224,7 @@ func (t *ApitoTokenService) ApitoTokenHandler(next echo.HandlerFunc) echo.Handle
 
 		useCookies := ctx.Request().Header.Get("X-Use-Cookies")
 		apitoKey := ctx.Request().Header.Get("X-Apito-Key")
-		syncKey := ctx.Request().Header.Get("X-Apito-Sync-Key")
+		syncKey := ctx.Request().Header.Get("X-Apito-Sync-Key")		
 		if apitoKey != "" || ((requestPath == "/secured/graphql" || requestPath == "/secured/graphql/v2") || strings.HasPrefix(requestPath, "/secured/rest/") || strings.HasPrefix(requestPath, "/secured/upload/file")) && useCookies == "" {
 			var token *string
 			if apitoKey != "" {
@@ -258,7 +258,7 @@ func (t *ApitoTokenService) ApitoTokenHandler(next echo.HandlerFunc) echo.Handle
 
 		} else if useCookies == "false" || syncKey != "" {
 			var verifiedToken *models.TokenClaims
-			if strings.HasPrefix(syncKey, "cl-") {
+			if strings.HasPrefix(syncKey, "cli-") {
 				verifiedToken, err = t.syncKeyManager.ValidateSyncTokenOptimized(ctx.Request().Context(), syncKey)
 				if err != nil {
 					return ctx.JSON(http.StatusForbidden, map[string]interface{}{"message": ae.InvalidToken})

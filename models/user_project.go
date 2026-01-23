@@ -50,7 +50,7 @@ type SystemUser struct {
 	ProjectAssignedRole      string   `json:"project_assigned_role,omitempty" bson:"project_assigned_role,omitempty"`
 	ProjectAccessPermissions []string `json:"project_access_permissions,omitempty" bson:"project_access_permissions,omitempty"`
 
-	IsAdmin      bool `json:"is_admin,omitempty" firestore:"is_admin,omitempty" bson:"is_admin,omitempty"`
+	IsAdmin bool `json:"is_admin,omitempty" firestore:"is_admin,omitempty" bson:"is_admin,omitempty"`
 
 	RefreshToken    string `json:"refresh_token,omitempty" firestore:"refresh_token,omitempty" bson:"refresh_token,omitempty"`
 	AccessToken     string `json:"access_token,omitempty" firestore:"access_token,omitempty" bson:"access_token,omitempty"`
@@ -62,7 +62,7 @@ type SystemUser struct {
 
 	IsPaymentDue bool `json:"is_payment_due,omitempty" firestore:"is_payment_due,omitempty" bson:"is_payment_due,omitempty"`
 
-	SyncTokens []*SyncToken   `bun:"rel:has-many" json:"sync_tokens,omitempty" firestore:"sync_tokens,omitempty" bson:"sync_tokens,omitempty"`
+	SyncTokens []*SyncToken `bun:"rel:has-many" json:"sync_tokens,omitempty" firestore:"sync_tokens,omitempty" bson:"sync_tokens,omitempty"`
 
 	DefaultTeam         *Team         `bun:"rel:belongs-to,join:default_team_id=team_id" json:"default_team,omitempty" firestore:"default_team,omitempty" bson:"default_team,omitempty"`
 	DefaultOrganization *Organization `bun:"rel:belongs-to,join:default_org_id=org_id" json:"default_organization,omitempty" firestore:"default_organization,omitempty" bson:"default_organization,omitempty"`
@@ -86,21 +86,29 @@ type ProjectSettings struct {
 	DefaultLocale string `json:"default_locale,omitempty" firestore:"default_locale,omitempty" bson:"default_locale,omitempty"`
 }
 
+type SavedPluginDetails struct {
+	ID             string                         `json:"id,omitempty" firestore:"id,omitempty" bson:"id,omitempty"`
+	EnvVars        []*protobuff.EnvVariable       `json:"env_vars,omitempty" firestore:"env_vars,omitempty" bson:"env_vars,omitempty"`
+	ActivateStatus protobuff.PluginActivateStatus `json:"activate_status,omitempty" firestore:"activate_status,omitempty" bson:"activate_status,omitempty"`
+	LoadStatus     protobuff.PluginLoadStatus     `json:"load_status,omitempty" firestore:"load_status,omitempty" bson:"load_status,omitempty"`
+	Enable         bool                           `json:"enable,omitempty" firestore:"enable,omitempty" bson:"enable,omitempty"`
+}
+
 // Project user project
 type Project struct {
 	XKey string `json:"_key,omitempty" firestore:"_key,omitempty" bson:"_key,omitempty"`
 	ID   string `bun:"type:uuid,pk" json:"id,omitempty" firestore:"id,omitempty" bson:"_id,omitempty"`
 
-	Name        string                     `json:"name,omitempty" firestore:"name,omitempty" bson:"name,omitempty"`
-	Description string                     `json:"description,omitempty" firestore:"description,omitempty" bson:"description,omitempty"`
-	Schema      *ProjectSchema             `bun:"rel:belongs-to,join:id=project_id" json:"schema,omitempty" firestore:"schema,omitempty" bson:"schema,omitempty"`
-	CreatedAt   string                     `json:"created_at,omitempty" firestore:"created_at,omitempty" bson:"created_at,omitempty"`
-	UpdatedAt   string                     `json:"updated_at,omitempty" firestore:"updated_at,omitempty" bson:"updated_at,omitempty"`
-	ExpireAt    string                     `json:"expire_at,omitempty" firestore:"expire_at,omitempty" bson:"expire_at,omitempty"`
-	Plugins     []*protobuff.PluginDetails `bun:"rel:has-many" json:"plugins,omitempty" firestore:"plugins,omitempty" bson:"plugins,omitempty"`
-	Settings    *ProjectSettings           `bun:"rel:belongs-to,join:id=project_id" json:"settings,omitempty"  firestore:"settings,omitempty" bson:"settings,omitempty"`
+	Name        string                `json:"name,omitempty" firestore:"name,omitempty" bson:"name,omitempty"`
+	Description string                `json:"description,omitempty" firestore:"description,omitempty" bson:"description,omitempty"`
+	Schema      *ProjectSchema        `bun:"rel:belongs-to,join:id=project_id" json:"schema,omitempty" firestore:"schema,omitempty" bson:"schema,omitempty"`
+	CreatedAt   string                `json:"created_at,omitempty" firestore:"created_at,omitempty" bson:"created_at,omitempty"`
+	UpdatedAt   string                `json:"updated_at,omitempty" firestore:"updated_at,omitempty" bson:"updated_at,omitempty"`
+	ExpireAt    string                `json:"expire_at,omitempty" firestore:"expire_at,omitempty" bson:"expire_at,omitempty"`
+	Plugins     []*SavedPluginDetails `bun:"rel:has-many" json:"plugins,omitempty" firestore:"plugins,omitempty" bson:"plugins,omitempty"`
+	Settings    *ProjectSettings      `bun:"rel:belongs-to,join:id=project_id" json:"settings,omitempty"  firestore:"settings,omitempty" bson:"settings,omitempty"`
 
-	Tokens  []*ProjectToken `bun:"rel:has-many" json:"tokens,omitempty" firestore:"tokens,omitempty" bson:"tokens,omitempty"`
+	Tokens []*ProjectToken `bun:"rel:has-many" json:"tokens,omitempty" firestore:"tokens,omitempty" bson:"tokens,omitempty"`
 
 	Roles      map[string]*Role   `bun:"type:jsonb" json:"roles,omitempty" protobuf_key:"bytes,1,opt,name=key,proto3" protobuf_val:"bytes,2,opt,name=value,proto3" firestore:"roles,omitempty" bson:"roles,omitempty"`
 	Driver     *DriverCredentials `bun:"rel:belongs-to,join:id=project_id" json:"driver,omitempty"  firestore:"driver,omitempty" bson:"driver,omitempty"`
@@ -115,7 +123,7 @@ type Project struct {
 
 	SystemMessages []*SystemMessage `bun:"rel:has-many" json:"system_messages,omitempty" firestore:"system_messages,omitempty" bson:"system_messages,omitempty"`
 	Workspaces     []*Workspace     `bun:"rel:has-many" json:"workspaces,omitempty" firestore:"workspaces,omitempty" bson:"workspaces,omitempty"`
-	
+
 	// for sync
 	SyncedProperty *SyncProject `bun:"rel:belongs-to,join:id=project_id" json:"synced_property,omitempty" firestore:"synced_property,omitempty" bson:"synced_property,omitempty"`
 

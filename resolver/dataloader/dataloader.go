@@ -3,13 +3,14 @@ package dataloader
 import (
 	"context"
 	"errors"
+
 	"github.com/apito-io/engine/interfaces"
 	"github.com/apito-io/engine/models"
 	"github.com/apito-io/engine/utility"
 	"github.com/graph-gophers/dataloader"
 	"github.com/labstack/echo/v4"
 	"github.com/sirupsen/logrus"
-	"github.com/tailor-inc/graphql"
+	"github.com/tailor-platform/graphql"
 )
 
 type SystemDataloader struct {

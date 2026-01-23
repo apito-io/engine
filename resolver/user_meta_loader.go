@@ -6,7 +6,7 @@ import (
 	"github.com/apito-io/engine/models"
 	"github.com/apito-io/types"
 	"github.com/graph-gophers/dataloader"
-	"github.com/tailor-inc/graphql"
+	"github.com/tailor-platform/graphql"
 )
 
 func (s *GraphQLServer) SystemUserMetaLoader(ctx context.Context, keys dataloader.Keys) []*dataloader.Result {

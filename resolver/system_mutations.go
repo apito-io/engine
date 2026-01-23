@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"os/exec"
 	"regexp"
 	"strings"
 	"time"
@@ -22,7 +21,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/iancoleman/strcase"
 	"github.com/labstack/echo/v4"
-	"github.com/tailor-inc/graphql"
+	"github.com/tailor-platform/graphql"
 )
 
 func (s *GraphQLServer) GenerateTenantTokenResolverFn(p graphql.ResolveParams) (interface{}, error) {
@@ -742,14 +741,14 @@ func (s *GraphQLServer) UpdateProjectResolverFn(p graphql.ResolveParams) (interf
 		}
 	}
 
-	if plugins, ok := p.Args["plugins"].(map[string]interface{}); ok {
+/* 	if plugins, ok := p.Args["plugins"].(map[string]interface{}); ok {
 		if project.Plugins == nil {
-			project.Plugins = []*protobuff.PluginDetails{}
+			project.Plugins = []*models.SavedPluginDetails{}
 		}
 
 		switch plugins["name"] {
 		case "aws":
-			details := &protobuff.PluginDetails{
+			details := &models.SavedPluginDetails{
 				Id:          "aws",
 				Description: "Aws Lambda Functions",
 				EnvVars:     []*protobuff.EnvVariable{},
@@ -775,7 +774,7 @@ func (s *GraphQLServer) UpdateProjectResolverFn(p graphql.ResolveParams) (interf
 				}
 			}
 
-			/*// validate the creds first
+			/* validate the creds first
 			sess, err := session.NewSession(&aws.Config{
 				Region:      aws.String(details.Configs.Credentials.Region),
 				Credentials: credentials.NewStaticCredentials(details.Configs.Credentials.AccessKey, details.Configs.Credentials.SecretKey, ""),
@@ -798,12 +797,11 @@ func (s *GraphQLServer) UpdateProjectResolverFn(p graphql.ResolveParams) (interf
 				return nil, err
 			}
 
-			fmt.Printf("%s - %s\n", arn, *result.Policy.Description)*/
+			fmt.Printf("%s - %s\n", arn, *result.Policy.Description)
 
 			project.Plugins = append(project.Plugins, details)
 			break
 		case "apitofunc":
-
 			details := &protobuff.PluginDetails{
 				Id:          "apitofunc",
 				Description: "Apito Functions",
@@ -856,7 +854,7 @@ func (s *GraphQLServer) UpdateProjectResolverFn(p graphql.ResolveParams) (interf
 		default:
 			return nil, errors.New("invalid Extension Type")
 		}
-	}
+	} */
 
 	if project.ProjectSecretKey == "" {
 		project.ProjectSecretKey = utility.RandomStringGenerator(25)
@@ -869,6 +867,7 @@ func (s *GraphQLServer) UpdateProjectResolverFn(p graphql.ResolveParams) (interf
 
 	// hide the schema
 	project.Schema = nil
+
 	return project, nil
 }
 
@@ -958,11 +957,11 @@ func (s *GraphQLServer) UpsertPluginResolverFn(p graphql.ResolveParams) (interfa
 		return nil, errors.New("plugin id is required")
 	}
 
-	var _pluginDetails *protobuff.PluginDetails
+	var _pluginDetails *models.SavedPluginDetails
 
 	// First check if plugin already exists in project
 	for _, plugin := range project.Plugins {
-		if plugin.Id == id {
+		if plugin.ID == id {
 			_pluginDetails = plugin
 			break
 		}
@@ -974,9 +973,14 @@ func (s *GraphQLServer) UpsertPluginResolverFn(p graphql.ResolveParams) (interfa
 		if err != nil {
 			return nil, fmt.Errorf("failed to load HashiCorp plugin registry: %w", err)
 		}
-
 		if plugin, exists := _hashiCorpPlugins[id]; exists {
-			_pluginDetails = plugin
+			_pluginDetails = &models.SavedPluginDetails{
+				ID:             id,
+				EnvVars:        plugin.EnvVars,
+				ActivateStatus: plugin.ActivateStatus,
+				LoadStatus:     plugin.LoadStatus,
+				Enable:         plugin.Enable,
+			}
 		} else {
 			return nil, errors.New("plugin not found in HashiCorp registry")
 		}
@@ -1009,7 +1013,7 @@ func (s *GraphQLServer) UpsertPluginResolverFn(p graphql.ResolveParams) (interfa
 		project.Plugins = append(project.Plugins, _pluginDetails)
 	} else {
 		for i, plugin := range project.Plugins {
-			if plugin.Id == id {
+			if plugin.ID == id {
 				project.Plugins[i] = _pluginDetails
 				break
 			}

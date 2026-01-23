@@ -6,8 +6,8 @@ import (
 	"github.com/apito-io/engine/resolver"
 	"github.com/apito-io/engine/scaler"
 	"github.com/labstack/echo/v4"
-	"github.com/tailor-inc/graphql"
-	"github.com/tailor-inc/graphql/gqlerrors"
+	"github.com/tailor-platform/graphql"
+	"github.com/tailor-platform/graphql/gqlerrors"
 	"github.com/teivah/onecontext"
 )
 

@@ -4,7 +4,7 @@ import (
 	"fmt"
 
 	"github.com/apito-io/engine/models"
-	"github.com/tailor-inc/graphql"
+	"github.com/tailor-platform/graphql"
 )
 
 func BuildModelEnum(name string, connections []*models.ConnectionType) *graphql.Enum {

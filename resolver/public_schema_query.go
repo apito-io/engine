@@ -6,7 +6,7 @@ import (
 	ae "github.com/apito-io/engine/err"
 	"github.com/apito-io/engine/models"
 	"github.com/apito-io/engine/utility"
-	"github.com/tailor-inc/graphql"
+	"github.com/tailor-platform/graphql"
 	"github.com/vektah/gqlparser/v2/ast"
 )
 

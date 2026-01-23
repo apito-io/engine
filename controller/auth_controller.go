@@ -18,7 +18,7 @@ import (
 	"github.com/getsentry/sentry-go"
 	"github.com/ilyakaznacheev/cleanenv"
 	"github.com/labstack/echo/v4"
-	"github.com/tailor-inc/graphql"
+	"github.com/tailor-platform/graphql"
 	"golang.org/x/oauth2"
 	"golang.org/x/oauth2/github"
 	"golang.org/x/oauth2/google"

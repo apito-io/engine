@@ -6,7 +6,7 @@ import (
 
 	"github.com/apito-io/engine/models"
 	"github.com/apito-io/types"
-	"github.com/tailor-inc/graphql"
+	"github.com/tailor-platform/graphql"
 	"github.com/teivah/onecontext"
 )
 

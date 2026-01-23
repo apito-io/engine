@@ -2,6 +2,7 @@ package redis
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/ThreeDotsLabs/watermill/message"
 	"github.com/apito-io/engine/models"
@@ -12,8 +13,33 @@ func (r *RedisQueueService) Publish(topic string, messages ...*message.Message) 
 	return r.publisher.Publish(topic, messages...)
 }
 
+// ensureConsumerGroup creates the consumer group for a topic if it doesn't exist
+// This is required for Redis Streams consumer groups to work properly
+func (r *RedisQueueService) ensureConsumerGroup(ctx context.Context, topic string) error {
+	// Try to create the consumer group with MKSTREAM option using raw command
+	// This will create both the stream and the group if they don't exist
+	// Command: XGROUP CREATE stream group start [MKSTREAM]
+	err := r.client.Do(ctx, "XGROUP", "CREATE", topic, r.consumerGroup, "0", "MKSTREAM").Err()
+	if err != nil {
+		// If the group already exists, that's fine - we can ignore BUSYGROUP error
+		// Redis returns "BUSYGROUP Consumer Group name already exists" if the group exists
+		errStr := err.Error()
+		if errStr != "BUSYGROUP Consumer Group name already exists" {
+			return fmt.Errorf("failed to create consumer group for topic %s: %w", topic, err)
+		}
+		// Group already exists, which is fine
+	}
+	return nil
+}
+
 // Subscribe implements message.Subscriber interface
 func (r *RedisQueueService) Subscribe(ctx context.Context, topic string) (<-chan *message.Message, error) {
+	// Ensure the consumer group exists before subscribing
+	// This prevents the NOGROUP error
+	if err := r.ensureConsumerGroup(ctx, topic); err != nil {
+		return nil, fmt.Errorf("failed to ensure consumer group for topic %s: %w", topic, err)
+	}
+
 	return r.subscriber.Subscribe(ctx, topic)
 }
 

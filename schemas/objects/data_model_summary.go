@@ -1,6 +1,6 @@
 package objects
 
-import "github.com/tailor-inc/graphql"
+import "github.com/tailor-platform/graphql"
 
 var DatModelObject = graphql.NewObject(graphql.ObjectConfig{
 	Name: "ListModelData_preview_fields",

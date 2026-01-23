@@ -3,16 +3,16 @@ package enums
 import (
 	_const "github.com/apito-io/engine/const"
 	"github.com/apito-io/types/protobuff"
-	"github.com/tailor-inc/graphql"
+	"github.com/tailor-platform/graphql"
 )
 
 type FieldOperation string
 
 const (
-	FieldOperation_Rename    FieldOperation = "rename"
-	FieldOperation_Duplicate FieldOperation = "duplicate"
-	FieldOperation_Delete    FieldOperation = "delete"
-	FieldOperation_Move      FieldOperation = "move"
+	FieldOperation_Rename     FieldOperation = "rename"
+	FieldOperation_Duplicate  FieldOperation = "duplicate"
+	FieldOperation_Delete     FieldOperation = "delete"
+	FieldOperation_Move       FieldOperation = "move"
 	FieldOperation_ChangeType FieldOperation = "change_type"
 )
 

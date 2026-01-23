@@ -9,7 +9,7 @@ import (
 	"github.com/apito-io/engine/utility"
 	"github.com/google/uuid"
 	"github.com/labstack/echo/v4"
-	"github.com/tailor-inc/graphql"
+	"github.com/tailor-platform/graphql"
 	"golang.org/x/oauth2"
 	"google.golang.org/api/idtoken"
 )
