@@ -29,6 +29,7 @@ import (
 const PROJECT_PLUGIN_PREFIX = "plg"
 const DEFAULT_INTERNAL_PREFIX = "ext"
 
+
 // ========================================
 // ERROR HANDLING WITH HTTP STATUS CODES
 // ========================================
@@ -530,11 +531,14 @@ func (s *GraphQLServer) registerPluginSchemaAndAPIs(ctx context.Context, plugin 
 		if convertedSchemas.Queries != nil {
 			for k, v := range convertedSchemas.Queries {
 				queryKey := DEFAULT_INTERNAL_PREFIX + "_" + k
-				if val := s.SystemQueries[queryKey]; val == nil && pluginDetails.Type == protobuff.PluginType_PLUGIN_TYPE_SYSTEM {
-					fmt.Printf("--> Registering plugin schema from %s query `%s` to system schema\n", pluginDetails.Id, k)
-					s.SystemQueries[queryKey] = v
-				} else {
+				if pluginDetails.Type == protobuff.PluginType_PLUGIN_TYPE_SYSTEM {
+					if val := s.SystemQueries[queryKey]; val == nil {
+						fmt.Printf("--> Registering plugin schema from %s query `%s` to system schema\n", pluginDetails.Id, k)
+						s.SystemQueries[queryKey] = v
+						continue
+					}
 					fmt.Printf("the query '%s' on '%s' already found on another plugin. please change the id. ignoring this query\n", k, pluginDetails.Id)
+				} else {
 				}
 			}
 		}
@@ -543,11 +547,14 @@ func (s *GraphQLServer) registerPluginSchemaAndAPIs(ctx context.Context, plugin 
 		if convertedSchemas.Mutations != nil {
 			for k, v := range convertedSchemas.Mutations {
 				mutationKey := DEFAULT_INTERNAL_PREFIX + "_" + k
-				if val := s.SystemMutations[mutationKey]; val == nil && pluginDetails.Type == protobuff.PluginType_PLUGIN_TYPE_SYSTEM {
-					fmt.Printf("--> Registering plugin schema from %s mutation `%s` to system schema\n", pluginDetails.Id, k)
-					s.SystemMutations[mutationKey] = v
-				} else {
+				if pluginDetails.Type == protobuff.PluginType_PLUGIN_TYPE_SYSTEM {
+					if val := s.SystemMutations[mutationKey]; val == nil {
+						fmt.Printf("--> Registering plugin schema from %s mutation `%s` to system schema\n", pluginDetails.Id, k)
+						s.SystemMutations[mutationKey] = v
+						continue
+					}
 					fmt.Printf("the mutation '%s' on '%s' already found on another plugin. please change the id. ignoring this mutation\n", k, pluginDetails.Id)
+				} else {
 				}
 			}
 		}
@@ -960,6 +967,9 @@ func (s *GraphQLServer) LoadProjectSpecificPlugins(ctx context.Context, cache *m
 			Mutations: make(graphql.Fields),
 		}
 	}
+	if cache.PluginSchemasRegistered == nil {
+		cache.PluginSchemasRegistered = make(map[string]bool)
+	}
 
 	// Collect enabled HashiCorp plugins
 	var enabledPlugins []*protobuff.PluginDetails
@@ -987,6 +997,10 @@ func (s *GraphQLServer) LoadProjectSpecificPlugins(ctx context.Context, cache *m
 		default:
 		}
 
+		if cache.PluginSchemasRegistered[pluginDetails.Id] {
+			continue
+		}
+
 		// Try to get plugin without blocking - if we can't get it immediately, skip it
 		globalPlugin := s.tryGetPluginNoBlock(pluginDetails.Id)
 
@@ -995,6 +1009,9 @@ func (s *GraphQLServer) LoadProjectSpecificPlugins(ctx context.Context, cache *m
 			err := s.registerProjectPluginToCache(ctx, cache, globalPlugin, pluginDetails)
 			if err != nil {
 				fmt.Printf("[ERROR] LoadProjectSpecificPlugins: Failed to register plugin %s for project %s: %v\n", pluginDetails.Id, project.ID, err)
+			}
+			if err == nil {
+				cache.PluginSchemasRegistered[pluginDetails.Id] = true
 			}
 		}
 	}
@@ -1050,6 +1067,10 @@ func (s *GraphQLServer) tryGetPluginNoBlock(pluginID string) *models.HashiCorpPl
 // registerProjectPluginToCache registers a plugin's schemas and APIs to the project cache
 func (s *GraphQLServer) registerProjectPluginToCache(ctx context.Context, cache *models.ApplicationCache, globalPlugin *models.HashiCorpPluginCache, pluginDetails *protobuff.PluginDetails) error {
 	pluginID := pluginDetails.Id
+	effectiveType := pluginDetails.Type
+	if globalPlugin != nil && globalPlugin.PluginConfigurations != nil {
+		effectiveType = globalPlugin.PluginConfigurations.Type
+	}
 
 	// Defensive programming: ensure cache is valid
 	if cache == nil || cache.RawSchemas == nil {
@@ -1090,7 +1111,7 @@ func (s *GraphQLServer) registerProjectPluginToCache(ctx context.Context, cache 
 		if convertedSchemas.Queries != nil {
 			for k, v := range convertedSchemas.Queries {
 				queryKey := fmt.Sprintf("%s_%s", PROJECT_PLUGIN_PREFIX, k)
-				if cache.RawSchemas.Queries[queryKey] == nil && pluginDetails.Type == protobuff.PluginType_PLUGIN_TYPE_PROJECT {
+				if cache.RawSchemas.Queries[queryKey] == nil && effectiveType == protobuff.PluginType_PLUGIN_TYPE_PROJECT {
 					cache.RawSchemas.Queries[queryKey] = v
 					fmt.Printf("✅ Added plugin query '%s' from %s to project %s\n", k, pluginID, cache.Project.ID)
 				} else {
@@ -1103,7 +1124,7 @@ func (s *GraphQLServer) registerProjectPluginToCache(ctx context.Context, cache 
 		if convertedSchemas.Mutations != nil {
 			for k, v := range convertedSchemas.Mutations {
 				mutationKey := fmt.Sprintf("%s_%s", PROJECT_PLUGIN_PREFIX, k)
-				if cache.RawSchemas.Mutations[mutationKey] == nil && pluginDetails.Type == protobuff.PluginType_PLUGIN_TYPE_PROJECT {
+				if cache.RawSchemas.Mutations[mutationKey] == nil && effectiveType == protobuff.PluginType_PLUGIN_TYPE_PROJECT {
 					cache.RawSchemas.Mutations[mutationKey] = v
 					fmt.Printf("✅ Added plugin mutation '%s' from %s to project %s\n", k, pluginID, cache.Project.ID)
 				} else {

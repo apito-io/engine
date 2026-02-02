@@ -164,11 +164,6 @@ func InitRouter(cfg *models.Config) (*echo.Echo, error) {
 		authV2Routes.POST("/forget/password/verify", authCtrl.ForgetPasswordConfirmedV2)
 
 		//authV2Routes.POST("/verify/email/resend", authCtrl.ResendVerificationEmailV2)
-		authV2Routes.GET("/google/login", authCtrl.GoogleLogin)
-		authV2Routes.GET("/google/callback", authCtrl.GoogleCallback)
-
-		authV2Routes.GET("/github/login", authCtrl.GithubLogin)
-		authV2Routes.GET("/github/callback", authCtrl.GithubCallback)
 	}
 
 	authV2ProtectedRoutes := router.Group("auth/v2")

@@ -19,17 +19,11 @@ import (
 	"github.com/ilyakaznacheev/cleanenv"
 	"github.com/labstack/echo/v4"
 	"github.com/tailor-platform/graphql"
-	"golang.org/x/oauth2"
-	"golang.org/x/oauth2/github"
-	"golang.org/x/oauth2/google"
 )
 
 type authCtrl struct {
 	Cfg           *models.Config
 	graphQLServer *resolver.GraphQLServer
-
-	googleOauthConfig *oauth2.Config
-	githubOauthConfig *oauth2.Config
 }
 
 func GetAuthController(cfg *models.Config, commonFn *resolver.GraphQLServer) *authCtrl {
@@ -38,30 +32,9 @@ func GetAuthController(cfg *models.Config, commonFn *resolver.GraphQLServer) *au
 		return nil
 	}*/
 
-	// Scopes define the level of access you are requesting from the user
-	var googleOauthConfig = &oauth2.Config{
-		ClientID:     cfg.GoogleOauthClientID,
-		ClientSecret: cfg.GoogleOauthClientSecret,
-		RedirectURL:  cfg.GoogleOauthRedirectURL,
-		Scopes:       []string{"https://www.googleapis.com/auth/userinfo.email", "https://www.googleapis.com/auth/userinfo.profile", "openid"},
-		Endpoint:     google.Endpoint,
-	}
-
-	// Replace these with your GitHub OAuth app's Client ID and Client Secret
-	var githubOauthConfig = &oauth2.Config{
-		ClientID:     cfg.GithubOauthClientID,
-		ClientSecret: cfg.GithubOauthClientSecret,
-		RedirectURL:  cfg.GithubOauthRedirectURL,
-		Scopes:       []string{"user:email"},
-		Endpoint:     github.Endpoint,
-	}
-
 	return &authCtrl{
-		Cfg: cfg,
-		//authService:  cognito,
-		graphQLServer:     commonFn,
-		googleOauthConfig: googleOauthConfig,
-		githubOauthConfig: githubOauthConfig,
+		Cfg:           cfg,
+		graphQLServer: commonFn,
 	}
 }
 

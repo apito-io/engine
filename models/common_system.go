@@ -46,6 +46,7 @@ type ApplicationCache struct {
 	Param       *CommonSystemParams     `json:"param,omitempty"`
 	RawSchemas  *RawSchema              `json:"raw_schema,omitempty"`
 	Dataloaders map[string]*dlv6.Loader `json:"dataloaders,omitempty"`
+	PluginSchemasRegistered map[string]bool `json:"-"`
 
 	IncomingRequest []*IncomingRequest      `json:"incoming_request"`
 	GraphqlRequest  *GraphQLIncomingRequest `json:"graphql_request,omitempty"`

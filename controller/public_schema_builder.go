@@ -739,6 +739,10 @@ func (g *GraphCtrl) publicSchemaBuilder(ctx context.Context, cache *models.Appli
 		len(role.LogicExecutions) > 0 {
 		// logic for custom resolver / functions
 		for _, s := range filteredFunctions {
+			if s.FunctionProviderID != "" && !strings.HasPrefix(s.Name, "plg_") {
+				continue
+			}
+
 			// if permitted in the role then add to query
 			if utility.ArrayContains(role.LogicExecutions, s.Name) || role.IsAdmin {
 				if s.Request != nil && s.Response != nil {
