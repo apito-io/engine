@@ -8,6 +8,7 @@ import (
 	"time"
 
 	_const "github.com/apito-io/engine/const"
+	"golang.org/x/crypto/bcrypt"
 	"github.com/apito-io/engine/database/project/driver/bbolt"
 	"github.com/apito-io/engine/database/project/driver/mongo"
 	"github.com/apito-io/engine/database/project/driver/sql"
@@ -450,6 +451,55 @@ func (a *authCtrl) ChangePasswordV2(c echo.Context) error {
 	return c.JSON(http.StatusOK, map[string]interface{}{
 		"code":    http.StatusOK,
 		"message": "password has been changed",
+	})
+}
+
+// AdminResetPasswordV2 handles POST /admin/reset-password. Requires APITO_ADMIN_RESET_SECRET in request body and config.
+func (a *authCtrl) AdminResetPasswordV2(c echo.Context) error {
+	var req models.AdminResetPasswordRequest
+	if err := c.Bind(&req); err != nil {
+		return c.JSON(http.StatusBadRequest, &models.HttpResponse{
+			Message: err.Error(),
+			Code:    http.StatusBadRequest,
+		})
+	}
+	if req.Email == "" || req.NewPassword == "" || req.AdminSecret == "" {
+		return c.JSON(http.StatusBadRequest, &models.HttpResponse{
+			Message: "email, new_password and admin_secret are required",
+			Code:    http.StatusBadRequest,
+		})
+	}
+	if a.Cfg.AdminResetSecret == "" || req.AdminSecret != a.Cfg.AdminResetSecret {
+		return c.JSON(http.StatusUnauthorized, &models.HttpResponse{
+			Message: "invalid or missing admin secret",
+			Code:    http.StatusUnauthorized,
+		})
+	}
+	ctx := c.Request().Context()
+	user, err := a.graphQLServer.SystemDriver.GetSystemUserByEmail(ctx, req.Email)
+	if err != nil {
+		return c.JSON(http.StatusNotFound, &models.HttpResponse{
+			Message: "user not found",
+			Code:    http.StatusNotFound,
+		})
+	}
+	hash, err := bcrypt.GenerateFromPassword([]byte(req.NewPassword), bcrypt.DefaultCost)
+	if err != nil {
+		return c.JSON(http.StatusInternalServerError, &models.HttpResponse{
+			Message: "failed to hash password",
+			Code:    http.StatusInternalServerError,
+		})
+	}
+	user.Secret = string(hash)
+	if err := a.graphQLServer.SystemDriver.UpdateSystemUser(ctx, user, true); err != nil {
+		return c.JSON(http.StatusInternalServerError, &models.HttpResponse{
+			Message: err.Error(),
+			Code:    http.StatusInternalServerError,
+		})
+	}
+	return c.JSON(http.StatusOK, &models.HttpResponse{
+		Message: "password reset successfully",
+		Code:    http.StatusOK,
 	})
 }
 

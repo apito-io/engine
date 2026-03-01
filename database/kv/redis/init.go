@@ -11,6 +11,10 @@ import (
 )
 
 // #todo redis sentinal service
+//
+// KV requires a Redis primary (master). Replicas are read-only and will return
+// "READONLY You can't write against a read only replica" on Set/SetValue.
+// Ensure KV_HOST (and QUEUE_HOST if shared) points to the primary, not a replica.
 
 type KVRedisService struct {
 	client *redis.Client

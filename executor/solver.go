@@ -812,6 +812,11 @@ func (s *GraphQLExecutor) HandlePayloadFormatting(ctx context.Context, param *mo
 	deltaUpdate bool,
 ) (map[string]interface{}, error) {
 
+	// handler nil dbPayload map error
+	if dbPayload == nil {
+		dbPayload = make(map[string]interface{})
+	}
+
 	for _, f := range fields { // loop through the fields to format the payload
 
 		// local support

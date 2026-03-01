@@ -82,6 +82,9 @@ type Config struct {
 	AWSSecret string `env:"AWS_SECRET" env-default:""`
 	AWSKey    string `env:"AWS_KEY" env-default:""`
 
+	// Admin password reset: secret required to call POST /admin/reset-password (e.g. set in ~/.apito/bin/.env)
+	AdminResetSecret string `env:"APITO_ADMIN_RESET_SECRET" env-default:""`
+
 	// Optional driver factory for dependency injection (used by pro version)
 	// If nil, falls back to default core drivers
 	DriverFactory interface{} `env:"-"` // Will be type-asserted to DatabaseDriverFactory

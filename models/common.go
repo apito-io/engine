@@ -92,6 +92,13 @@ type PassChangeRequest struct {
 	NewPassword string `json:"new_password,omitempty" firestore:"new_password,omitempty" bson:"new_password,omitempty"`
 }
 
+// AdminResetPasswordRequest is the body for POST /admin/reset-password (protected by APITO_ADMIN_RESET_SECRET).
+type AdminResetPasswordRequest struct {
+	Email       string `json:"email"`
+	NewPassword string `json:"new_password"`
+	AdminSecret string `json:"admin_secret"`
+}
+
 type PreviewMode struct {
 	Title  string `json:"title,omitempty" firestore:"title,omitempty" bson:"title,omitempty"`
 	Icon   string `json:"icon,omitempty" firestore:"icon,omitempty" bson:"icon,omitempty"`

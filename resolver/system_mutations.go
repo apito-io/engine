@@ -3338,11 +3338,14 @@ func (s *GraphQLServer) UpsertModelDataFnFn(p graphql.ResolveParams) (interface{
 		return nil, ae.SchemaIsNil
 	}
 
-	var modelName string
-	if val, ok := p.Args["model_name"].(string); ok && val != "" {
-		modelName = val
-	} else {
-		return nil, errors.New("model Name is Necessary")
+	// Safe extraction: model_name is required and must be non-empty string
+	modelNameVal := p.Args["model_name"]
+	if modelNameVal == nil {
+		return nil, errors.New("model_name is required")
+	}
+	modelName, ok := modelNameVal.(string)
+	if !ok || modelName == "" {
+		return nil, errors.New("model_name must be a non-empty string")
 	}
 
 	var modelType *models.ModelType
@@ -3367,10 +3370,11 @@ func (s *GraphQLServer) UpsertModelDataFnFn(p graphql.ResolveParams) (interface{
 	param.TenantId = tempTenantId
 	*/
 
-	if val, ok := p.Args["status"].(string); ok {
+	// Safe extraction: status defaults to "published" when nil or invalid
+	if val, ok := p.Args["status"].(string); ok && val != "" {
 		param.DocPublishStatus = val
 	} else {
-		param.DocPublishStatus = "published" // default is published
+		param.DocPublishStatus = "published"
 	}
 
 	var forceUpdate bool
@@ -3387,14 +3391,18 @@ func (s *GraphQLServer) UpsertModelDataFnFn(p graphql.ResolveParams) (interface{
 
 	var doc *types.DefaultDocumentStructure
 
-	if val, ok := p.Args["_id"]; ok {
+	if val, ok := p.Args["_id"]; ok && val != nil {
+		if id, ok := val.(string); ok && id != "" {
+			param.DocumentID = id
+		}
+	}
+
+	if param.DocumentID != "" {
 
 		var isSinglePageData bool
 		if val, ok := p.Args["single_page_data"].(bool); ok {
 			isSinglePageData = val
 		}
-
-		param.DocumentID = val.(string)
 		param.ResolveParams = &p
 		param.Model = modelType
 		param.SinglePageData = isSinglePageData
@@ -3446,13 +3454,16 @@ func (s *GraphQLServer) UpsertModelDataFnFn(p graphql.ResolveParams) (interface{
 		if userInputPayload, ok := p.Args["payload"].(map[string]interface{}); ok && len(userInputPayload) > 0 {
 			input := param.ResolveParams.Args
 			var inputPayload map[string]interface{}
-			if val, ok := input["payload"].(map[string]interface{}); ok {
+			if val, ok := input["payload"].(map[string]interface{}); ok && val != nil {
 				inputPayload = val
 			}
+			if inputPayload == nil {
+				inputPayload = make(map[string]interface{})
+			}
 
-			// local support
+			// local support (safe: nil yields ok=false)
 			local := "en"
-			if val, ok := input["local"].(string); ok {
+			if val, ok := input["local"].(string); ok && val != "" {
 				local = val
 			}
 
@@ -3506,13 +3517,16 @@ func (s *GraphQLServer) UpsertModelDataFnFn(p graphql.ResolveParams) (interface{
 
 		if userInputPayload, ok := p.Args["payload"].(map[string]interface{}); ok && len(userInputPayload) > 0 {
 			input := param.ResolveParams.Args
-			if val, ok := input["payload"].(map[string]interface{}); ok {
+			if val, ok := input["payload"].(map[string]interface{}); ok && val != nil {
 				inputPayload = val
 			}
-			// local support
-			if val, ok := input["local"].(string); ok {
+			// local support (safe: nil yields ok=false)
+			if val, ok := input["local"].(string); ok && val != "" {
 				local = val
 			}
+		}
+		if inputPayload == nil {
+			inputPayload = make(map[string]interface{})
 		}
 
 		//#todo need image param validation
@@ -3620,40 +3634,43 @@ func (s *GraphQLServer) DuplicateModelDataFnFn(p graphql.ResolveParams) (interfa
 	}
 
 	var docId string
-	if val, ok := p.Args["_id"]; ok {
-		docId = val.(string)
-		param.DocumentID = docId
-		param.ResolveParams = &p
-		param.Model = modelType
-		param.ProjectType = project.ProjectType
+	if val, ok := p.Args["_id"]; ok && val != nil {
+		if id, ok := val.(string); ok && id != "" {
+			docId = id
+		}
+	}
+	if docId == "" {
+		return nil, errors.New("_id is required for duplicate")
+	}
 
-		driver, err := s.GraphQLExecutor.GetProjectDriver(cache.Ctx)
+	param.DocumentID = docId
+	param.ResolveParams = &p
+	param.Model = modelType
+	param.ProjectType = project.ProjectType
+
+	driver, err := s.GraphQLExecutor.GetProjectDriver(cache.Ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	exists, err := driver.GetSingleProjectDocument(cache.Ctx, param)
+	if err != nil {
+		return nil, err
+	}
+
+	if exists != nil {
+		id := uuid.New()
+		exists.Key = id.String()
+		exists.ID = exists.Key
+		exists.Meta.CreatedAt = utility.GetCurrentTime()
+		exists.Meta.UpdatedAt = utility.GetCurrentTime()
+
+		_, err = driver.AddDocumentToProject(cache.Ctx, param, exists)
 		if err != nil {
 			return nil, err
-		}
-
-		exists, err := driver.GetSingleProjectDocument(cache.Ctx, param)
-		if err != nil {
-			return nil, err
-		}
-
-		if exists != nil {
-			id := uuid.New()
-			exists.Key = id.String()
-			exists.ID = exists.Key
-			exists.Meta.CreatedAt = utility.GetCurrentTime()
-			exists.Meta.UpdatedAt = utility.GetCurrentTime()
-
-			//_, err = s.GraphQLExecutor.GetProjectDriver(ctx).AddDocumentToProject(p.Context, param.ProjectId, modelName, doc)
-			_, err = driver.AddDocumentToProject(cache.Ctx, param, exists)
-			if err != nil {
-				return nil, err
-			}
-		} else {
-			return nil, errors.New("doc not found to duplicate")
 		}
 	} else {
-		return nil, errors.New("_id is required for delete")
+		return nil, errors.New("doc not found to duplicate")
 	}
 
 	return map[string]interface{}{
@@ -3704,34 +3721,37 @@ func (s *GraphQLServer) DeleteModelDataFnFn(p graphql.ResolveParams) (interface{
 	param := s.NewParam(cache.Param)
 
 	var docId string
-	if val, ok := p.Args["_id"]; ok {
-		docId = val.(string)
-		param.DocumentID = docId
-		param.Model = modelType
-
-		driver, err := s.GraphQLExecutor.GetProjectDriver(cache.Ctx)
-		if err != nil {
-			return nil, err
+	if val, ok := p.Args["_id"]; ok && val != nil {
+		if id, ok := val.(string); ok && id != "" {
+			docId = id
 		}
-
-		param.DocPublishStatus = "all"
-
-		exists, err := driver.GetSingleProjectDocument(cache.Ctx, param)
-		if err != nil {
-			return nil, err
-		}
-
-		if exists != nil {
-			err = driver.DeleteDocumentFromProject(cache.Ctx, param)
-			if err != nil {
-				return nil, err
-			}
-		} else {
-			return nil, errors.New("doc not found to delete")
-		}
-
-	} else {
+	}
+	if docId == "" {
 		return nil, errors.New("_id is required for delete")
+	}
+
+	param.DocumentID = docId
+	param.Model = modelType
+
+	driver, err := s.GraphQLExecutor.GetProjectDriver(cache.Ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	param.DocPublishStatus = "all"
+
+	exists, err := driver.GetSingleProjectDocument(cache.Ctx, param)
+	if err != nil {
+		return nil, err
+	}
+
+	if exists != nil {
+		err = driver.DeleteDocumentFromProject(cache.Ctx, param)
+		if err != nil {
+			return nil, err
+		}
+	} else {
+		return nil, errors.New("doc not found to delete")
 	}
 
 	return map[string]interface{}{

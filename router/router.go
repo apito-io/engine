@@ -174,6 +174,10 @@ func InitRouter(cfg *models.Config) (*echo.Echo, error) {
 		authV2ProtectedRoutes.POST("/change/password", authCtrl.ChangePasswordV2)
 	}
 
+	// Admin routes (protected by APITO_ADMIN_RESET_SECRET in request body)
+	adminAPI := router.Group("/admin")
+	adminAPI.POST("/reset-password", authCtrl.AdminResetPasswordV2)
+
 	/*authv3ProtectedRoutes := router.Group("auth/v3")
 	authv3ProtectedRoutes.Use(server.Authorize())
 	{

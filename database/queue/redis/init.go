@@ -1,8 +1,10 @@
 package redis
 
 import (
+	"context"
 	"fmt"
 	"strconv"
+	"sync"
 
 	"github.com/ThreeDotsLabs/watermill"
 	"github.com/ThreeDotsLabs/watermill-redisstream/pkg/redisstream"
@@ -22,6 +24,7 @@ type RedisQueueService struct {
 	logger        watermill.LoggerAdapter
 	client        *redis.Client
 	consumerGroup string
+	topics        sync.Map // tracks subscribed topics for NOGROUP recovery
 }
 
 // Ensure RedisQueueService implements QueueEngineInterface
@@ -39,6 +42,11 @@ func GetRedisQueueDriver(cfg *models.Config) (*RedisQueueService, error) {
 		DB:       dbNo,
 	})
 
+	if err := client.Ping(context.Background()).Err(); err != nil {
+		client.Close()
+		return nil, fmt.Errorf("redis connection failed: %w", err)
+	}
+
 	logger := watermill.NewStdLogger(false, false)
 
 	// Create Redis Stream Publisher
@@ -50,29 +58,35 @@ func GetRedisQueueDriver(cfg *models.Config) (*RedisQueueService, error) {
 		logger,
 	)
 	if err != nil {
+		client.Close()
 		return nil, fmt.Errorf("failed to create redis publisher: %w", err)
 	}
 
 	consumerGroup := "apito-consumer-group"
 
-	// Create Redis Stream Subscriber
+	svc := &RedisQueueService{
+		publisher:     publisher,
+		subscriber:    nil, // set below
+		logger:        logger,
+		client:        client,
+		consumerGroup: consumerGroup,
+	}
+
+	// Create Redis Stream Subscriber with NOGROUP recovery callback
 	subscriber, err := redisstream.NewSubscriber(
 		redisstream.SubscriberConfig{
-			Client:        client,
-			Unmarshaller:  redisstream.DefaultMarshallerUnmarshaller{},
-			ConsumerGroup: consumerGroup,
+			Client:                 client,
+			Unmarshaller:           redisstream.DefaultMarshallerUnmarshaller{},
+			ConsumerGroup:          consumerGroup,
+			ShouldStopOnReadErrors: svc.handleReadError,
 		},
 		logger,
 	)
 	if err != nil {
+		client.Close()
 		return nil, fmt.Errorf("failed to create redis subscriber: %w", err)
 	}
 
-	return &RedisQueueService{
-		publisher:     publisher,
-		subscriber:    subscriber,
-		logger:        logger,
-		client:        client,
-		consumerGroup: consumerGroup,
-	}, nil
+	svc.subscriber = subscriber
+	return svc, nil
 }

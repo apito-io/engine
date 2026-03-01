@@ -3,6 +3,7 @@ package redis
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	"github.com/ThreeDotsLabs/watermill/message"
 	"github.com/apito-io/engine/models"
@@ -11,6 +12,24 @@ import (
 // Publish implements message.Publisher interface
 func (r *RedisQueueService) Publish(topic string, messages ...*message.Message) error {
 	return r.publisher.Publish(topic, messages...)
+}
+
+// handleReadError is the ShouldStopOnReadErrors callback for the Watermill subscriber.
+// When NOGROUP occurs (e.g. after Redis restart/flush), recreates consumer groups for all tracked topics.
+// Returns false to continue retrying instead of stopping the subscriber.
+func (r *RedisQueueService) handleReadError(err error) bool {
+	if !strings.Contains(err.Error(), "NOGROUP") {
+		return false
+	}
+	r.topics.Range(func(key, value interface{}) bool {
+		topic := key.(string)
+		createErr := r.client.XGroupCreateMkStream(context.Background(), topic, r.consumerGroup, "0").Err()
+		if createErr != nil && createErr.Error() != "BUSYGROUP Consumer Group name already exists" {
+			r.logger.Error("Failed to recreate consumer group", createErr, nil)
+		}
+		return true
+	})
+	return false
 }
 
 // ensureConsumerGroup creates the consumer group for a topic if it doesn't exist
@@ -34,6 +53,8 @@ func (r *RedisQueueService) ensureConsumerGroup(ctx context.Context, topic strin
 
 // Subscribe implements message.Subscriber interface
 func (r *RedisQueueService) Subscribe(ctx context.Context, topic string) (<-chan *message.Message, error) {
+	r.topics.Store(topic, true)
+
 	// Ensure the consumer group exists before subscribing
 	// This prevents the NOGROUP error
 	if err := r.ensureConsumerGroup(ctx, topic); err != nil {

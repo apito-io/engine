@@ -8,6 +8,7 @@ import (
 	"time"
 
 	pluginService "github.com/apito-io/engine/services/plugin"
+	"github.com/apito-io/types/protobuff"
 )
 
 // Plugin health monitoring constants
@@ -313,22 +314,33 @@ func (pm *PluginMonitor) handlePluginRestart(ctx context.Context, pluginID strin
 
 // restartPlugin performs the actual plugin restart
 func (pm *PluginMonitor) restartPlugin(ctx context.Context, pluginID string) error {
-	// Get the current plugin configuration
 	plugin := pm.server.tryGetPluginNoBlock(pluginID)
-	if plugin == nil {
-		return fmt.Errorf("plugin %s not found in cache", pluginID)
+
+	var pluginConfig *protobuff.PluginDetails
+	if plugin != nil {
+		pluginConfig = plugin.PluginConfigurations
+		// Kill the existing plugin process
+		fmt.Printf("🔪 [PLUGIN-MONITOR] Killing existing plugin process: %s\n", pluginID)
+		plugin.Client.Kill()
+		// Remove from cache
+		pm.server.Lock()
+		delete(pm.server.HashiCorpPluginCache, pluginID)
+		pm.server.Unlock()
+	} else {
+		// Plugin not in cache -- load config from YAML registry
+		registry, err := pluginService.LoadHashiCorpPluginRegistry(pm.server.Cfg)
+		if err != nil {
+			return fmt.Errorf("plugin %s not in cache and registry load failed: %w", pluginID, err)
+		}
+		details, exists := registry[pluginID]
+		if !exists {
+			return fmt.Errorf("plugin %s not found in cache or registry", pluginID)
+		}
+		if !details.Enable {
+			return fmt.Errorf("plugin %s is disabled in registry", pluginID)
+		}
+		pluginConfig = details
 	}
-
-	pluginConfig := plugin.PluginConfigurations
-
-	// Kill the existing plugin
-	fmt.Printf("🔪 [PLUGIN-MONITOR] Killing existing plugin process: %s\n", pluginID)
-	plugin.Client.Kill()
-
-	// Remove from cache
-	pm.server.Lock()
-	delete(pm.server.HashiCorpPluginCache, pluginID)
-	pm.server.Unlock()
 
 	// Wait a bit for cleanup with context timeout check
 	select {
