@@ -11,6 +11,7 @@ import (
 	_const "github.com/apito-io/engine/const"
 	"github.com/apito-io/engine/database/project/driver/sql"
 	ae "github.com/apito-io/engine/err"
+	"github.com/apito-io/engine/interfaces"
 	"github.com/apito-io/engine/models"
 	"github.com/apito-io/engine/schemas/enums"
 	"github.com/apito-io/engine/services"
@@ -23,43 +24,6 @@ import (
 	"github.com/labstack/echo/v4"
 	"github.com/tailor-platform/graphql"
 )
-
-func (s *GraphQLServer) GenerateTenantTokenResolverFn(p graphql.ResolveParams) (interface{}, error) {
-
-	var (
-		v      = p.Context.Value
-		router = v("router").(echo.Context)
-	)
-
-	s.injectMetaData("GenerateTenantTokenResolverFn", router)
-
-	var token string
-	if val, ok := p.Args["token"].(string); ok {
-		token = val
-	} else {
-		return nil, errors.New("token is Required")
-	}
-
-	var tenantID string
-	if val, ok := p.Args["tenant_id"].(string); ok {
-		tenantID = val
-	} else {
-		return nil, errors.New("tenant_id is Required")
-	}
-
-	cache, err := s.GetApplicationCache(router)
-	if err != nil {
-		return nil, err
-	}
-
-	_token, err := s.ProjectKeyManager.GenerateTenantToken(cache.Ctx, tenantID, token)
-	if err != nil {
-		return nil, err
-	}
-	return map[string]interface{}{
-		"token": _token,
-	}, nil
-}
 
 func (s *GraphQLServer) GenerateProjectTokenResolverFn(p graphql.ResolveParams) (interface{}, error) {
 
@@ -181,7 +145,6 @@ func (s *GraphQLServer) DeleteProjectTokenResolverFn(p graphql.ResolveParams) (i
 			}
 		}
 	} else {
-		// blanka token is used in api key so it might contain tenant id
 		verifiedToken, err = s.BlankaTokenService.Validate(cache.Ctx, token)
 		if err != nil {
 			return nil, ae.InvalidToken
@@ -310,7 +273,7 @@ func (s *GraphQLServer) CreateWebHookResolverFn(p graphql.ResolveParams) (interf
 	}
 
 	if hook.URL == "" && len(hook.LogicExecutions) == 0 {
-		return nil, errors.New("Either URL OR Trigger Functions are Required")
+		return nil, errors.New("either URL OR Trigger Functions are Required")
 	}
 
 	// now append the hook info in model as well
@@ -353,16 +316,6 @@ func (s *GraphQLServer) DeleteWebHookResolverFn(p graphql.ResolveParams) (interf
 	param := s.NewParam(cache.Param)
 
 	param.ResolveParams = &p
-
-	tenantId := router.Get("tenant")
-	switch param.Role.ID {
-	case "tenant":
-		if tenantId == nil {
-			return nil, errors.New("Unable to Identify the User")
-		}
-		param.TenantID = tenantId.(string)
-		break
-	}
 
 	if val, ok := p.Args["id"].(string); ok {
 		param.DocumentID = val
@@ -577,38 +530,6 @@ func (s *GraphQLServer) UpdateProjectResolverFn(p graphql.ResolveParams) (interf
 		if err != nil {
 			return nil, err
 		}
-	}
-
-	if val, ok := p.Args["tenant_model_name"].(string); ok {
-		var modelType *models.ModelType
-		for _, ct := range project.Schema.Models {
-			if ct.Name == val {
-				modelType = ct
-				break
-			}
-		}
-		if modelType == nil {
-			return nil, errors.New("tenant Model not found")
-		}
-		// search for name and logo fields
-		var nameFound, logoFound bool
-		for _, field := range modelType.Fields {
-			if field.Identifier == "name" && field.FieldType == "text" {
-				nameFound = true
-			} else if field.Identifier == "logo" && field.FieldType == "media" {
-				logoFound = true
-			}
-		}
-		if !nameFound || !logoFound {
-			return nil, errors.New("tenant Model must have name(string) and logo(media) fields")
-		}
-
-		// set the tenant model to false for all models
-		for _, ct := range project.Schema.Models {
-			ct.IsTenantModel = false
-		}
-		modelType.IsTenantModel = true // only one model can be tenant model
-		project.TenantModelName = val
 	}
 
 	if settings, ok := p.Args["settings"].(map[string]interface{}); ok {
@@ -934,6 +855,45 @@ func (s *GraphQLServer) UpdateProfileResolverFn(p graphql.ResolveParams) (interf
 	return user, nil
 }
 
+func (s *GraphQLServer) RemoveProjectSpecificPluginResolverFn(p graphql.ResolveParams) (interface{}, error) {
+	var (
+		v      = p.Context.Value
+		router = v("router").(echo.Context)
+	)
+
+	s.injectMetaData("DeletePluginResolverFn", router)
+
+	cache, err := s.GetApplicationCache(router)
+	if err != nil {
+		return nil, err
+	}
+
+	project := *cache.Project
+
+	var id string
+	if val, ok := p.Args["id"].(string); ok && val != "" {
+		id = val
+	} else {
+		return nil, errors.New("plugin id is required")
+	}
+
+	for i, plugin := range project.Plugins {
+		if plugin.ID == id {
+			project.Plugins = append(project.Plugins[:i], project.Plugins[i+1:]...)
+			break
+		}
+	}
+
+	err = s.SystemDriver.UpdateProject(cache.Ctx, &project, true)
+	if err != nil {
+		return nil, err
+	}
+
+	return map[string]interface{}{
+		"message": "Plugin deleted successfully",
+	}, nil
+}
+
 func (s *GraphQLServer) UpsertPluginResolverFn(p graphql.ResolveParams) (interface{}, error) {
 
 	var (
@@ -1125,16 +1085,10 @@ func (s *GraphQLServer) AddModelToProjectResolverFn(p graphql.ResolveParams) (in
 
 	var modelName string
 	if val, ok := p.Args["name"].(string); ok {
-		modelName = strings.TrimSpace(utility.SingularResourceName(strcase.ToLowerCamel(val)))
-		switch modelName {
-		case "list":
-			return nil, errors.New("naming a Model `List` is not allowed. Apito Uses List to represent plural of a resource automatically. Try another name instead")
-		case "user":
-			return nil, errors.New("naming a Model `User` is protected. If you want to store authenticated users. Try adding Authentication module from Settings > Add-Ons")
-		case "system":
-			return nil, errors.New("naming a Model `System` is not allowed. Try Another alternate name instead")
-		case "function":
-			return nil, errors.New("naming a Model `Function` is not allowed. Try Another alternate name instead")
+		var err error
+		modelName, err = utility.CanonicalizeModelName(val)
+		if err != nil {
+			return nil, err
 		}
 	} else {
 		return nil, errors.New(ae.MODEL_NAME_REQUIRED)
@@ -1162,7 +1116,7 @@ func (s *GraphQLServer) AddModelToProjectResolverFn(p graphql.ResolveParams) (in
 		return nil, err
 	}
 
-	checkCollectionExists, err := driver.CheckCollectionExists(cache.Ctx, param, false)
+	checkCollectionExists, err := driver.CheckTableOrCollectionExists(cache.Ctx, param)
 	if err != nil {
 		return nil, err
 	}
@@ -1225,14 +1179,14 @@ func (s *GraphQLServer) RunModelMigrationsResolverFn(p graphql.ResolveParams) (i
 			return nil, err
 		}
 
-		checkCollectionExists, err := driver.CheckCollectionExists(cache.Ctx, param, false)
+		checkCollectionExists, err := driver.CheckTableOrCollectionExists(cache.Ctx, param)
 		if err != nil {
 			return nil, err
 		}
 
 		if !checkCollectionExists {
 			// if schema not found then create
-			err = driver.AddCollection(cache.Ctx, param, false)
+			err = s.invokeCreateTableOrCollection(cache.Ctx, driver, param, false)
 			if err != nil {
 				return nil, err
 			}
@@ -1245,13 +1199,18 @@ func (s *GraphQLServer) RunModelMigrationsResolverFn(p graphql.ResolveParams) (i
 		return nil, err
 	}
 
-	checkRelationCollectionExists, err := driver.CheckCollectionExists(cache.Ctx, param, true)
+	if param.Ext == nil {
+		param.Ext = make(map[string]interface{})
+	}
+	param.Ext[models.ExtKeyRelationCollectionCheck] = true
+	checkRelationCollectionExists, err := driver.CheckTableOrCollectionExists(cache.Ctx, param)
+	delete(param.Ext, models.ExtKeyRelationCollectionCheck)
 	if err != nil {
 		return nil, err
 	}
 
 	if !checkRelationCollectionExists {
-		err = driver.AddCollection(cache.Ctx, param, true)
+		err = s.invokeCreateTableOrCollection(cache.Ctx, driver, param, true)
 		if err != nil {
 			return nil, err
 		}
@@ -1299,15 +1258,10 @@ func (s *GraphQLServer) UpdateModelResolverFn(p graphql.ResolveParams) (interfac
 		singlePageModel = val
 	}
 
-	var isCommonModel bool
-	if val, ok := p.Args["is_common_model"].(bool); ok {
-		isCommonModel = val
-	}
-
 	var resp interface{}
 	switch _type {
 	case "update":
-		resp, err = s.updateModel(cache.Ctx, project, modelName, isCommonModel)
+		resp, err = s.updateModel(cache.Ctx, project, modelName)
 		if err != nil {
 			return nil, err
 		}
@@ -1353,7 +1307,7 @@ func (s *GraphQLServer) UpdateModelResolverFn(p graphql.ResolveParams) (interfac
 	return nil, errors.New("invalid update model request")
 }
 
-func (s *GraphQLServer) updateModel(ctx context.Context, project *models.Project, modelName string, isCommonModel bool) (*models.ModelType, error) {
+func (s *GraphQLServer) updateModel(ctx context.Context, project *models.Project, modelName string) (*models.ModelType, error) {
 
 	if modelName == "" {
 		return nil, errors.New(ae.MODEL_NAME_REQUIRED)
@@ -1372,9 +1326,6 @@ func (s *GraphQLServer) updateModel(ctx context.Context, project *models.Project
 		}
 	}
 
-	// update its settings
-	updatedModel.IsCommonModel = isCommonModel
-
 	err := s.SystemDriver.UpdateProject(ctx, project, false)
 	if err != nil {
 		return nil, err
@@ -1389,18 +1340,12 @@ func (s *GraphQLServer) duplicateModel(ctx context.Context, project *models.Proj
 		return nil, errors.New(ae.MODEL_NAME_REQUIRED)
 	}
 
-	newModelName := strings.TrimSpace(utility.SingularResourceName(strcase.ToLowerCamel(newName)))
-	protectedNames := map[string]string{
-		"user":     "naming a Model `User` is protected. If you want to store authenticated users, try adding the Authentication module from Settings > Add-Ons.",
-		"system":   "naming a Model `System` is not allowed. Try another alternate name instead.",
-		"function": "naming a Model `Function` is not allowed. Try another alternate name instead.",
-	}
-	if msg, exists := protectedNames[newModelName]; exists {
-		return nil, errors.New(msg)
+	newModelName, err := utility.CanonicalizeModelName(newName)
+	if err != nil {
+		return nil, err
 	}
 
 	var duplicatedModel *models.ModelType
-	var err error
 
 	// if schema not found then create
 	// if schema not found then create
@@ -1468,19 +1413,12 @@ func (s *GraphQLServer) renameModel(ctx context.Context, project *models.Project
 		return nil, errors.New("new model name can not be the same as the old one")
 	}
 
-	var newModelName string
-
-	newModelName = utility.SingularResourceName(newName)
-	if newModelName == "user" {
-		return nil, errors.New("naming a Model `User` is protected. If you want to store authenticated users. Try adding Authentication module from Settings > Add-Ons")
-	} else if newModelName == "system" {
-		return nil, errors.New("naming a Model `System` is not allowed. Try Another alternate name instead")
-	} else if newModelName == "function" {
-		return nil, errors.New("naming a Model `Function` is not allowed. Try Another alternate name instead")
+	newModelName, err := utility.CanonicalizeModelName(newName)
+	if err != nil {
+		return nil, err
 	}
 
 	var modelToRename *models.ModelType
-	var err error
 
 	// if schema not found then create
 	if project.Schema == nil {
@@ -1593,18 +1531,10 @@ func (s *GraphQLServer) deleteModel(ctx context.Context, project *models.Project
 			return nil, errors.New("could not find model to delete")
 		}
 
-		if project.ProjectType == models.ProjectType_SaaS {
-			// for saas it creates additional collection, if model dropped all the data is gone
-			err := driver.DropModel(ctx, project, _model.Name)
-			if err != nil {
-				return nil, err
-			}
-		} else {
-			// delete all the data connected to this model
-			err := driver.DeleteDocumentsFromProject(ctx, &models.CommonSystemParams{ProjectID: project.ID, Model: _model})
-			if err != nil {
-				return nil, err
-			}
+		// delete all the data connected to this model
+		err := driver.DeleteDocumentsFromProject(ctx, &models.CommonSystemParams{ProjectID: project.ID, Model: _model})
+		if err != nil {
+			return nil, err
 		}
 		// drop the model from schema
 		project.Schema.Models = append(project.Schema.Models[:index], project.Schema.Models[index+1:]...)
@@ -2343,6 +2273,16 @@ func (s *GraphQLServer) UpsertFieldToModelResolverFn(p graphql.ResolveParams) (i
 		return nil, err
 	}
 
+	if s.Cfg.SchemaIterateHook != nil {
+		_ = s.Cfg.SchemaIterateHook(cache.Ctx, project, func(ctx context.Context, drv interface{}) error {
+			if td, ok := drv.(interfaces.ProjectDBInterface); ok {
+				_, err := td.AddFieldToModel(ctx, param, isUpdate, parentField)
+				return err
+			}
+			return nil
+		})
+	}
+
 	err = s.SystemDriver.UpdateProject(cache.Ctx, project, true)
 	if err != nil {
 		return nil, err
@@ -2727,6 +2667,14 @@ func (s *GraphQLServer) ModelFieldOperationResolverFn(p graphql.ResolveParams) (
 			if err != nil {
 				return nil, err
 			}
+			if s.Cfg.SchemaIterateHook != nil {
+				_ = s.Cfg.SchemaIterateHook(cache.Ctx, project, func(ctx context.Context, drv interface{}) error {
+					if td, ok := drv.(interfaces.ProjectDBInterface); ok {
+						return td.RenameField(ctx, fieldName, parentField, param)
+					}
+					return nil
+				})
+			}
 		}
 	case enums.FieldOperation_Duplicate:
 		var newField *models.ValidIdentifier
@@ -2826,6 +2774,14 @@ func (s *GraphQLServer) ModelFieldOperationResolverFn(p graphql.ResolveParams) (
 			err = driver.DropField(cache.Ctx, param)
 			if err != nil {
 				return nil, err
+			}
+			if s.Cfg.SchemaIterateHook != nil {
+				_ = s.Cfg.SchemaIterateHook(cache.Ctx, project, func(ctx context.Context, drv interface{}) error {
+					if td, ok := drv.(interfaces.ProjectDBInterface); ok {
+						return td.DropField(ctx, param)
+					}
+					return nil
+				})
 			}
 		}
 	}
@@ -3322,16 +3278,6 @@ func (s *GraphQLServer) UpsertModelDataFnFn(p graphql.ResolveParams) (interface{
 
 	param.ResolveParams = &p
 
-	/*tenantId := router.Get("tenant")
-	switch param.Role.ID {
-	case "tenant":
-		if tenantId == nil {
-			return nil, errors.New("unable to Identify the User")
-		}
-		param.TenantId = tenantId.(string)
-		break
-	}*/
-
 	project := cache.Project
 	// if schema not found then create
 	if project.Schema == nil {
@@ -3361,14 +3307,6 @@ func (s *GraphQLServer) UpsertModelDataFnFn(p graphql.ResolveParams) (interface{
 	}
 
 	param.Model = modelType
-
-	/* var tempTenantId string
-	// inject temp tenant id to fetch specific tenant data
-	if val := router.Get("temp_tenant_id"); val != nil {
-		tempTenantId = val.(string)
-	}
-	param.TenantId = tempTenantId
-	*/
 
 	// Safe extraction: status defaults to "published" when nil or invalid
 	if val, ok := p.Args["status"].(string); ok && val != "" {
@@ -3475,11 +3413,6 @@ func (s *GraphQLServer) UpsertModelDataFnFn(p graphql.ResolveParams) (interface{
 			}
 			doc.Data = modifiedPayload
 
-			if param.TenantID != "" {
-				doc.TenantID = types.ID(param.TenantID)
-				doc.TenantModel = project.TenantModelName
-			}
-
 			// replacing the doc might case the local field to disappear. don't replace the old doc
 			// fixed it later !!
 			err = driver.UpdateDocumentOfProject(cache.Ctx, param, doc, forceUpdate)
@@ -3537,15 +3470,15 @@ func (s *GraphQLServer) UpsertModelDataFnFn(p graphql.ResolveParams) (interface{
 		}
 		doc.Data = modifiedPayload
 
-		if param.TenantID != "" {
-			doc.TenantID = types.ID(param.TenantID)
-			doc.TenantModel = project.TenantModelName
-		}
-
 		//_, err = s.GraphQLExecutor.GetProjectDriver(ctx).AddDocumentToProject(p.Context, param.ProjectId, modelName, doc)
 		_, err = driver.AddDocumentToProject(cache.Ctx, param, doc)
 		if err != nil {
 			return nil, err
+		}
+		if s.Cfg.PostDocumentInsertHook != nil {
+			if err := s.Cfg.PostDocumentInsertHook(cache.Ctx, param, doc.ID); err != nil {
+				return nil, err
+			}
 		}
 
 		// for new document also check for connect disconnect
@@ -3596,17 +3529,6 @@ func (s *GraphQLServer) DuplicateModelDataFnFn(p graphql.ResolveParams) (interfa
 	param := s.NewParam(cache.Param)
 	param.ResolveParams = &p
 
-	tenantID := router.Get("tenant")
-
-	switch param.Role.ID {
-	case "tenant":
-		if tenantID == nil {
-			return nil, errors.New("unable to Identify the User")
-		}
-		param.TenantID = tenantID.(string)
-		break
-	}
-
 	project := cache.Project
 
 	var modelName string
@@ -3646,7 +3568,6 @@ func (s *GraphQLServer) DuplicateModelDataFnFn(p graphql.ResolveParams) (interfa
 	param.DocumentID = docId
 	param.ResolveParams = &p
 	param.Model = modelType
-	param.ProjectType = project.ProjectType
 
 	driver, err := s.GraphQLExecutor.GetProjectDriver(cache.Ctx)
 	if err != nil {

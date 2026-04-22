@@ -20,7 +20,7 @@ type FieldClassification struct {
 
 func (S *SQLDriver) RelationshipDataLoaderBytes(ctx context.Context, param *models.CommonSystemParams, connection map[string]interface{}) ([]byte, error) {
 	// query relations and find all docs
-	query, _, err := BuildCombinedRelationQuery("--removed", "--removed", param)
+	query, _, err := BuildCombinedRelationQuery(S.Conf, "--removed", "--removed", param)
 	if err != nil {
 		return nil, err
 	}
@@ -92,7 +92,7 @@ func (S *SQLDriver) RelationshipDataLoaderBytes(ctx context.Context, param *mode
 
 func (S *SQLDriver) RelationshipDataLoader(ctx context.Context, param *models.CommonSystemParams, connection map[string]interface{}) (interface{}, error) {
 	// query relations and find all docs
-	query, _, err := BuildCombinedRelationQuery("--removed", "--removed", param)
+	query, _, err := BuildCombinedRelationQuery(S.Conf, "--removed", "--removed", param)
 	if err != nil {
 		return nil, err
 	}

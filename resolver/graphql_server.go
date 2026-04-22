@@ -7,9 +7,11 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log"
 	"regexp"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/ThreeDotsLabs/watermill/message"
 	_const "github.com/apito-io/engine/const"
@@ -139,6 +141,8 @@ type GraphQLServer struct {
 	PluginManagerSwapper *hotswap.PluginManagerSwapper
 
 	MicroServiceClient *sync.Map
+
+	pluginMissCacheWarned sync.Map // tracks which "project:plugin" pairs we already warned about
 }
 
 func BuildGraphQL(ctx context.Context, cfg *models.Config, extensionRouter *echo.Group, mainEcho *echo.Echo) (*GraphQLServer, error) {
@@ -400,6 +404,22 @@ func BuildGraphQL(ctx context.Context, cfg *models.Config, extensionRouter *echo
 		fmt.Println("system driver finished initialized")
 		srv.SystemDriver = systemDB
 
+		migrateCtx, migrateCancel := context.WithTimeout(context.Background(), 90*time.Second)
+		if err := systemDB.RunMigration(migrateCtx); err != nil {
+			migrateCancel()
+			panic(fmt.Sprintf("system DB migration failed: %v", err))
+		}
+		migrateCancel()
+		log.Println("system DB migration completed")
+
+		bootCtx, bootCancel := context.WithTimeout(context.Background(), 120*time.Second)
+		if err := systemDB.EnsureSystemBootstrap(bootCtx); err != nil {
+			bootCancel()
+			panic(fmt.Sprintf("system DB bootstrap failed: %v", err))
+		}
+		bootCancel()
+		log.Println("system DB EnsureSystemBootstrap completed")
+
 		_executor := executor.GetGraphQLExecutor(cfg, systemDB)
 		err := _executor.Init(ctx, &models.InitParams{
 			SharedDB: &models.DriverCredentials{
@@ -642,8 +662,8 @@ func (s *GraphQLServer) LoadProjectCache(ctx context.Context, projectID string) 
 			return nil, err
 		}
 
-		if _project.Driver.Database == "" && _project.ProjectType == models.ProjectType_SaaS {
-			_project.Driver.Database = s.Cfg.DefaultSaaSProjectDBName
+		if s.Cfg.LoadProjectCacheHook != nil {
+			s.Cfg.LoadProjectCacheHook(ctx, _project)
 		}
 
 		// set the project driver and build param
@@ -682,7 +702,67 @@ func (s *GraphQLServer) LoadProjectCache(ctx context.Context, projectID string) 
 		}*/
 	}
 
+	if _project != nil {
+		if err := s.ApplyNamingV2AfterProjectLoad(ctx, _project); err != nil {
+			return nil, err
+		}
+	}
+
 	return _project, nil
+}
+
+func isArangoProjectEngine(engine string) bool {
+	e := strings.ToLower(strings.TrimSpace(engine))
+	return e == "arangodb" || e == "arango"
+}
+
+// ApplyNamingV2AfterProjectLoad runs optional Arango physical migration, then in-memory naming V2
+// schema migration and persistence. Safe to call on every load (no-op when already on V2).
+func (s *GraphQLServer) ApplyNamingV2AfterProjectLoad(ctx context.Context, project *models.Project) error {
+	if project == nil || project.Schema == nil {
+		return nil
+	}
+	if project.Schema.NamingSchemaVersion >= utility.NamingSchemaVersionV2 {
+		return nil
+	}
+	pairs, err := utility.ComputeNamingV2ModelRenamePairs(project)
+	if err != nil {
+		return err
+	}
+	needsPhysical := len(pairs) > 0 && project.Driver != nil && isArangoProjectEngine(project.Driver.Engine)
+	if needsPhysical {
+		perModel := false
+		if s.Cfg != nil && s.Cfg.NamingV2ArangoPerModelCollections != nil {
+			perModel = s.Cfg.NamingV2ArangoPerModelCollections(ctx, project)
+		}
+		sub := context.WithValue(ctx, "project_id", project.ID)
+		drv, err := s.GraphQLExecutor.GetProjectDriver(sub)
+		if err != nil {
+			return fmt.Errorf("naming v2: project driver: %w", err)
+		}
+		relationTenantModel := ""
+		if s.Cfg != nil && s.Cfg.NamingV2RelationTenantModel != nil {
+			relationTenantModel = strings.TrimSpace(s.Cfg.NamingV2RelationTenantModel(ctx, project))
+		}
+		if migrator, ok := drv.(utility.NamingV2PhysicalMigrator); ok {
+			if err := migrator.ApplyNamingV2PhysicalMigration(sub, project.ID, pairs, perModel, relationTenantModel); err != nil {
+				 return fmt.Errorf("naming v2 physical migration: %w", err)
+			}
+		}
+	}
+	changed, err := utility.MigrateProjectSchemaToNamingV2(project)
+	if err != nil {
+		return err
+	}
+	if changed {
+		if err := s.SystemDriver.UpdateProject(ctx, project, false); err != nil {
+			return err
+		}
+		if _, err := s.ProjectCache.SaveProject(ctx, project); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func (s *GraphQLServer) GetApplicationCache(router echo.Context) (*models.ApplicationCache, error) {
@@ -722,11 +802,13 @@ func (s *GraphQLServer) GetApplicationCache(router echo.Context) (*models.Applic
 	if err != nil {
 		return nil, err
 	}
-
 	cache := &models.ApplicationCache{
 		Ctx:     ctx,
 		Project: _project,
 		Param:   param,
+	}
+	if s.Cfg != nil && cache.Param != nil {
+		cache.Param.RuntimeConfig = s.Cfg
 	}
 
 	// Try to reuse previously cached plugin schemas (per project) to avoid re-registering every request
@@ -739,16 +821,35 @@ func (s *GraphQLServer) GetApplicationCache(router echo.Context) (*models.Applic
 		fmt.Printf("[DEBUG] GetApplicationCache: Loading project-specific plugins for project %s\n", _project.ID)
 		err = s.LoadProjectSpecificPlugins(ctx, cache)
 		if err != nil {
-			// Log error but don't fail - plugins are optional
 			fmt.Printf("[ERROR] GetApplicationCache: Failed to load project-specific plugins for project %s: %v\n", _project.ID, err)
 		} else {
-			// Persist only the plugin schema section to the app cache for reuse
 			_ = s.ProjectCache.PutAppCache(ctx, projectID, &models.ApplicationCache{RawSchemas: cache.RawSchemas})
 			fmt.Printf("[DEBUG] GetApplicationCache: Project-specific plugins loaded and cached for project %s\n", _project.ID)
 		}
+
+		// Warn once per (project, plugin) when a project-enabled hc-* plugin wasn't in the engine cache
+		for _, pd := range _project.Plugins {
+			if !pd.Enable || !strings.HasPrefix(pd.ID, "hc-") {
+				continue
+			}
+			if cache.PluginSchemasRegistered != nil && cache.PluginSchemasRegistered[pd.ID] {
+				continue
+			}
+			warnKey := _project.ID + ":" + pd.ID
+			if _, alreadyWarned := s.pluginMissCacheWarned.LoadOrStore(warnKey, true); !alreadyWarned {
+				fmt.Printf("⚠️  [PLUGIN-PROJECT] project=%s plugin=%s: enabled in project document but not found in engine plugin cache — "+
+					"plg_* queries/mutations from this plugin won't appear until it is loaded (startup config or PLUGIN-V2 admin API).\n",
+					_project.ID, pd.ID)
+			}
+		}
 	} else {
-		// Using cached plugin schemas
 		fmt.Printf("[DEBUG] GetApplicationCache: Using cached project-specific plugin schemas for project %s\n", _project.ID)
+	}
+
+	if h := s.Cfg.PostApplicationCacheHook; h != nil {
+		if fn, ok := h.(func(echo.Context, *models.ApplicationCache)); ok {
+			fn(router, cache)
+		}
 	}
 
 	return cache, nil
@@ -767,9 +868,8 @@ func (s *GraphQLServer) BuildSystemParam(i echo.Context, project *models.Project
 		//param.Limit = project.Limits
 	*/
 
-	param.ProjectType = project.ProjectType
-	if project.TenantModelName != "" {
-		param.TenantModel = project.TenantModelName
+	if s.Cfg.BuildSystemParamHook != nil {
+		s.Cfg.BuildSystemParamHook(i.Request().Context(), project, param)
 	}
 
 	/* var roles []string
@@ -796,6 +896,14 @@ func (s *GraphQLServer) BuildSystemParam(i echo.Context, project *models.Project
 		}
 	}
 	return param, nil
+}
+
+func (s *GraphQLServer) invokeCreateTableOrCollection(ctx context.Context, driver interfaces.ProjectDBInterface, param *models.CommonSystemParams, isRelation bool) error {
+	var idx []string
+	if isRelation {
+		idx = []string{models.IndexesRelationCollectionToken}
+	}
+	return driver.CreateTableOrCollection(ctx, param, idx)
 }
 
 /*
@@ -873,6 +981,9 @@ func (s *GraphQLServer) GetApplicationCacheOld(router echo.Context) (*shared.App
 func (s *GraphQLServer) NewParam(_param *models.CommonSystemParams) *models.CommonSystemParams {
 	param := new(models.CommonSystemParams)
 	*param = *_param
+	if s.Cfg != nil {
+		param.RuntimeConfig = s.Cfg
+	}
 	return param
 }
 
@@ -927,17 +1038,6 @@ func (s *GraphQLServer) buildCommonSystemParam(i echo.Context) (*models.CommonSy
 	email := i.Get("email")
 	if email != nil {
 		param.Email = email.(string)
-	}
-
-	tenantID := i.Get("tenant")
-	if tenantID != nil {
-		param.TenantID = tenantID.(string)
-	}
-
-	tempTenantID := i.Get("temp_tenant_id")
-	if tempTenantID != nil {
-		fmt.Println("temp_tenant_id", tempTenantID)
-		param.TenantID = tempTenantID.(string)
 	}
 
 	role := i.Get("role")

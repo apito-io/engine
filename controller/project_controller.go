@@ -3,11 +3,15 @@ package controller
 import (
 	"context"
 	"encoding/csv"
+	"errors"
 	"fmt"
 	"net/http"
 	"os"
+	"strconv"
 	"strings"
 	"time"
+
+	ae "github.com/apito-io/engine/err"
 	"github.com/apito-io/engine/models"
 	"github.com/apito-io/engine/utility"
 	"github.com/google/uuid"
@@ -23,7 +27,62 @@ func contains(arr []string, str string) bool {
 	return false
 }
 
-func (a *authCtrl) ProjectCreation(c echo.Context) error {
+func coerceConfigPort(v interface{}) string {
+	switch p := v.(type) {
+	case string:
+		return p
+	case float64:
+		return strconv.FormatInt(int64(p), 10)
+	case int:
+		return strconv.Itoa(p)
+	case int64:
+		return strconv.FormatInt(p, 10)
+	default:
+		return fmt.Sprint(v)
+	}
+}
+
+func dbConfigString(m map[string]interface{}, k string) string {
+	v, ok := m[k]
+	if !ok || v == nil {
+		return ""
+	}
+	switch t := v.(type) {
+	case string:
+		return t
+	default:
+		return fmt.Sprint(t)
+	}
+}
+
+// ApplyDBConfigFromMap merges db_config map values into driver credentials (open-core fields only).
+func ApplyDBConfigFromMap(d *models.DriverCredentials, dbConfig map[string]interface{}) {
+	if s := dbConfigString(dbConfig, "host"); s != "" {
+		d.Host = s
+	}
+	if val, ok := dbConfig["port"]; ok && val != nil {
+		d.Port = coerceConfigPort(val)
+	}
+	if s := dbConfigString(dbConfig, "user"); s != "" {
+		d.User = s
+	} else if s := dbConfigString(dbConfig, "username"); s != "" {
+		d.User = s
+	}
+	if s := dbConfigString(dbConfig, "password"); s != "" {
+		d.Password = s
+	}
+	if s := dbConfigString(dbConfig, "database"); s != "" {
+		d.Database = s
+	}
+	if s := dbConfigString(dbConfig, "file"); s != "" {
+		d.File = s
+	}
+	if s := dbConfigString(dbConfig, "ssl_mode"); s != "" {
+		d.SSLMode = s
+	}
+}
+
+func (a *AuthController) ProjectCreation(c echo.Context) error {
 
 	var req map[string]interface{}
 	if err := c.Bind(&req); err != nil {
@@ -121,8 +180,9 @@ func (a *authCtrl) ProjectCreation(c echo.Context) error {
 
 	project.Driver = &models.DriverCredentials{}
 
+	var rawDBType string
 	if val, ok := req["database_type"]; ok && val != nil {
-		project.Driver.Engine = val.(string)
+		rawDBType = strings.ToLower(val.(string))
 	} else {
 		return c.JSON(http.StatusBadRequest, &models.HttpResponse{
 			Message: "Database type is required",
@@ -130,74 +190,10 @@ func (a *authCtrl) ProjectCreation(c echo.Context) error {
 		})
 	}
 
-	if val, ok := dbConfig["host"]; ok && val != nil {
-		project.Driver.Host = val.(string)
-	}
-	if val, ok := dbConfig["port"]; ok && val != nil {
-		project.Driver.Port = val.(string)
-	}
-	if val, ok := dbConfig["user"]; ok && val != nil {
-		project.Driver.User = val.(string)
-	}
-	if val, ok := dbConfig["password"]; ok && val != nil {
-		project.Driver.Password = val.(string)
-	}
-	if val, ok := dbConfig["database"]; ok && val != nil {
-		project.Driver.Database = val.(string)
-	}
-	if val, ok := dbConfig["file"]; ok && val != nil {
-		project.Driver.File = val.(string)
-	}
-
-	switch strings.ToLower(req["project_type"].(string)) {
-	case "regular", "general":
-		project.ProjectType = models.ProjectType_General
-	case "saas":
-		project.ProjectType = models.ProjectType_SaaS
-
-		var tenantModelName string
-		if val, ok := req["tenant_model_name"]; ok && val != nil {
-			tenantModelName = val.(string)
-		} else {
-			return c.JSON(http.StatusBadRequest, &models.HttpResponse{
-				Message: "Tenant model name is required for SaaS project",
-				Code:    http.StatusBadRequest,
-			})
-		}
-
-		// saas is just in trail mode right now for 7 days
-		//project.TrialEnds = time.Now().AddDate(0, 0, 7).UTC().Format(time.RFC3339)
-		project.TenantModelName = utility.SingularResourceName(tenantModelName)
-		project.Schema = &models.ProjectSchema{
-			Models: []*models.ModelType{
-				{
-					Name:          tenantModelName,
-					IsTenantModel: true,
-					Fields: []*models.FieldInfo{
-						{
-							Identifier:  "name",
-							Description: fmt.Sprintf("%s Name", strings.Title(tenantModelName)),
-							FieldType:   "text",
-							InputType:   "string",
-							Serial:      1,
-							Label:       "Name",
-							//SystemGenerated: true,
-						},
-						{
-							Identifier:  "logo",
-							Description: fmt.Sprintf("%s Logo", strings.Title(tenantModelName)),
-							InputType:   "string",
-							FieldType:   "media",
-							Serial:      2,
-							Label:       "Logo",
-							//SystemGenerated: true,
-						},
-					},
-				},
-			},
-		}
+	switch rawDBType {
 	default:
-		project.ProjectType = models.ProjectType_General
+		project.Driver.Engine = rawDBType
+		ApplyDBConfigFromMap(project.Driver, dbConfig)
 	}
 
 	if project.Driver == nil {
@@ -216,27 +212,29 @@ func (a *authCtrl) ProjectCreation(c echo.Context) error {
 	project.Driver.ProjectID = projectID // this is a must for connection manager
 	a.graphQLServer.GraphQLExecutor.SetProjectDriverCredential(ctx, project.Driver)
 
-	if project.ProjectType != models.ProjectType_SaaS {
-		//inject project_id via context
-		ctx = context.WithValue(ctx, "project_id", projectID)
-		projectDriver, err := a.graphQLServer.GraphQLExecutor.GetProjectDriver(ctx)
-		if err != nil {
-			return c.JSON(http.StatusInternalServerError, &models.HttpResponse{
-				Message: captureInternalServerError(err).Error(),
-				Code:    http.StatusInternalServerError,
-			})
-		}
-		err = projectDriver.AddCollection(ctx, &models.CommonSystemParams{
-			ProjectID:   projectID,
-			UserID:      user.ID,
-			ProjectType: project.ProjectType,
-		}, false)
-		if err != nil {
-			return c.JSON(http.StatusInternalServerError, &models.HttpResponse{
-				Message: captureInternalServerError(err).Error(),
-				Code:    http.StatusInternalServerError,
-			})
-		}
+	// Create the collection/table per database engine.
+	ctx = context.WithValue(ctx, "project_id", projectID)
+	projectDriver, err := a.graphQLServer.GraphQLExecutor.GetProjectDriver(ctx)
+	if err != nil {
+		return c.JSON(http.StatusInternalServerError, &models.HttpResponse{
+			Message: captureInternalServerError(err).Error(),
+			Code:    http.StatusInternalServerError,
+		})
+	}
+	addColParam := &models.CommonSystemParams{
+		ProjectID: projectID,
+		UserID:    user.ID,
+	}
+	if a.Cfg != nil && a.Cfg.InitProjectBaseHook != nil {
+		err = a.Cfg.InitProjectBaseHook(ctx, projectDriver, addColParam)
+	} else {
+		err = projectDriver.InitProjectBase(ctx, addColParam, nil)
+	}
+	if err != nil {
+		return c.JSON(http.StatusInternalServerError, &models.HttpResponse{
+			Message: captureInternalServerError(err).Error(),
+			Code:    http.StatusInternalServerError,
+		})
 	}
 
 	_project, err := a.graphQLServer.SystemDriver.CreateProject(ctx, userID.(string), project)
@@ -355,7 +353,7 @@ func (a *authCtrl) ProjectCreation(c echo.Context) error {
 	})
 }
 
-func (a *authCtrl) DemoProjectSwitch(c echo.Context) error {
+func (a *AuthController) DemoProjectSwitch(c echo.Context) error {
 
 	var req *models.ProjectCreateRequest
 	if err := c.Bind(&req); err != nil {
@@ -430,7 +428,7 @@ func (a *authCtrl) DemoProjectSwitch(c echo.Context) error {
 	})
 }
 
-func (a *authCtrl) ProjectNameCheck(c echo.Context) error {
+func (a *AuthController) ProjectNameCheck(c echo.Context) error {
 
 	var req *models.ProjectCreateRequest
 	if err := c.Bind(&req); err != nil {
@@ -457,8 +455,15 @@ func (a *authCtrl) ProjectNameCheck(c echo.Context) error {
 
 	ctx := c.Request().Context()
 
+	// first check proejct name is available in the sytem db or not 
 	err := a.graphQLServer.SystemDriver.CheckProjectName(ctx, req.Name)
 	if err != nil {
+		if errors.Is(err, ae.ErrProjectNameTaken) {
+			return c.JSON(http.StatusConflict, &models.HttpResponse{
+				Message: err.Error(),
+				Code:    http.StatusConflict,
+			})
+		}
 		return c.JSON(http.StatusInternalServerError, &models.HttpResponse{
 			Message: captureInternalServerError(err).Error(),
 			Code:    http.StatusInternalServerError,
@@ -472,7 +477,7 @@ func (a *authCtrl) ProjectNameCheck(c echo.Context) error {
 	})
 }
 
-func (a *authCtrl) ProjectList(c echo.Context) error {
+func (a *AuthController) ProjectList(c echo.Context) error {
 
 	userId := c.Get("user")
 	if userId == nil {
@@ -500,7 +505,6 @@ func (a *authCtrl) ProjectList(c echo.Context) error {
 			Name:        p.Name,
 			Description: p.Description,
 			CreatedAt:   p.CreatedAt,
-			ProjectType: p.ProjectType,
 		}
 		if p.Driver != nil {
 			_project.Driver = &models.DriverCredentials{Engine: p.Driver.Engine}
@@ -513,7 +517,7 @@ func (a *authCtrl) ProjectList(c echo.Context) error {
 	})
 }
 
-func (a *authCtrl) CSVTempGen(c echo.Context) error {
+func (a *AuthController) CSVTempGen(c echo.Context) error {
 
 	var req *models.CSVTemplateGenerator
 	if err := c.Bind(&req); err != nil {
@@ -586,7 +590,7 @@ func (a *authCtrl) CSVTempGen(c echo.Context) error {
 	return c.Attachment(fileName, fileName)
 }
 
-func (a *authCtrl) GetProfile(c echo.Context) error {
+func (a *AuthController) GetProfile(c echo.Context) error {
 
 	userId := c.Get("user")
 	if userId == nil {
@@ -617,7 +621,7 @@ func (a *authCtrl) GetProfile(c echo.Context) error {
 	})
 }
 
-func (a *authCtrl) UpdateProfile(c echo.Context) error {
+func (a *AuthController) UpdateProfile(c echo.Context) error {
 
 	userId := c.Get("user")
 	if userId == nil {
@@ -669,7 +673,7 @@ func (a *authCtrl) UpdateProfile(c echo.Context) error {
 	})
 }
 
-func (a *authCtrl) ProjectDelete(c echo.Context) error {
+func (a *AuthController) ProjectDelete(c echo.Context) error {
 
 	var req *models.ProjectCreateRequest
 	if err := c.Bind(&req); err != nil {

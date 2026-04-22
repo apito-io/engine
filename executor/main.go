@@ -6,7 +6,6 @@ import (
 	"fmt"
 
 	"github.com/apito-io/engine/database"
-	//shardDB "github.com/apito-io/engine/database/shared"
 	"github.com/apito-io/engine/interfaces"
 	"github.com/apito-io/engine/models"
 	"github.com/graph-gophers/dataloader/v7"
@@ -40,6 +39,18 @@ func (s *GraphQLExecutor) Init(ctx context.Context, _driver *models.InitParams) 
 	if _driver.ProjectDB != nil {
 		// store project driver credentials
 		s.connectionManager.AddDriverCredentials(ctx, _driver.ProjectDB)
+	}
+	projectID := _driver.ProjectID
+	if projectID == "" && _driver.ProjectDB != nil {
+		projectID = _driver.ProjectDB.ProjectID
+	}
+	if projectID == "" && ctx.Value("project_id") != nil {
+		if s, ok := ctx.Value("project_id").(string); ok {
+			projectID = s
+		}
+	}
+	if projectID != "" {
+		s.connectionManager.AddProDriverExtras(projectID, _driver.ProDriverExtras)
 	}
 
 	/* if s.SharedDriver == nil && _driver.SharedDB != nil {
@@ -82,7 +93,20 @@ func (s *GraphQLExecutor) GetProjectDriver(ctx context.Context) (interfaces.Proj
 	if projectID == nil {
 		return nil, errors.New("project id is required in context for `GetProjectDriver`")
 	}
-	conn, err := s.connectionManager.GetConnection(ctx, projectID.(string))
+	pid := projectID.(string)
+
+	if s.connectionManager.GetConfig() != nil && s.connectionManager.GetConfig().ConnectionRoutingHook != nil {
+		if scopeKey, ok := s.connectionManager.GetConfig().ConnectionRoutingHook(ctx, pid); ok && scopeKey != "" {
+			conn, err := s.connectionManager.GetScopedConnection(ctx, pid, scopeKey)
+			if err != nil {
+				fmt.Println(err.Error())
+				return nil, err
+			}
+			return conn.DBConn, nil
+		}
+	}
+
+	conn, err := s.connectionManager.GetConnection(ctx, pid)
 	if err != nil {
 		fmt.Println(err.Error())
 		return nil, err

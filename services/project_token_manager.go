@@ -106,9 +106,6 @@ func (m *ProjectKeyManager) GenerateKey(payload *models.TokenClaims) (string, er
 	}
 	data = append(data, stringToFixedBytes(payload.TokenUniqueID, 12)...)
 
-	// TenantID (UUID - 16 bytes)
-	data = append(data, uuidToBytes(payload.TenantID)...)
-
 	// TokenType (fixed 8 bytes)
 	data = append(data, stringToFixedBytes(payload.TokenType, 8)...)
 
@@ -198,13 +195,6 @@ func (m *ProjectKeyManager) Validate(ctx context.Context, key string, skipDBChec
 		}
 	}
 
-	// TenantID (16 bytes)
-	if offset+16 > len(data) {
-		return nil, ErrInvalidPayload
-	}
-	payload.TenantID = bytesToUUID(data[offset : offset+16])
-	offset += 16
-
 	// TokenType (8 bytes)
 	if offset+8 > len(data) {
 		return nil, ErrInvalidPayload
@@ -264,33 +254,7 @@ func (m *ProjectKeyManager) ValidateAndSetContext(c echo.Context, token string) 
 		return nil, errors.New("invalid token, without role")
 	}
 
-	if tokenObj.TenantID != "" {
-		c.Set("tenant", tokenObj.TenantID)
-	}
-
 	return tokenObj, nil
-}
-
-func (m *ProjectKeyManager) GenerateTenantToken(ctx context.Context, tenantID, token string) (string, error) {
-
-	claims, err := m.Validate(ctx, token, true)
-	if err != nil {
-		return "", err
-	}
-
-	var projectUserID string
-	if val, ok := ctx.Value("project_user_id").(string); ok && val != "" {
-		projectUserID = val
-	}
-
-	// overwrite the project user id
-	claims.UserID = projectUserID
-
-	claims.TenantID = tenantID
-	//claims.TenantID = "2a7cd0c3-d263-4d25-8b6a-263692879fc6"
-	claims.TokenType = "tenant"
-	claims.ExpireAt = time.Now().Unix() + (int64(time.Hour) * 24 * 30) // 30 days
-	return m.GenerateKey(claims)
 }
 
 func stringToFixedBytes(s string, size int) []byte {

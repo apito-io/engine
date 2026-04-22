@@ -9,6 +9,7 @@ import (
 	_const "github.com/apito-io/engine/const"
 	"github.com/apito-io/engine/interfaces"
 	"github.com/apito-io/engine/models"
+	"github.com/apito-io/engine/utility"
 	"github.com/apito-io/types"
 	hcplugin "github.com/hashicorp/go-plugin"
 	"github.com/tailor-platform/graphql"
@@ -40,11 +41,6 @@ func (s *GraphQLServer) HandleApitoFunction(ctx context.Context, cache *models.A
 		} else {
 			return nil, nil, errors.New("payload is required")
 		}
-		// inject tenant id if available
-		if param.TenantID != "" {
-			_payload.(map[string]interface{})["tenant_id"] = param.TenantID
-		}
-
 		// inject user id if available
 		if param.UserID != "" {
 			_payload.(map[string]interface{})["user_id"] = param.UserID
@@ -55,10 +51,6 @@ func (s *GraphQLServer) HandleApitoFunction(ctx context.Context, cache *models.A
 			return nil, nil, errors.New("invalid payload type")
 		}
 		_payload = doc
-		// inject tenant id if available
-		if param.TenantID != "" {
-			doc.TenantID = types.ID(param.TenantID)
-		}
 
 		// inject user id if available
 		if param.UserID != "" {
@@ -122,10 +114,17 @@ func (s *GraphQLServer) HandleApitoFunction(ctx context.Context, cache *models.A
 
 func (s *GraphQLServer) ApitoFunctionResolverFn(p graphql.ResolveParams) (interface{}, error) {
 
-	var (
-		v     = p.Context.Value
-		cache = v("cache").(*models.ApplicationCache)
-	)
+	cache, ok := utility.LegacyApplicationCache(p.Context)
+	if !ok || cache == nil {
+		return nil, errors.New("graphql context: application cache missing")
+	}
+
+	if s.Cfg != nil && s.Cfg.RoleAgnosticSchemaCache && cache.Param != nil && cache.Param.Role != nil {
+		r := cache.Param.Role
+		if !r.IsAdmin && !utility.ArrayContains(r.LogicExecutions, p.Info.FieldName) {
+			return nil, errors.New("permission denied: function not allowed for this role")
+		}
+	}
 
 	resp, _fn, err := s.HandleApitoFunction(p.Context, cache, p.Info.FieldName, p.Args)
 	if err != nil {

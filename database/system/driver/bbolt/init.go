@@ -6,18 +6,15 @@ package bbolt
 
 import (
 	"context"
-	"crypto/rand"
 	"fmt"
 	"log"
-	"math/big"
 	"os"
 	"path/filepath"
+
 	apitobolt "github.com/apito-io/apitoBolt"
 	oci "github.com/apito-io/engine/interfaces"
 	"github.com/apito-io/engine/models"
 	"github.com/apito-io/engine/utility"
-	"github.com/google/uuid"
-	"golang.org/x/crypto/bcrypt"
 )
 
 type ProBBoltSystemDriver struct {
@@ -78,38 +75,6 @@ func (d *ProBBoltSystemDriver) Close() error {
 	return d.DB.Close()
 }
 
-// generatePassword generates a random password string
-func generatePassword() string {
-	const charset = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789!@#$%^&*"
-	const passwordLength = 16
-
-	password := make([]byte, passwordLength)
-	for i := range password {
-		num, _ := rand.Int(rand.Reader, big.NewInt(int64(len(charset))))
-		password[i] = charset[num.Int64()]
-	}
-
-	return string(password)
-}
-
-// printCredentials prints the admin credentials in a bordered format
-func printCredentials(email, password string) {
-	border := "╔══════════════════════════════════════════════════════════════════════╗"
-	empty := "║                                                                      ║"
-	footer := "╚══════════════════════════════════════════════════════════════════════╝"
-
-	log.Println(border)
-	log.Println(empty)
-	log.Printf("║                        DEFAULT ADMIN CREDENTIALS                     ║")
-	log.Println(empty)
-	log.Printf("║  Email:    %-54s ║", email)
-	log.Printf("║  Password: %-54s ║", password)
-	log.Println(empty)
-	log.Printf("║  Please login with these credentials and change the password!       ║")
-	log.Println(empty)
-	log.Println(footer)
-}
-
 // checkMigrationStatus checks if migration has been completed
 func (d *ProBBoltSystemDriver) checkMigrationStatus(ctx context.Context) (bool, error) {
 	// First ensure the migrations collection exists
@@ -157,53 +122,6 @@ func (d *ProBBoltSystemDriver) markMigrationCompleted(ctx context.Context) error
 	}
 
 	return migrationsCollection.Update(&migrationStatus)
-}
-
-// createDefaultAdminUser creates the default admin user
-func (d *ProBBoltSystemDriver) createDefaultAdminUser(ctx context.Context) error {
-	// Check if admin user already exists
-	usersCollection := d.DB.Collection("users")
-	var existingUser models.SystemUser
-	err := usersCollection.FindOne("email", "admin@apito.io", &existingUser)
-	if err == nil && existingUser.Email == "admin@apito.io" {
-		// Admin user already exists, skip creation
-		log.Println("Default admin user already exists, skipping creation...")
-		return nil
-	}
-
-	// Create the admin user
-	adminUser := &models.SystemUser{
-		XKey:                      uuid.New().String(),
-		FirstName:                 "System",
-		LastName:                  "Administrator",
-		Email:                     "admin@apito.io",
-		Username:                  "admin",
-		//Secret:                    password, // In production, this should be hashed
-		IsAdmin:                   true,
-		AdministrativePermissions: []string{"all"},
-		CreatedAt:                 utility.GetCurrentTime(),
-		UpdatedAt:                 utility.GetCurrentTime(),
-	}
-
-	// Generate random password
-	password := generatePassword()
-	hash, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
-	if err != nil {
-		return err
-	}
-	adminUser.Secret = string(hash)
-	adminUser.ID = adminUser.XKey
-
-	// Save the admin user
-	_, err = usersCollection.Save(adminUser)
-	if err != nil {
-		return fmt.Errorf("failed to create default admin user: %v", err)
-	}
-
-	// Print credentials in bordered format
-	printCredentials("admin@apito.io", password)
-
-	return nil
 }
 
 // RunMigration creates the necessary collections/buckets for the system with migration tracking
@@ -290,11 +208,7 @@ func (d *ProBBoltSystemDriver) RunMigration(ctx context.Context) error {
 		}
 	}
 
-	// Create default admin user
-	log.Println("Creating default admin user...")
-	if err := d.createDefaultAdminUser(ctx); err != nil {
-		return fmt.Errorf("failed to create default admin user: %v", err)
-	}
+	// Default admin and org/team/project are created by EnsureSystemBootstrap on the system driver after migration.
 
 	// Mark migration as completed
 	if err := d.markMigrationCompleted(ctx); err != nil {

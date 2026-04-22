@@ -1,5 +1,12 @@
 package models
 
+import (
+	"context"
+
+	"github.com/apito-io/types"
+	"github.com/labstack/echo/v4"
+)
+
 type Config struct {
 	Environment string `env:"ENVIRONMENT" env-default:"local"`
 
@@ -27,30 +34,28 @@ type Config struct {
 	DefaultDatabaseDir string `env:"DEFAULT_DATABASE_DIR" env-default:"~/.apito/db"`
 
 	// System Database Information
-	SystemDatabaseEngine string `env:"SYSTEM_DB_ENGINE" env-default:"coreDB"`
+	SystemDatabaseEngine string `env:"SYSTEM_DB_ENGINE" env-default:"coredb"`
 	SystemDBUser         string `env:"SYSTEM_DB_USER" env-default:""`
 	SystemDBPassword     string `env:"SYSTEM_DB_PASSWORD" env-default:""`
 	SystemDBHost         string `env:"SYSTEM_DB_HOST" env-default:""`
 	SystemDBPort         string `env:"SYSTEM_DB_PORT" env-default:""`
 	SystemDBName         string `env:"SYSTEM_DB_NAME" env-default:"apito_system.db"`
 
-	DefaultProjectDatabaseEngine string `env:"PROJECT_DB_ENGINE" env-default:"coreDB"`
+	DefaultProjectDatabaseEngine string `env:"PROJECT_DB_ENGINE" env-default:"coredb"`
 	DefaultProjectDBUser         string `env:"PROJECT_DB_USER" env-default:""`
 	DefaultProjectDBPassword     string `env:"PROJECT_DB_PASSWORD" env-default:""`
 	DefaultProjectDBHost         string `env:"PROJECT_DB_HOST" env-default:""`
 	DefaultProjectDBPort         string `env:"PROJECT_DB_PORT" env-default:""`
 	DefaultProjectDBName         string `env:"PROJECT_DB_NAME" env-default:"apito_project.db"`
 
-	DefaultSaaSProjectDBName string `env:"DEFAULT_SAAS_PROJECT_DB_NAME" env-default:"apito_saas_project.db"`
-
-	KVStorageEngine         string `env:"KV_ENGINE" env-default:"coreDB"`
+	KVStorageEngine         string `env:"KV_ENGINE" env-default:"coredb"`
 	KVStorageEngineHost     string `env:"KV_HOST" env-default:""`
 	KVStorageEnginePort     string `env:"KV_PORT" env-default:""`
 	KVStorageEngineUser     string `env:"KV_USER" env-default:""`
 	KVStorageEnginePassword string `env:"KV_PASSWORD" env-default:""`
 	KVStorageEngineDatabase string `env:"KV_DATABASE" env-default:"apito_kv.db"`
 
-	QueueStorageEngine         string `env:"QUEUE_ENGINE" env-default:"coreDB"`
+	QueueStorageEngine         string `env:"QUEUE_ENGINE" env-default:"coredb"`
 	QueueStorageEngineHost     string `env:"QUEUE_HOST" env-default:""`
 	QueueStorageEnginePort     string `env:"QUEUE_PORT" env-default:""`
 	QueueStorageEngineUser     string `env:"QUEUE_USER" env-default:""`
@@ -85,7 +90,107 @@ type Config struct {
 	// Admin password reset: secret required to call POST /admin/reset-password (e.g. set in ~/.apito/bin/.env)
 	AdminResetSecret string `env:"APITO_ADMIN_RESET_SECRET" env-default:""`
 
-	// Optional driver factory for dependency injection (used by pro version)
-	// If nil, falls back to default core drivers
+	// Optional driver factory for dependency injection. If nil, built-in defaults are used.
 	DriverFactory interface{} `env:"-"` // Will be type-asserted to DatabaseDriverFactory
+
+	// DatabaseCheckWrapper optionally wraps the system database check HTTP handler.
+	// Type: func(auth any) echo.HandlerFunc (router type-asserts; avoids importing echo here).
+	DatabaseCheckWrapper interface{} `env:"-"`
+
+	// --- Extension hooks (pro layer registers implementations at startup) ---
+
+	// ConnectionRoutingHook returns a scope key for sub-project connection isolation.
+	// If it returns (key, true) with a non-empty key, the executor uses a scoped connection.
+	ConnectionRoutingHook func(ctx context.Context, projectID string) (scopeKey string, ok bool) `env:"-"`
+
+	// QueryFilterHook returns additional filters to apply before every query (e.g. row-level isolation).
+	QueryFilterHook func(ctx context.Context, params *CommonSystemParams) []*QueryFilter `env:"-"`
+
+	// DocumentPreInsertHook is called before a document is inserted; can mutate the document or return an error.
+	DocumentPreInsertHook func(ctx context.Context, params *CommonSystemParams, doc map[string]interface{}) error `env:"-"`
+
+	// DocumentPreInsertDocHook is called after the driver builds *types.DefaultDocumentStructure and before persist.
+	// Pro may mutate the struct; open-core must not interpret field semantics.
+	DocumentPreInsertDocHook func(ctx context.Context, params *CommonSystemParams, doc *types.DefaultDocumentStructure) error `env:"-"`
+
+	// PostTokenValidateHook runs after token validation succeeds (bearer or cookie path).
+	// Pro may read scopes/headers/cookies and stamp echo context; open-core stays policy-free.
+	PostTokenValidateHook func(ctx echo.Context, claims *TokenClaims) `env:"-"`
+
+	// DDLPostCreateHook is called after a model table/collection is created; can add columns or indexes.
+	DDLPostCreateHook func(ctx context.Context, project *Project, model *ModelType, dbHandle interface{}) error `env:"-"`
+
+	// PostDocumentInsertHook is called after a document is successfully inserted.
+	PostDocumentInsertHook func(ctx context.Context, params *CommonSystemParams, docID string) error `env:"-"`
+
+	// SchemaIterateHook is called when a schema change needs to propagate to sub-project databases.
+	SchemaIterateHook func(ctx context.Context, project *Project, fn func(ctx context.Context, driver interface{}) error) error `env:"-"`
+
+	// TokenClaimsHook allows the pro layer to inject additional claims into JWT/token payloads.
+	TokenClaimsHook func(project *Project, claims map[string]interface{}) `env:"-"`
+
+	// EnsureScopedDatabaseHook runs before default scoped DB creation (e.g. Postgres/MySQL per-scope isolation).
+	EnsureScopedDatabaseHook func(ctx context.Context, projectID string, base, derived *DriverCredentials) error `env:"-"`
+
+	// LoadProjectCacheHook allows the pro layer to modify a project after loading from the system DB.
+	LoadProjectCacheHook func(ctx context.Context, project *Project) `env:"-"`
+
+	// NamingV2ArangoPerModelCollections is used when applying Arango naming V2 physical migration:
+	// true means one document collection per model layout; false uses a single p_{projectId} bucket.
+	NamingV2ArangoPerModelCollections func(ctx context.Context, project *Project) bool `env:"-"`
+
+	// NamingV2RelationTenantModel returns the tenant root model name for relation edges (e.g. "restaurant").
+	// When set, Arango naming migration moves legacy root-level tenant_id into ext and sets ext.tenant_model.
+	NamingV2RelationTenantModel func(ctx context.Context, project *Project) string `env:"-"`
+
+	// BuildSystemParamHook allows the pro layer to enrich CommonSystemParams after the base build.
+	BuildSystemParamHook func(ctx context.Context, project *Project, param *CommonSystemParams) `env:"-"`
+
+	// InitProjectBaseHook is for extending the project base initialization.
+	// driver is the concrete ProjectDBInterface implementation. Default when nil: type-assert and call InitProjectBase.
+	InitProjectBaseHook func(ctx context.Context, driver interface{}, param *CommonSystemParams) error `env:"-"`
+
+	// ProjectTypeForClaims maps open-core Project to a JWT "project_type" value (e.g. int32). OSS leaves nil and JWT uses "general".
+	ProjectTypeForClaims func(*Project) interface{} `env:"-"`
+
+	// PostApplicationCacheHook runs after GetApplicationCache assembles cache (param, ctx, plugins).
+	// Pro may enrich cache.Ctx / cache.Param here so resolvers using the embedded *GraphQLServer see the same context
+	// as the outer server. Type: func(echo.Context, *ApplicationCache).
+	PostApplicationCacheHook interface{} `env:"-"`
+
+	// SchemaObjectsExtensionHook runs inside BuildServerQueriesAndMutations right after
+	// InitPrivateObjects(). The pro layer uses it to AddFieldConfig on core schema objects
+	// (e.g. ModelType, ProjectModel) before the schema is sent through channels.
+	SchemaObjectsExtensionHook func(objs interface{}) `env:"-"`
+
+	// --- Public GraphQL schema builder (per-request dynamic schema) ---
+
+	// MaxModelsPerProject caps models processed by publicSchemaBuilder (0 = no limit).
+	MaxModelsPerProject int `env:"MAX_MODELS_PER_PROJECT" env-default:"0"`
+
+	// EnableCompiledSchemaCache caches pre-connection GraphQL shape (fingerprint: project + role + schema).
+	EnableCompiledSchemaCache bool `env:"ENABLE_COMPILED_SCHEMA_CACHE" env-default:"false"`
+
+	// EnableClosureFreeResolvers reserved for future resolver refactors (relation fields).
+	EnableClosureFreeResolvers bool `env:"ENABLE_CLOSURE_FREE_RESOLVERS" env-default:"false"`
+
+	// RoleAgnosticSchemaCache builds one superset schema per project (pre-connection cache key omits role); resolvers enforce real role.
+	RoleAgnosticSchemaCache bool `env:"ROLE_AGNOSTIC_SCHEMA_CACHE" env-default:"false"`
+
+	// SchemaBuildTelemetry emits OTel spans around publicSchemaBuilder when true.
+	SchemaBuildTelemetry bool `env:"SCHEMA_BUILD_TELEMETRY" env-default:"true"`
+
+	// SchemaBuildMetrics registers OTel counter schema_build_total and histogram schema_build_duration_seconds.
+	SchemaBuildMetrics bool `env:"SCHEMA_BUILD_METRICS" env-default:"false"`
+
+	// MetricsEnabled gates apito_* OpenTelemetry instruments (HTTP, GraphQL, pool, DB decorator, cache, KV, queue, session).
+	// When false, telemetry helpers no-op. When true, instruments record if a global MeterProvider is registered (OSS or extended builds).
+	MetricsEnabled bool `env:"METRICS_ENABLED" env-default:"true"`
+
+	// SystemMetricsToken is an optional Bearer secret compared by the router when a build exposes a protected metrics scrape path.
+	// Open-core does not mount that route; deployments that add one should set this in production.
+	SystemMetricsToken string `env:"SYSTEM_METRICS_TOKEN" env-default:""`
+
+	// OTELExporterOTLPEndpoint optional OTLP HTTP endpoint for traces. Empty disables OTLP trace export for builds that wire a TracerProvider.
+	OTELExporterOTLPEndpoint string `env:"OTEL_EXPORTER_OTLP_ENDPOINT" env-default:""`
 }

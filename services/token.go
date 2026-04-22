@@ -18,6 +18,7 @@ import (
 	ae "github.com/apito-io/engine/err"
 	"github.com/apito-io/engine/interfaces"
 	"github.com/apito-io/engine/models"
+	"github.com/apito-io/engine/telemetry"
 	"github.com/apito-io/engine/utility"
 	"github.com/gorilla/websocket"
 	"github.com/labstack/echo/v4"
@@ -34,6 +35,15 @@ type ApitoTokenService struct {
 	// Removed dbWriteLock - channels are thread-safe
 	ctx    context.Context
 	cancel context.CancelFunc
+}
+
+func (t *ApitoTokenService) runPostTokenValidateHook(ctx echo.Context, claims *models.TokenClaims) {
+	if t == nil || t.cfg == nil || claims == nil || t.cfg.PostTokenValidateHook == nil {
+		return
+	}
+	start := time.Now()
+	t.cfg.PostTokenValidateHook(ctx, claims)
+	telemetry.RecordSessionValidate(ctx.Request().Context(), t.cfg, "ok", time.Since(start))
 }
 
 func NewApitoTokenService(cfg *models.Config, auth AuthServiceInterface, driver interfaces.ApitoSystemDB) (*ApitoTokenService, error) {
@@ -243,16 +253,12 @@ func (t *ApitoTokenService) ApitoTokenHandler(next echo.HandlerFunc) echo.Handle
 					return ctx.JSON(http.StatusForbidden, map[string]interface{}{"message": ae.InvalidToken})
 				}
 			} else {
-				// blanka token is used in api key so it might contain tenant id
-				tenantID := ctx.Request().Header.Get("X-Apito-Tenant-ID")
-				if tenantID != "" {
-					ctx.Set("temp_tenant_id", tenantID)
-				}
 				verifiedToken, err = t.blankaService.ValidateAndSetContext(ctx, *token)
 				if err != nil {
 					return ctx.JSON(http.StatusForbidden, map[string]interface{}{"message": ae.InvalidToken})
 				}
 			}
+			t.runPostTokenValidateHook(ctx, verifiedToken)
 			projectID = verifiedToken.ProjectID
 			userID = verifiedToken.UserID
 
@@ -282,6 +288,8 @@ func (t *ApitoTokenService) ApitoTokenHandler(next echo.HandlerFunc) echo.Handle
 			if err != nil {
 				return ctx.JSON(http.StatusForbidden, map[string]interface{}{"message": ae.InvalidToken})
 			}
+
+			t.runPostTokenValidateHook(ctx, verifiedToken)
 
 			projectID = verifiedToken.ProjectID
 			userID = verifiedToken.UserID
@@ -320,11 +328,12 @@ func (t *ApitoTokenService) ApitoTokenHandler(next echo.HandlerFunc) echo.Handle
 				}
 			}
 
-			tokenClaims.TenantID = tokens.TenantID
 			err = utility.SetTokenClaimsToRouter(ctx, tokenClaims)
 			if err != nil {
 				return ctx.JSON(http.StatusForbidden, map[string]interface{}{"message": ae.InvalidToken})
 			}
+
+			t.runPostTokenValidateHook(ctx, tokenClaims)
 
 			projectID = tokenClaims.ProjectID
 			userID = tokenClaims.UserID
@@ -509,13 +518,6 @@ func tokenFromCookies(r *http.Request) (*models.JWTTokens, error) {
 		return nil, errors.New("no token")
 	}
 	tokens.IDToken = c.Value
-
-	// optional cookie
-	c, _ = r.Cookie("temp_tenant_id")
-	if c != nil {
-		fmt.Println("temp_tenant_id", c.Value)
-		tokens.TenantID = c.Value
-	}
 
 	return &tokens, nil
 }

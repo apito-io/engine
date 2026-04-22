@@ -1,10 +1,12 @@
 package controller
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"net/http"
 	"strconv"
+	"strings"
 	"time"
 
 	_const "github.com/apito-io/engine/const"
@@ -22,18 +24,18 @@ import (
 	"github.com/tailor-platform/graphql"
 )
 
-type authCtrl struct {
+type AuthController struct {
 	Cfg           *models.Config
 	graphQLServer *resolver.GraphQLServer
 }
 
-func GetAuthController(cfg *models.Config, commonFn *resolver.GraphQLServer) *authCtrl {
+func GetAuthController(cfg *models.Config, commonFn *resolver.GraphQLServer) *AuthController {
 	/*cognito, err := services.NewApitoTokenService(cfg, gqlServer.SystemDriver)
 	if err != nil {
 		return nil
 	}*/
 
-	return &authCtrl{
+	return &AuthController{
 		Cfg:           cfg,
 		graphQLServer: commonFn,
 	}
@@ -47,14 +49,14 @@ func fetchFromCookies(r *http.Request, name string) (string, error) {
 	return c.Value, nil
 }
 
-func (a *authCtrl) normalJSONResponse(resp http.ResponseWriter, code int, msg interface{}) {
+func (a *AuthController) normalJSONResponse(resp http.ResponseWriter, code int, msg interface{}) {
 	js, _ := json.Marshal(msg)
 	resp.WriteHeader(code)
 	resp.Header().Set("Content-Type", "application/json")
 	resp.Write(js)
 }
 
-/*func (a *authCtrl) setFacebookToken() http.Handler {
+/*func (a *AuthController) setFacebookToken() http.Handler {
 	fn := func(w http.ResponseWriter, req *http.Request) {
 		ctx := req.Context()
 		token, err := fb_oauth2.TokenFromContext(ctx)
@@ -87,7 +89,7 @@ func (a *authCtrl) normalJSONResponse(resp http.ResponseWriter, code int, msg in
 	return http.HandlerFunc(fn)
 }*/
 
-func (a *authCtrl) Journey(c echo.Context) error {
+func (a *AuthController) Journey(c echo.Context) error {
 
 	// Load configuration from environment variables and .env file
 	var cfg models.Config
@@ -126,17 +128,42 @@ func (a *authCtrl) Journey(c echo.Context) error {
 }
 
 type DatabaseRequest struct {
-	File     string `json:"file"`
-	Type     string `json:"type"`
-	Host     string `json:"host"`
-	Port     int    `json:"port"`
-	Database string `json:"database"`
-	Username string `json:"username"`
-	Password string `json:"password"`
+	File     string      `json:"file"`
+	Type     string      `json:"type"`
+	Host     string      `json:"host"`
+	Port     interface{} `json:"port"`
+	Database string      `json:"database"`
+	Username string      `json:"username"`
+	Password string      `json:"password"`
+	SSLMode  string      `json:"ssl_mode"`
 }
 
-func (a *authCtrl) DatabaseCheck(c echo.Context) error {
+// DatabaseCheckPort coerces JSON port values for database check requests.
+func DatabaseCheckPort(v interface{}, defaultPort string) string {
+	switch x := v.(type) {
+	case nil:
+		return defaultPort
+	case float64:
+		if x == 0 {
+			return defaultPort
+		}
+		return strconv.FormatInt(int64(x), 10)
+	case int:
+		if x == 0 {
+			return defaultPort
+		}
+		return strconv.Itoa(x)
+	case string:
+		if x == "" {
+			return defaultPort
+		}
+		return x
+	default:
+		return defaultPort
+	}
+}
 
+func (a *AuthController) DatabaseCheck(c echo.Context) error {
 	var req DatabaseRequest
 	if err := c.Bind(&req); err != nil {
 		return c.JSON(http.StatusBadRequest, &models.HttpResponse{
@@ -144,13 +171,19 @@ func (a *authCtrl) DatabaseCheck(c echo.Context) error {
 			Code:    http.StatusBadRequest,
 		})
 	}
+	return DatabaseCheckCore(a, c, &req)
+}
 
-	switch req.Type {
+// DatabaseCheckCore runs open-core database connectivity checks (Mongo, SQL family, coredb). Pro wraps this for hosted providers.
+func DatabaseCheckCore(a *AuthController, c echo.Context, req *DatabaseRequest) error {
+	dbType := strings.ToLower(strings.TrimSpace(req.Type))
+
+	switch dbType {
 	case _const.MongoDBDriver:
-		driver, err := mongo.GetMongoDriver(a.Cfg, &models.DriverCredentials{
-			Engine:   req.Type,
+		driver, err := mongo.GetProjectMongoDriver(a.Cfg, &models.DriverCredentials{
+			Engine:   _const.MongoDBDriver,
 			Host:     req.Host,
-			Port:     strconv.Itoa(req.Port),
+			Port:     DatabaseCheckPort(req.Port, "27017"),
 			Database: req.Database,
 			User:     req.Username,
 			Password: req.Password,
@@ -174,14 +207,22 @@ func (a *authCtrl) DatabaseCheck(c echo.Context) error {
 		})
 
 	case _const.PostgreSQLDriver, _const.MySQLDriver, _const.SQLiteDriver, _const.SQLServerDriver, _const.MariaDBDriver:
+		defPort := ""
+		switch dbType {
+		case _const.PostgreSQLDriver:
+			defPort = "5432"
+		case _const.MySQLDriver, _const.MariaDBDriver:
+			defPort = "3306"
+		}
 		driver, err := sql.GetSQLDriver(a.Cfg, &models.DriverCredentials{
 			File:     req.File,
-			Engine:   req.Type,
+			Engine:   dbType,
 			Host:     req.Host,
-			Port:     strconv.Itoa(req.Port),
+			Port:     DatabaseCheckPort(req.Port, defPort),
 			Database: req.Database,
 			User:     req.Username,
 			Password: req.Password,
+			SSLMode:  req.SSLMode,
 		})
 		if err != nil {
 			return c.JSON(http.StatusInternalServerError, &models.HttpResponse{
@@ -203,7 +244,7 @@ func (a *authCtrl) DatabaseCheck(c echo.Context) error {
 		})
 	case _const.CoreDB:
 		driver, err := bbolt.GetBBoltDriver(a.Cfg, &models.DriverCredentials{
-			Engine: req.Type,
+			Engine: _const.CoreDB,
 			File:   req.File,
 		})
 		if err != nil {
@@ -219,17 +260,16 @@ func (a *authCtrl) DatabaseCheck(c echo.Context) error {
 				Code:    http.StatusInternalServerError,
 			})
 		}
+		return c.JSON(http.StatusOK, map[string]interface{}{
+			"code":    http.StatusOK,
+			"message": "Database connected successfully",
+		})
 	default:
 		return c.JSON(http.StatusBadRequest, &models.HttpResponse{
 			Message: "Invalid database type",
 			Code:    http.StatusBadRequest,
 		})
 	}
-
-	return c.JSON(http.StatusOK, map[string]interface{}{
-		"code":    http.StatusOK,
-		"message": "DemoProjectSwitch",
-	})
 }
 
 func captureInternalServerError(err error) error {
@@ -238,11 +278,11 @@ func captureInternalServerError(err error) error {
 	return err
 }
 
-func (a *authCtrl) errorHandler(router echo.Context, response *models.HttpResponse) {
+func (a *AuthController) errorHandler(router echo.Context, response *models.HttpResponse) {
 	router.JSON(int(response.Code), response)
 }
 
-func (a *authCtrl) ProjectSwitchV2(c echo.Context) error {
+func (a *AuthController) ProjectSwitchV2(c echo.Context) error {
 	var req *models.ProjectCreateRequest
 	if err := c.Bind(&req); err != nil {
 		return c.JSON(http.StatusBadRequest, &models.HttpResponse{
@@ -321,6 +361,16 @@ func (a *authCtrl) ProjectSwitchV2(c echo.Context) error {
 		_project.Driver.Database = a.Cfg.DefaultProjectDBName
 	}
 
+	// Register enriched credentials on the process-wide connection manager (same as project create).
+	if _project.Driver != nil && a.graphQLServer != nil && a.graphQLServer.GraphQLExecutor != nil {
+		d := *_project.Driver
+		if strings.TrimSpace(d.ProjectID) == "" {
+			d.ProjectID = _project.ID
+		}
+		ctxP := context.WithValue(ctx, "project_id", _project.ID)
+		_ = a.graphQLServer.GraphQLExecutor.SetProjectDriverCredential(ctxP, &d)
+	}
+
 	/*projectDriver, err := project.GetProjectDriver(_project.Driver)
 	if err != nil {
 		return c.JSON(http.StatusBadRequest, &models.HttpResponse{
@@ -342,7 +392,7 @@ func (a *authCtrl) ProjectSwitchV2(c echo.Context) error {
 	})
 }
 
-func (a *authCtrl) LogoutV2(c echo.Context) error {
+func (a *AuthController) LogoutV2(c echo.Context) error {
 
 	ctx := c.Request().Context()
 
@@ -402,7 +452,7 @@ func (a *authCtrl) LogoutV2(c echo.Context) error {
 	return c.Redirect(http.StatusTemporaryRedirect, url.String())
 }
 
-func (a *authCtrl) ChangePasswordV2(c echo.Context) error {
+func (a *AuthController) ChangePasswordV2(c echo.Context) error {
 
 	ctx := c.Request().Context()
 
@@ -455,7 +505,7 @@ func (a *authCtrl) ChangePasswordV2(c echo.Context) error {
 }
 
 // AdminResetPasswordV2 handles POST /admin/reset-password. Requires APITO_ADMIN_RESET_SECRET in request body and config.
-func (a *authCtrl) AdminResetPasswordV2(c echo.Context) error {
+func (a *AuthController) AdminResetPasswordV2(c echo.Context) error {
 	var req models.AdminResetPasswordRequest
 	if err := c.Bind(&req); err != nil {
 		return c.JSON(http.StatusBadRequest, &models.HttpResponse{
@@ -503,7 +553,7 @@ func (a *authCtrl) AdminResetPasswordV2(c echo.Context) error {
 	})
 }
 
-func (a *authCtrl) LoginV2(c echo.Context) error {
+func (a *AuthController) LoginV2(c echo.Context) error {
 
 	var loginRequest *models.LoginRequest
 	if err := c.Bind(&loginRequest); err != nil {
@@ -616,7 +666,7 @@ func (a *authCtrl) LoginV2(c echo.Context) error {
 	})
 }
 
-func (a *authCtrl) RegisterV2(c echo.Context) error {
+func (a *AuthController) RegisterV2(c echo.Context) error {
 
 	ctx := c.Request().Context()
 
@@ -714,7 +764,7 @@ func (a *authCtrl) RegisterV2(c echo.Context) error {
 	})
 }
 
-func (a *authCtrl) VerifyV2(c echo.Context) error {
+func (a *AuthController) VerifyV2(c echo.Context) error {
 
 	ctx := c.Request().Context()
 
@@ -751,7 +801,7 @@ func (a *authCtrl) VerifyV2(c echo.Context) error {
 	})
 }
 
-func (a *authCtrl) ForgetPasswordRequestV2(c echo.Context) error {
+func (a *AuthController) ForgetPasswordRequestV2(c echo.Context) error {
 
 	var registerRequest *models.RegisterRequest
 	if err := c.Bind(&registerRequest); err != nil {
@@ -795,7 +845,7 @@ func (a *authCtrl) ForgetPasswordRequestV2(c echo.Context) error {
 	})
 }
 
-func (a *authCtrl) ForgetPasswordConfirmedV2(c echo.Context) error {
+func (a *AuthController) ForgetPasswordConfirmedV2(c echo.Context) error {
 
 	var registerRequest *models.RegisterRequest
 	if err := c.Bind(&registerRequest); err != nil {

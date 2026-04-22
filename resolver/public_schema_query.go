@@ -12,13 +12,15 @@ import (
 
 func (s *GraphQLServer) MultiResourceResolverFn(p graphql.ResolveParams) (interface{}, error) {
 
-	var (
-		v = p.Context.Value
-		//router           = v("router").(echo.Context)
-		cache            = v("cache").(*models.ApplicationCache)
-		rootSelectionSet = v("selectionSet").(ast.SelectionSet)
-		ctx              = p.Context
-	)
+	cache, ok := utility.LegacyApplicationCache(p.Context)
+	if !ok {
+		return nil, errors.New("application cache missing in context")
+	}
+	rootSelectionSet, ok := utility.LegacySelectionSet(p.Context)
+	if !ok {
+		return nil, errors.New("selection set missing in context")
+	}
+	ctx := p.Context
 
 	model := utility.SingularResourceName(p.Info.FieldName)
 
@@ -39,7 +41,7 @@ func (s *GraphQLServer) MultiResourceResolverFn(p graphql.ResolveParams) (interf
 
 	var modelType *models.ModelType
 	for _, field := range cache.Project.Schema.Models {
-		if field.Name == model {
+		if utility.ModelIDMatchesGraphQLField(field.Name, model) {
 			modelType = field
 			break
 		}
@@ -47,6 +49,10 @@ func (s *GraphQLServer) MultiResourceResolverFn(p graphql.ResolveParams) (interf
 
 	if modelType == nil {
 		return nil, ae.ModelTypeNotFound
+	}
+
+	if err := s.enforceRoleAgnosticModelRead(modelType.Name, cache.Param.Role); err != nil {
+		return nil, err
 	}
 
 	param := s.NewParam(cache.Param)
@@ -66,13 +72,15 @@ func (s *GraphQLServer) MultiResourceResolverFn(p graphql.ResolveParams) (interf
 
 func (s *GraphQLServer) SingleResourceResolverFn(p graphql.ResolveParams) (interface{}, error) {
 
-	var (
-		v = p.Context.Value
-		//router           = v("router").(echo.Context)
-		cache            = v("cache").(*models.ApplicationCache)
-		rootSelectionSet = v("selectionSet").(ast.SelectionSet)
-		ctx              = p.Context
-	)
+	cache, ok := utility.LegacyApplicationCache(p.Context)
+	if !ok {
+		return nil, errors.New("application cache missing in context")
+	}
+	rootSelectionSet, ok := utility.LegacySelectionSet(p.Context)
+	if !ok {
+		return nil, errors.New("selection set missing in context")
+	}
+	ctx := p.Context
 
 	model := utility.SingularResourceName(p.Info.FieldName)
 
@@ -93,7 +101,7 @@ func (s *GraphQLServer) SingleResourceResolverFn(p graphql.ResolveParams) (inter
 
 	var modelType *models.ModelType
 	for _, field := range cache.Project.Schema.Models {
-		if field.Name == model {
+		if utility.ModelIDMatchesGraphQLField(field.Name, model) {
 			modelType = field
 			break
 		}
@@ -103,6 +111,10 @@ func (s *GraphQLServer) SingleResourceResolverFn(p graphql.ResolveParams) (inter
 		return nil, ae.ModelTypeNotFound
 	}
 
+	if err := s.enforceRoleAgnosticModelRead(modelType.Name, cache.Param.Role); err != nil {
+		return nil, err
+	}
+
 	param := s.NewParam(cache.Param)
 
 	param.Model = modelType
@@ -110,18 +122,14 @@ func (s *GraphQLServer) SingleResourceResolverFn(p graphql.ResolveParams) (inter
 
 	param.QuerySelectionSets = selectionSet
 
-	if param.TenantID == "" && len(p.Args) == 0 {
-		return nil, errors.New("ID is required")
+	if uid, ok := p.Args["_id"].(string); ok && uid != "" {
+		param.DocumentID = uid
+	} else if modelType.SinglePage {
+		param.DocumentID = modelType.SinglePageUUID
 	}
 
-	if modelType.IsTenantModel && param.TenantID != "" {
-		param.DocumentID = param.TenantID
-	} else {
-		if uid, ok := p.Args["_id"].(string); ok && uid != "" {
-			param.DocumentID = uid
-		} else if modelType.SinglePage {
-			param.DocumentID = modelType.SinglePageUUID
-		}
+	if param.DocumentID == "" {
+		return nil, errors.New("ID is required")
 	}
 
 	driver, err := s.GraphQLExecutor.GetProjectDriver(ctx)
@@ -138,12 +146,11 @@ func (s *GraphQLServer) SingleResourceResolverFn(p graphql.ResolveParams) (inter
 
 func (s *GraphQLServer) CountResolverFn(p graphql.ResolveParams) (interface{}, error) {
 
-	var (
-		v = p.Context.Value
-		//router = v("router").(echo.Context)
-		cache = v("cache").(*models.ApplicationCache)
-		ctx   = p.Context
-	)
+	cache, ok := utility.LegacyApplicationCache(p.Context)
+	if !ok {
+		return nil, errors.New("application cache missing in context")
+	}
+	ctx := p.Context
 
 	/*cache, err := s.GetApplicationCache(router)
 	if err != nil {
@@ -156,13 +163,18 @@ func (s *GraphQLServer) CountResolverFn(p graphql.ResolveParams) (interface{}, e
 
 	var modelType *models.ModelType
 	for _, field := range cache.Project.Schema.Models {
-		if field.Name == model {
+		if utility.ModelIDMatchesGraphQLField(field.Name, model) {
 			modelType = field
+			break
 		}
 	}
 
 	if modelType == nil {
 		return "", errors.New("Connection >  Model Type Not Found")
+	}
+
+	if err := s.enforceRoleAgnosticModelRead(modelType.Name, cache.Param.Role); err != nil {
+		return nil, err
 	}
 
 	param := s.NewParam(cache.Param)
@@ -185,13 +197,15 @@ func (s *GraphQLServer) CountResolverFn(p graphql.ResolveParams) (interface{}, e
 
 func (s *GraphQLServer) AggregateResolverFn(p graphql.ResolveParams) (interface{}, error) {
 
-	var (
-		v = p.Context.Value
-		//router = v("router").(echo.Context)
-		cache = v("cache").(*models.ApplicationCache)
-		rootSelectionSet = v("selectionSet").(ast.SelectionSet)
-		ctx   = p.Context
-	)
+	cache, ok := utility.LegacyApplicationCache(p.Context)
+	if !ok {
+		return nil, errors.New("application cache missing in context")
+	}
+	rootSelectionSet, ok := utility.LegacySelectionSet(p.Context)
+	if !ok {
+		return nil, errors.New("selection set missing in context")
+	}
+	ctx := p.Context
 
 	/*cache, err := s.GetApplicationCache(router)
 	if err != nil {
@@ -212,13 +226,18 @@ func (s *GraphQLServer) AggregateResolverFn(p graphql.ResolveParams) (interface{
 
 	var modelType *models.ModelType
 	for _, field := range cache.Project.Schema.Models {
-		if field.Name == model {
+		if utility.ModelIDMatchesGraphQLField(field.Name, model) {
 			modelType = field
+			break
 		}
 	}
 
 	if modelType == nil {
 		return "", errors.New("Connection >  Model Type Not Found")
+	}
+
+	if err := s.enforceRoleAgnosticModelRead(modelType.Name, cache.Param.Role); err != nil {
+		return nil, err
 	}
 
 	param := s.NewParam(cache.Param)

@@ -3,8 +3,10 @@ package bbolt
 import (
 	"context"
 	"errors"
+	"fmt"
 	apitobolt "github.com/apito-io/apitoBolt"
 	q "github.com/apito-io/apitoBolt/q"
+	ae "github.com/apito-io/engine/err"
 	"github.com/apito-io/engine/models"
 	"github.com/apito-io/engine/utility"
 	"github.com/apito-io/types"
@@ -118,7 +120,7 @@ func (d *ProBBoltSystemDriver) CheckProjectName(ctx context.Context, name string
 	}
 
 	if len(results) > 0 {
-		return errors.New("project Already Exists with this Name")
+		return fmt.Errorf("%w", ae.ErrProjectNameTaken)
 	}
 
 	return nil

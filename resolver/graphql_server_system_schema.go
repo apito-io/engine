@@ -17,6 +17,10 @@ func (s *GraphQLServer) BuildServerQueriesAndMutations() {
 	privateSchemaObjects.ObjectModels = privateSchemaObjects.InitPrivateObjects()
 	s.PrivateSchemObjects = privateSchemaObjects
 
+	if s.Cfg.SchemaObjectsExtensionHook != nil {
+		s.Cfg.SchemaObjectsExtensionHook(privateSchemaObjects)
+	}
+
 	s.SystemQueriesChan <- &graphql.Fields{
 		"currentProject": &graphql.Field{
 			Name:    "GetCurrentProject",
@@ -113,24 +117,6 @@ func (s *GraphQLServer) BuildServerQueriesAndMutations() {
 			Type:    privateSchemaObjects.SystemUserObject,
 			Resolve: s.GetLoggedInUserFn,
 		},
-		"getTenants": &graphql.Field{
-			Name: "GetAllTenants",
-			Type: graphql.NewList(graphql.NewObject(graphql.ObjectConfig{
-				Name: "ProjectTenantsResponse",
-				Fields: graphql.Fields{
-					"id": &graphql.Field{
-						Type: graphql.String,
-					},
-					"name": &graphql.Field{
-						Type: graphql.String,
-					},
-					"logo": &graphql.Field{
-						Type: graphql.String,
-					},
-				},
-			})),
-			Resolve: s.GetProjectTenantsResolverFn,
-		},
 		"getProject": &graphql.Field{
 			Name: "GetAProject",
 			Type: privateSchemaObjects.ProjectDetailsObject,
@@ -171,7 +157,30 @@ func (s *GraphQLServer) BuildServerQueriesAndMutations() {
 			Args:    graphql.FieldConfigArgument{},
 			Resolve: s.ProjectModelInfoResolverFn,
 		},*/
-		"getPlugins": &graphql.Field{
+		"listPluginIds": &graphql.Field{
+			Name: "GetListPluginIds",
+			Args: graphql.FieldConfigArgument{
+				"_id": &graphql.ArgumentConfig{
+					Type: graphql.String,
+				},
+				"type": &graphql.ArgumentConfig{
+					Type: graphql.NewNonNull(enums.PluginTypeEnums),
+				},
+			},
+			Type: graphql.NewObject(graphql.ObjectConfig{
+				Name: "ListPluginIDsResponse",
+				Fields: graphql.Fields{
+					"type": &graphql.Field{
+						Type: graphql.NewNonNull(enums.PluginTypeEnums),
+					},
+					"plugins": &graphql.Field{
+						Type: graphql.NewList(graphql.String),
+					},
+				},
+			}),
+			Resolve: s.LoadedFunctionProviderResolverFn,
+		},
+		"getSystemPlugins": &graphql.Field{
 			Name: "GetSystemAndThirdPartyPlugins",
 			Type: graphql.NewList(privateSchemaObjects.PluginDetailsObject),
 			Args: graphql.FieldConfigArgument{
@@ -181,7 +190,7 @@ func (s *GraphQLServer) BuildServerQueriesAndMutations() {
 				"filter": args.FilterArg,
 				"where": &graphql.ArgumentConfig{
 					Type: graphql.NewInputObject(graphql.InputObjectConfig{
-						Name: "PluginsWhereFilterArgObject",
+						Name: "SystemPluginsWhereFilterArgObject",
 						Fields: graphql.InputObjectConfigFieldMap{
 							"name": &graphql.InputObjectFieldConfig{
 								Type: args.CommonFilter,
@@ -191,6 +200,24 @@ func (s *GraphQLServer) BuildServerQueriesAndMutations() {
 				},
 			},
 			Resolve: s.SystemPlugins,
+		},
+		"getProjectPlugins": &graphql.Field{
+			Name: "GetProjectSpecificInstalledPlugins",
+			Type: graphql.NewList(privateSchemaObjects.PluginDetailsObject),
+			Args: graphql.FieldConfigArgument{
+				"filter": args.FilterArg,
+				"where": &graphql.ArgumentConfig{
+					Type: graphql.NewInputObject(graphql.InputObjectConfig{
+						Name: "ProjectPluginsWhereFilterArgObject",
+						Fields: graphql.InputObjectConfigFieldMap{
+							"name": &graphql.InputObjectFieldConfig{
+								Type: args.CommonFilter,
+							},
+						},
+					}),
+				},
+			},
+			Resolve: s.ProjectSpecificInstalledPlugins,
 		},
 		/*		"listModelData": &graphql.Field{
 				Name: "ListAllDataOfAModel",
@@ -541,29 +568,6 @@ func (s *GraphQLServer) BuildServerQueriesAndMutations() {
 			Type:    graphql.NewList(objects.FunctionProviderConfigType),
 			Resolve: server.AWSLambdaFunctionInfoResolverFn,
 		},*/
-		"listPluginIds": &graphql.Field{
-			Name: "GetListPluginIds",
-			Args: graphql.FieldConfigArgument{
-				"_id": &graphql.ArgumentConfig{
-					Type: graphql.String,
-				},
-				"type": &graphql.ArgumentConfig{
-					Type: graphql.NewNonNull(enums.PluginTypeEnums),
-				},
-			},
-			Type: graphql.NewObject(graphql.ObjectConfig{
-				Name: "ListPluginIDsResponse",
-				Fields: graphql.Fields{
-					"type": &graphql.Field{
-						Type: graphql.NewNonNull(enums.PluginTypeEnums),
-					},
-					"plugins": &graphql.Field{
-						Type: graphql.NewList(graphql.String),
-					},
-				},
-			}),
-			Resolve: s.LoadedFunctionProviderResolverFn,
-		},
 		"listAvailableFunctions": &graphql.Field{
 			Name: "GetListAvailableFunctions",
 			Args: graphql.FieldConfigArgument{
@@ -663,28 +667,28 @@ func (s *GraphQLServer) BuildServerQueriesAndMutations() {
 			Args: graphql.FieldConfigArgument{
 				"id": &graphql.ArgumentConfig{
 					Type: graphql.NewNonNull(graphql.String),
-				},/* 
-				"type": &graphql.ArgumentConfig{
-					Type: enums.PluginTypeEnums,
-				},
-				"title": &graphql.ArgumentConfig{
-					Type: graphql.String,
-				},
-				"icon": &graphql.ArgumentConfig{
-					Type: graphql.String,
-				},
-				"version": &graphql.ArgumentConfig{
-					Type: graphql.String,
-				},
-				"description": &graphql.ArgumentConfig{
-					Type: graphql.String,
-				},
-				"role": &graphql.ArgumentConfig{
-					Type: graphql.String,
-				},
-				"exported_variable": &graphql.ArgumentConfig{
-					Type: graphql.String,
-				}, */
+				}, /*
+					"type": &graphql.ArgumentConfig{
+						Type: enums.PluginTypeEnums,
+					},
+					"title": &graphql.ArgumentConfig{
+						Type: graphql.String,
+					},
+					"icon": &graphql.ArgumentConfig{
+						Type: graphql.String,
+					},
+					"version": &graphql.ArgumentConfig{
+						Type: graphql.String,
+					},
+					"description": &graphql.ArgumentConfig{
+						Type: graphql.String,
+					},
+					"role": &graphql.ArgumentConfig{
+						Type: graphql.String,
+					},
+					"exported_variable": &graphql.ArgumentConfig{
+						Type: graphql.String,
+					}, */
 				"env_vars": &graphql.ArgumentConfig{
 					Type: graphql.NewList(graphql.NewInputObject(graphql.InputObjectConfig{
 						Name: "PluginConfigEnvVarsPayload",
@@ -707,6 +711,21 @@ func (s *GraphQLServer) BuildServerQueriesAndMutations() {
 			},
 			Resolve: s.UpsertPluginResolverFn,
 		},
+		"removeProjectSpecificPlugin": &graphql.Field{
+			Name: "RemoveProjectSpecificPlugin",
+			Type: graphql.NewObject(graphql.ObjectConfig{
+				Name: "RemoveProjectSpecificPluginResponse",
+				Fields: graphql.Fields{
+					"message": &graphql.Field{Type: graphql.String},
+				},
+			}),
+			Args: graphql.FieldConfigArgument{
+				"id": &graphql.ArgumentConfig{
+					Type: graphql.NewNonNull(graphql.String),
+				},
+			},
+			Resolve: s.RemoveProjectSpecificPluginResolverFn,
+		},
 		// Delete Media File
 		/*"deleteMediaFile": &graphql.Field{
 			Name: "DeleteMediaFile",
@@ -723,26 +742,6 @@ func (s *GraphQLServer) BuildServerQueriesAndMutations() {
 			},
 			Resolve: s.DeleteMediaFileInfoResolverFn,
 		},*/
-		"generateTenantToken": &graphql.Field{
-			Name: "GenerateTenantToken",
-			Type: graphql.NewObject(graphql.ObjectConfig{
-				Name: "GenerateTenantTokenResponse",
-				Fields: graphql.Fields{
-					"token": &graphql.Field{
-						Type: graphql.String,
-					},
-				},
-			}),
-			Args: graphql.FieldConfigArgument{
-				"token": &graphql.ArgumentConfig{
-					Type: graphql.NewNonNull(graphql.String),
-				},
-				"tenant_id": &graphql.ArgumentConfig{
-					Type: graphql.NewNonNull(graphql.String),
-				},
-			},
-			Resolve: s.GenerateTenantTokenResolverFn,
-		},
 		"generateProjectToken": &graphql.Field{
 			Name: "GenerateProjectToken",
 			Type: graphql.NewObject(graphql.ObjectConfig{
@@ -867,10 +866,7 @@ func (s *GraphQLServer) BuildServerQueriesAndMutations() {
 				"project_secret_key": &graphql.ArgumentConfig{
 					Type: graphql.String,
 				},
-				"tenant_model_name": &graphql.ArgumentConfig{
-					Type: graphql.String,
-				},
-				"settings": &graphql.ArgumentConfig{
+			"settings": &graphql.ArgumentConfig{
 					Type: graphql.NewInputObject(graphql.InputObjectConfig{
 						Name: "UpdateSettingsPayload",
 						Fields: graphql.InputObjectConfigFieldMap{
@@ -1020,12 +1016,9 @@ func (s *GraphQLServer) BuildServerQueriesAndMutations() {
 					Type:        graphql.String,
 					Description: "used in duplicate type",
 				},
-				"single_page_model": &graphql.ArgumentConfig{
-					Type: graphql.Boolean,
-				},
-				"is_common_model": &graphql.ArgumentConfig{
-					Type: graphql.Boolean,
-				},
+			"single_page_model": &graphql.ArgumentConfig{
+				Type: graphql.Boolean,
+			},
 			},
 			Resolve: s.UpdateModelResolverFn,
 		},

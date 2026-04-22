@@ -10,6 +10,10 @@ import (
 type ProjectDBInterface interface {
 
 	// Project-related functions
+	// InitProjectCollection initializes a project collection with optional indexes
+	InitProjectBase(ctx context.Context, param *models.CommonSystemParams, indexes []string) error
+	// DeleteProjectBase drops the same physical storage created by InitProjectBase (base bucket/graph/tables only).
+	DeleteProjectBase(ctx context.Context, param *models.CommonSystemParams) error
 	// DeleteProject deletes a project by its ID.
 	DeleteProject(ctx context.Context, projectID string) error
 	// TransferProject transfers a project from one user to another.
@@ -17,9 +21,9 @@ type ProjectDBInterface interface {
 
 	// Collection-related functions
 	// CheckCollectionExists checks if a collection exists in the project.
-	CheckCollectionExists(ctx context.Context, param *models.CommonSystemParams, isRelationCollection bool) (bool, error)
-	// AddCollection adds a new collection to the project.
-	AddCollection(ctx context.Context, param *models.CommonSystemParams, isRelationCollection bool) error
+	CheckTableOrCollectionExists(ctx context.Context, param *models.CommonSystemParams) (bool, error)
+	// AddCollection adds a new collection to the project with optional indexes
+	CreateTableOrCollection(ctx context.Context, param *models.CommonSystemParams, indexes []string) error
 
 	// Model-related functions
 	// AddModel adds a new model to the project.
@@ -132,4 +136,5 @@ type ProjectDBInterface interface {
 
 	// DuplicateField rename a field in a model along with its data key
 	//DuplicateField(oldFieldName string, repeatedFieldGroup *string, param models.CommonSystemParams) error
+
 }

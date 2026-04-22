@@ -15,7 +15,7 @@ func CreateCacheDriver(cfg *models.Config, engineType string) (interfaces.CacheD
 	switch engineType {
 	case "redis":
 		return redis.GetRedisCacheDriver(cfg)
-	case "coreDB", "bbolt", "bolt":
+	case "coredb", "coreDB", "bbolt", "bolt":
 		return bbolt.GetBoltCacheDriver(cfg)
 	case "memory":
 		return memory.GetMemoryCacheDriver(cfg)

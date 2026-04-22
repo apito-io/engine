@@ -29,7 +29,6 @@ import (
 const PROJECT_PLUGIN_PREFIX = "plg"
 const DEFAULT_INTERNAL_PREFIX = "ext"
 
-
 // ========================================
 // ERROR HANDLING WITH HTTP STATUS CODES
 // ========================================
@@ -777,9 +776,6 @@ func (s *GraphQLServer) executePluginRESTHandler(ctx context.Context, pluginID s
 	if userID := ctx.Value("user_id"); userID != nil {
 		contextData["user_id"] = userID
 	}
-	if tenantID := ctx.Value("tenant_id"); tenantID != nil {
-		contextData["tenant_id"] = tenantID
-	}
 
 	// Create a unique function name based on the route
 	functionName := fmt.Sprintf("rest_%s_%s", strings.ToLower(route.Method), strings.ReplaceAll(strings.TrimPrefix(route.Path, "/"), "/", "_"))
@@ -1184,9 +1180,6 @@ func (s *GraphQLServer) executePluginGraphQLResolver(ctx context.Context, plugin
 	}
 	if userID := ctx.Value("user_id"); userID != nil {
 		contextData["user_id"] = userID
-	}
-	if tenantID := ctx.Value("tenant_id"); tenantID != nil {
-		contextData["tenant_id"] = tenantID
 	}
 
 	response, err := loadedPlugin.Execute(ctx, resolverName, functionType, args, contextData)

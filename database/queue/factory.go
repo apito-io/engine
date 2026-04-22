@@ -17,7 +17,7 @@ func CreateQueueEngine(engineType string, cfg *models.Config) (interfaces.QueueE
 	switch engineType {
 	case "redis":
 		return redis.GetRedisQueueDriver(cfg)
-	case "coreDB", "bbolt", "bolt":
+	case "coredb", "coreDB", "bbolt", "bolt":
 		return bbolt.GetBoltQueueDriver(cfg)
 	case "memory":
 		return memory.GetMemoryQueueDriver(cfg)

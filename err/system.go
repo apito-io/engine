@@ -8,6 +8,12 @@ import (
 
 var LOGIN_CONFICT = errors.New("login conflict")
 
+// ErrProjectNameTaken is returned by ApitoSystemDB.CheckProjectName when the name is already in use.
+var ErrProjectNameTaken = errors.New("project name already exists")
+
+// ErrProjectDuplicate is used when persisting a project fails due to an existing id or unique constraint (e.g. MongoDB E11000).
+var ErrProjectDuplicate = errors.New("project already exists")
+
 // core
 var ProjectIdRequired = fmt.Errorf("project id required")
 

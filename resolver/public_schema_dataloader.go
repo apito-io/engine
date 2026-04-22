@@ -2,6 +2,8 @@ package resolver
 
 import (
 	"context"
+	"errors"
+	"fmt"
 
 	ae "github.com/apito-io/engine/err"
 	"github.com/apito-io/engine/models"
@@ -14,26 +16,25 @@ import (
 
 func (s *GraphQLServer) DataLoaderFn(ctx context.Context, keys dataloader.Keys) []*dataloader.Result {
 
+	// graph-gophers/dataloader requires len(results) == len(keys) for every batch outcome.
 	handleError := func(err error) []*dataloader.Result {
-		var results []*dataloader.Result
-		var result dataloader.Result
-		result.Error = err
-		results = append(results, &result)
-		return results
+		out := make([]*dataloader.Result, len(keys))
+		for i := range keys {
+			out[i] = &dataloader.Result{Error: err}
+		}
+		return out
 	}
 
-	var (
-		v            = ctx.Value
-		cache        = v("cache").(*models.ApplicationCache)
-		relationMeta = v("relation_meta").(map[string]interface{})
-	)
+	cache, ok := utility.LegacyApplicationCache(ctx)
+	if !ok {
+		return handleError(errors.New("graphql context: application cache missing"))
+	}
+	relationMeta, ok := utility.LegacyRelationMeta(ctx)
+	if !ok {
+		return handleError(errors.New("graphql context: relation_meta missing"))
+	}
 
 	param := s.NewParam(cache.Param)
-
-	var queryIds []string
-	for _, key := range keys {
-		queryIds = append(queryIds, key.String())
-	}
 
 	var allKeys []string
 	for _, key := range keys {
@@ -59,7 +60,7 @@ func (s *GraphQLServer) DataLoaderFn(ctx context.Context, keys dataloader.Keys) 
 
 	var modelType *models.ModelType
 	for _, _model := range cache.Project.Schema.Models {
-		if _model.Name == model {
+		if utility.ModelIDMatchesGraphQLField(_model.Name, model) {
 			modelType = _model
 		}
 	}
@@ -99,7 +100,13 @@ func (s *GraphQLServer) DataLoaderFn(ctx context.Context, keys dataloader.Keys) 
 		return handleError(err)
 	}
 
-	results := _results.([]*dataloader.Result)
+	results, ok := _results.([]*dataloader.Result)
+	if !ok {
+		return handleError(fmt.Errorf("dataloader: driver returned %T, expected []*dataloader.Result", _results))
+	}
+	if len(results) != len(keys) {
+		return handleError(fmt.Errorf("dataloader: driver returned %d results for %d keys (model %q)", len(results), len(keys), model))
+	}
 
 	return results
 }

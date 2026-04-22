@@ -17,15 +17,6 @@ import (
 	"github.com/uptrace/bun"
 )
 
-func (S *SQLDriver) DeleteProject(ctx context.Context, projectId string) error {
-	sql := fmt.Sprintf(`drop schema %s;`, projectId)
-	_, err := S.ORM.NewRaw(sql).Exec(ctx)
-	if err != nil {
-		return err
-	}
-	return nil
-}
-
 func (S *SQLDriver) DropField(ctx context.Context, param *models.CommonSystemParams) error {
 
 	tableName := utility.SingularResourceName(param.Model.Name)
@@ -59,160 +50,27 @@ type Meta2 struct {
 	Status    string `gorm:"column:status;not null"`
 }
 
-func (S *SQLDriver) AddCollection(ctx context.Context, param *models.CommonSystemParams, isRelationCollection bool) error {
-
-	projectId := param.ProjectID
-
-	switch S.DriverCredential.Engine {
-	case _const.PostgreSQLDriver:
-		// create database can not be executed inside transaction so it's outside the transaction
-		if _, err := S.ORM.NewRaw(fmt.Sprintf("CREATE DATABASE `%s`", projectId)).Exec(ctx); err != nil {
-			return err
-		}
-
-		// reinit the Bun connection
-		S.DriverCredential.Database = projectId
-		db, err := GetSQLDriver(S.Conf, S.DriverCredential)
-		if err != nil {
-			return err
-		}
-
-		err = db.ORM.RunInTx(ctx, nil, func(ctx context.Context, tx bun.Tx) error {
-			if _, err := tx.NewRaw(`
-			CREATE TABLE public.meta(
-				id VARCHAR(36) NOT NULL PRIMARY KEY,
-				doc_id VARCHAR(36) NOT NULL,
-				created_at DATE NOT NULL DEFAULT CURRENT_DATE,
-				updated_at DATE NOT NULL DEFAULT CURRENT_DATE,
-				created_by VARCHAR(36) NOT NULL,
-				updated_by VARCHAR(36),
-				status VARCHAR(36)
-			);`).Exec(ctx); err != nil {
-				return err
-			}
-
-			if _, err := tx.NewRaw(`
-			CREATE TABLE public.media(
-				id VARCHAR(36) NOT NULL PRIMARY KEY,
-				model VARCHAR(125),
-				media_type VARCHAR(65),
-				file_extension VARCHAR(65),
-				file_name TEXT,
-				size INTEGER,
-				s3_key TEXT,
-				url TEXT,
-				created_at DATE NOT NULL DEFAULT CURRENT_DATE
-			);`).Exec(ctx); err != nil {
-				return err
-			}
-			// return nil will commit the whole transaction
-			return nil
-		})
-		if err != nil {
-			return err
-		}
-	case _const.SQLiteDriver:
-		// SQLite is file-based, no CREATE DATABASE needed, run everything in one transaction like MySQL
-		err := S.ORM.RunInTx(ctx, nil, func(ctx context.Context, tx bun.Tx) error {
-			if _, err := tx.NewRaw(`
-			CREATE TABLE meta(
-				id VARCHAR(36) NOT NULL PRIMARY KEY,
-				doc_id VARCHAR(36) NOT NULL,
-				created_at DATE NOT NULL DEFAULT CURRENT_DATE,
-				updated_at DATE NOT NULL DEFAULT CURRENT_DATE,
-				created_by VARCHAR(36) NOT NULL,
-				updated_by VARCHAR(36),
-				status VARCHAR(36)
-			);`).Exec(ctx); err != nil {
-				return err
-			}
-
-			if _, err := tx.NewRaw(`
-			CREATE TABLE media(
-				id VARCHAR(36) NOT NULL PRIMARY KEY,
-				model VARCHAR(125),
-				media_type VARCHAR(65),
-				file_extension VARCHAR(65),
-				file_name TEXT,
-				size INTEGER,
-				s3_key TEXT,
-				url TEXT,
-				created_at DATE NOT NULL DEFAULT CURRENT_DATE
-			);`).Exec(ctx); err != nil {
-				return err
-			}
-			// return nil will commit the whole transaction
-			return nil
-		})
-		if err != nil {
-			return err
-		}
-	case _const.MySQLDriver, _const.MariaDBDriver:
-		err := S.ORM.RunInTx(ctx, nil, func(ctx context.Context, tx bun.Tx) error {
-			// do some database operations in the transaction (use 'tx' from this point, not 'db')
-			if _, err := tx.NewRaw(fmt.Sprintf("CREATE DATABASE %s", projectId)).Exec(ctx); err != nil {
-				// return any error will rollback
-				return err
-			}
-
-			var tenantField string
-			if param.ProjectType == models.ProjectType_SaaS {
-				tenantField = fmt.Sprintf("tenant_id VARCHAR(36) NOT NULL, ADD CONSTRAINT %s_tenant_id_fk FOREIGN KEY (tenant_id) REFERENCES %s(id), ADD CONSTRAINT %s_tenant_composite_key UNIQUE(id, tenant_id);", utility.SingularResourceName(param.Model.Name), param.TenantModel, utility.SingularResourceName(param.Model.Name))
-			}
-
-			if _, err := tx.NewRaw(fmt.Sprintf(`
-			CREATE TABLE %s.meta(
-				id VARCHAR(36) NOT NULL PRIMARY KEY,
-				%s
-				doc_id VARCHAR(36) NOT NULL,
-				created_at DATE NOT NULL DEFAULT (CURRENT_DATE),
-				updated_at DATE NOT NULL DEFAULT (CURRENT_DATE),
-				created_by VARCHAR(36) NOT NULL,
-				updated_by VARCHAR(36),
-				status VARCHAR(35)
-			);`, projectId, tenantField)).Exec(ctx); err != nil {
-				return err
-			}
-
-			if _, err := tx.NewRaw(fmt.Sprintf(`
-			CREATE TABLE %s.media(
-				id VARCHAR(36) NOT NULL PRIMARY KEY,
-				%s
-				model VARCHAR(125),
-				media_type VARCHAR(65),
-				file_extension VARCHAR(65),
-				file_name TEXT,
-				size INTEGER,
-				s3_key TEXT,
-				url TEXT,
-				created_at DATE NOT NULL DEFAULT (CURRENT_DATE)
-			);`, projectId, tenantField)).Exec(ctx); err != nil {
-				return err
-			}
-			// return nil will commit the whole transaction
-			return nil
-		})
-		if err != nil {
-			return err
-		}
+// CreateTableOrCollection creates the physical table for param.Model only. Project bootstrap
+// (database + meta + media) is handled by InitProjectBase.
+func (S *SQLDriver) CreateTableOrCollection(ctx context.Context, param *models.CommonSystemParams, indexes []string) error {
+	if param == nil || param.Model == nil {
+		return nil
 	}
-	return nil
+	return S.CreateModelTable(ctx, param.Model, false)
 }
 
-func (a *SQLDriver) CheckCollectionExists(ctx context.Context, param *models.CommonSystemParams, isRelationCollection bool) (bool, error) {
+func (a *SQLDriver) CheckTableOrCollectionExists(ctx context.Context, param *models.CommonSystemParams) (bool, error) {
 	var query string
 	var count int64
 
+	table := strings.ReplaceAll(utility.SingularResourceName(param.Model.Name), "'", "''")
 	switch a.DriverCredential.Engine {
 	case _const.PostgreSQLDriver:
-		// PostgreSQL uses information_schema with table_schema
-		query = fmt.Sprintf("SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = '%s' AND table_name = '%s'", param.ProjectID, param.Model.Name)
+		query = fmt.Sprintf("SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = 'public' AND table_name = '%s'", table)
 	case _const.MySQLDriver, _const.MariaDBDriver:
-		// MySQL/MariaDB uses information_schema with table_schema
-		query = fmt.Sprintf("SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = '%s' AND table_name = '%s'", param.ProjectID, param.Model.Name)
-	case _const.SQLiteDriver:
-		// SQLite uses sqlite_master (no schema concept, file-based)
-		query = fmt.Sprintf("SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='%s'", param.Model.Name)
+		query = fmt.Sprintf("SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = DATABASE() AND table_name = '%s'", table)
+	case _const.SQLiteDriver, "libsql":
+		query = fmt.Sprintf("SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='%s'", table)
 	default:
 		return false, fmt.Errorf("unsupported database engine: %s", a.DriverCredential.Engine)
 	}
@@ -253,38 +111,8 @@ func (S *SQLDriver) AddModel(ctx context.Context, project *models.Project, model
 		Name string
 	}
 
-	tableName := utility.SingularResourceName(model.Name)
-
-	var createTableQuery string
-	switch S.DriverCredential.Engine {
-	case _const.PostgreSQLDriver:
-		createTableQuery = fmt.Sprintf("`%s`( id VARCHAR(36) NOT NULL PRIMARY KEY )", tableName)
-	case _const.MySQLDriver, _const.MariaDBDriver:
-		createTableQuery = fmt.Sprintf("`%s`( id VARCHAR(36) NOT NULL PRIMARY KEY )", tableName)
-	case _const.SQLiteDriver:
-		createTableQuery = fmt.Sprintf("`%s`( id VARCHAR(36) NOT NULL PRIMARY KEY )", tableName)
-	default:
-		return nil, fmt.Errorf("unsupported database engine: %s", S.DriverCredential.Engine)
-	}
-
-	//Then execute your query for creating table
-	query := fmt.Sprintf("CREATE TABLE %s;", createTableQuery)
-	_, err := S.ORM.NewRaw(query).Exec(ctx)
-	if err != nil {
+	if err := S.CreateModelTable(ctx, model, false); err != nil {
 		return nil, err
-	}
-
-	// if project type is saas then add tenant id column
-	if project.ProjectType == models.ProjectType_SaaS {
-		query = fmt.Sprintf("ALTER TABLE `%s` ADD COLUMN tenant_id VARCHAR(36) NOT NULL, ADD CONSTRAINT %s_tenant_id_fk FOREIGN KEY (tenant_id) REFERENCES %s(id), ADD CONSTRAINT %s_tenant_composite_key UNIQUE(id, tenant_id);",
-			tableName,
-			utility.SingularResourceName(model.Name),
-			project.TenantModelName,
-			utility.SingularResourceName(model.Name))
-		_, err = S.ORM.NewRaw(query).Exec(ctx)
-		if err != nil {
-			return nil, err
-		}
 	}
 
 	return project.Schema, nil
@@ -632,13 +460,6 @@ func (S *SQLDriver) AddDocumentToProject(ctx context.Context, param *models.Comm
 		data := map[string]interface{}{
 			"id": doc.ID,
 		}
-		if param.ProjectType == models.ProjectType_SaaS {
-			if doc.TenantID != "" {
-				data["tenant_id"] = doc.TenantID
-			} else {
-				return errors.New("tenant id is required for a saas project")
-			}
-		}
 		for k, v := range doc.Data {
 			if val, ok := v.(map[string]interface{}); ok {
 				if html, ok := val["html"]; ok {
@@ -648,6 +469,13 @@ func (S *SQLDriver) AddDocumentToProject(ctx context.Context, param *models.Comm
 				data[k] = v
 			}
 		}
+		if err := runDocumentPreInsertHook(S.Conf, ctx, param, data); err != nil {
+			return err
+		}
+		if err := runDocumentPreInsertDocHook(S.Conf, ctx, param, doc); err != nil {
+			return err
+		}
+		mergeDocumentTaggedFieldsIntoData(doc, data)
 		_, err := tx.NewInsert().Table(tableName).Model(&data).Exec(ctx)
 		if err != nil {
 			return err
@@ -660,13 +488,6 @@ func (S *SQLDriver) AddDocumentToProject(ctx context.Context, param *models.Comm
 			"updated_by": doc.Meta.LastModifiedBy.ID,
 			"status":     doc.Meta.Status,
 			"doc_id":     doc.ID,
-		}
-		if param.ProjectType == models.ProjectType_SaaS {
-			if doc.TenantID != "" {
-				data["tenant_id"] = doc.TenantID
-			} else {
-				return errors.New("tenant id is required for a saas project")
-			}
 		}
 		_, err = tx.NewInsert().Table("meta").Model(&metaData).Exec(ctx)
 		if err != nil {
@@ -742,7 +563,9 @@ func (S *SQLDriver) UpdateDocumentOfProject(ctx context.Context, param *models.C
 		}
 
 	}
-	_, err := S.ORM.NewUpdate().Table(tableName).Where("id = ?", doc.ID).Model(&data).Exec(ctx)
+	q := S.ORM.NewUpdate().Table(tableName).Where("id = ?", doc.ID)
+	q = applyBunHookWheresUpdate(S.Conf, ctx, param, q)
+	_, err := q.Model(&data).Exec(ctx)
 	if err != nil {
 		return err
 	}
@@ -765,7 +588,9 @@ func (S *SQLDriver) DeleteDocumentFromProject(ctx context.Context, param *models
 
 	tableName := utility.SingularResourceName(param.Model.Name)
 
-	_, err := S.ORM.NewDelete().Table(tableName).Where("id = ?", param.DocumentID).Exec(ctx)
+	q := S.ORM.NewDelete().Table(tableName).Where("id = ?", param.DocumentID)
+	q = applyBunHookWheresDelete(S.Conf, ctx, param, q)
+	_, err := q.Exec(ctx)
 	if err != nil {
 		return err
 	}

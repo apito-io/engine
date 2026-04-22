@@ -82,14 +82,15 @@ type QueryBuilder struct {
 
 	ReturnOnlyID        bool `json:"return_only_id"`
 	ReturnOnlyCount     bool `json:"return_only_count"`
-	IsAggregateQuery    bool `json:"is_aggregate_query"`
-
-	ProjectType ProjectType `json:"project_type"`
+	IsAggregateQuery bool `json:"is_aggregate_query"`
 
 	FinalQuery string `json:"final_query"`
 
-	TenantID    string `json:"tenant_id"`
-	TenantModel string `json:"tenant_model"`
+	Ext map[string]interface{} `json:"ext,omitempty"`
+
+	// RuntimeConfig and HookParam wire QueryFilterHook from AQL builder without importing drivers.
+	RuntimeConfig *Config               `json:"-"`
+	HookParam     *CommonSystemParams   `json:"-"`
 }
 
 type FilterInformation struct {

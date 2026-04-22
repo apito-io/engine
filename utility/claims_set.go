@@ -1,7 +1,6 @@
 package utility
 
 import (
-	"fmt"
 	"net/http"
 
 	"github.com/apito-io/engine/models"
@@ -11,14 +10,6 @@ import (
 func SetTokenClaimsToRouter(ctx echo.Context, tokenClaims *models.TokenClaims) error {
 
 	if tokenClaims != nil {
-
-		// inject tenant id to context for system for queyr and mutation
-		if tokenClaims.TenantID != "" { // for apito saas project
-			fmt.Println("setting temp_tenant_id", tokenClaims.TenantID)
-			ctx.Set("temp_tenant_id", tokenClaims.TenantID)
-		} /* else if tempTenantID != "" { // passed via cookie
-			ctx.Set("temp_tenant_id", tempTenantID)
-		} */
 
 		// user id is set by access token not id token
 		if tokenClaims.UserID != "" {

@@ -15,7 +15,7 @@ type DeleteSyncTokenRequest struct {
 	Duration string `json:"duration"`
 }
 
-func (a *authCtrl) DeleteSyncToken(c echo.Context) error {
+func (a *AuthController) DeleteSyncToken(c echo.Context) error {
 	var req DeleteSyncTokenRequest
 	if err := c.Bind(&req); err != nil {
 		return c.JSON(http.StatusBadRequest, &models.HttpResponse{
@@ -98,7 +98,7 @@ type GenerateSyncTokenRequest struct {
 	Scopes     []string `json:"scopes"`
 }
 
-func (a *authCtrl) GenerateSyncToken(c echo.Context) error {
+func (a *AuthController) GenerateSyncToken(c echo.Context) error {
 
 	var req GenerateSyncTokenRequest
 	if err := c.Bind(&req); err != nil {
@@ -169,7 +169,7 @@ func (a *authCtrl) GenerateSyncToken(c echo.Context) error {
 	})
 }
 
-func (a *authCtrl) SyncProject(c echo.Context) error {
+func (a *AuthController) SyncProject(c echo.Context) error {
 
 	type SyncProjectRequest struct {
 		Token   string          `json:"token"`
@@ -259,7 +259,7 @@ func (a *authCtrl) SyncProject(c echo.Context) error {
 	})
 }
 
-func (a *authCtrl) ListSyncTokens(c echo.Context) error {
+func (a *AuthController) ListSyncTokens(c echo.Context) error {
 	ctx := c.Request().Context()
 	userID := c.Get("user").(string)
 

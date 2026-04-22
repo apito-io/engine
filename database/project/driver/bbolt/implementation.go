@@ -28,13 +28,8 @@ func getEnv(key, defaults string) string {
 }
 
 // getCollectionName returns the collection name for a model
-// Pattern for SaaS: "p_{projectId}_{modelName}"
-// Pattern for Regular: "p_{projectId}"
-func (b *BBoltDriver) getCollectionName(projectID, modelName string, projectType models.ProjectType) string {
-	if projectType == models.ProjectType_SaaS {
-		return fmt.Sprintf("p_%s_%s", projectID, modelName)
-	}
-	// Regular projects use project ID as collection name
+// Pattern: "p_{projectId}"
+func (b *BBoltDriver) getCollectionName(projectID, modelName string) string {
 	return fmt.Sprintf("p_%s", projectID)
 }
 
@@ -259,21 +254,18 @@ func (b *BBoltDriver) GetProject(ctx context.Context, id string) (*models.Projec
 // COLLECTION MANAGEMENT
 // ============================================================================
 
-// CheckCollectionExists checks if a collection exists
-func (b *BBoltDriver) CheckCollectionExists(ctx context.Context, param *models.CommonSystemParams, isRelationCollection bool) (bool, error) {
-	var collectionName string
-	if param.ProjectType == models.ProjectType_SaaS {
-		if isRelationCollection {
-			collectionName = fmt.Sprintf("p_%s_relation", param.ProjectID)
-		} else {
-			collectionName = fmt.Sprintf("p_%s_%s", param.ProjectID, param.Model.Name)
-		}
-	} else {
-		collectionName = param.Model.Name
-		if isRelationCollection {
-			collectionName = "relation_" + collectionName
-		}
-	}
+func (b *BBoltDriver) InitProjectBase(ctx context.Context, param *models.CommonSystemParams, indexes []string) error {
+	return nil
+}
+
+// DeleteProjectBase is a no-op for BBolt (InitProjectBase does not allocate base storage here).
+func (b *BBoltDriver) DeleteProjectBase(ctx context.Context, param *models.CommonSystemParams) error {
+	return nil
+}
+
+// CheckTableOrCollectionExists checks if a table or collection exists in the project
+func (b *BBoltDriver) CheckTableOrCollectionExists(ctx context.Context, param *models.CommonSystemParams) (bool, error) {
+	collectionName := param.Model.Name
 
 	// Try to access collection and check if it has any documents
 	var count int
@@ -294,25 +286,13 @@ func (b *BBoltDriver) CheckCollectionExists(ctx context.Context, param *models.C
 	return count > 0, nil
 }
 
-// AddCollection creates a new collection with indexes
-func (b *BBoltDriver) AddCollection(ctx context.Context, param *models.CommonSystemParams, isRelationCollection bool) error {
+// CreateTableOrCollection creates a new table or collection in the project
+func (b *BBoltDriver) CreateTableOrCollection(ctx context.Context, param *models.CommonSystemParams, indexes []string) error {
 	var collectionName string
-	if param.ProjectType == models.ProjectType_SaaS {
-		if isRelationCollection {
-			collectionName = fmt.Sprintf("p_%s_relation", param.ProjectID)
-		} else {
-			collectionName = fmt.Sprintf("p_%s_%s", param.ProjectID, param.Model.Name)
-		}
+	if param.Model != nil {
+		collectionName = param.Model.Name
 	} else {
-		if param.Model != nil {
-			collectionName = param.Model.Name
-			if isRelationCollection {
-				collectionName = "relation_" + collectionName
-			}
-		} else {
-			// if model is not provided, we don't need to create a collection
-			return nil
-		}
+		return nil
 	}
 
 	if collectionName == "" {
@@ -329,27 +309,10 @@ func (b *BBoltDriver) AddCollection(ctx context.Context, param *models.CommonSys
 		}
 
 		// Create indexes for relation collections
-		if isRelationCollection {
-			indexes := []string{"from", "to", "from_id", "to_id", "known_as"}
-			for _, idx := range indexes {
-				if err := col.EnsureIndex(idx, false); err != nil {
-					return err
-				}
-			}
-		} else {
-			// Create indexes for document collections
-			indexes := []string{"type", "id"}
-			for _, idx := range indexes {
-				if err := col.EnsureIndex(idx, false); err != nil {
-					return err
-				}
-			}
-
-			// SaaS-specific index
-			if param.ProjectType == models.ProjectType_SaaS {
-				if err := col.EnsureIndex("tenant_id", false); err != nil {
-					return err
-				}
+		indexes := []string{"type", "id"}
+		for _, idx := range indexes {
+			if err := col.EnsureIndex(idx, false); err != nil {
+				return err
 			}
 		}
 
@@ -727,28 +690,14 @@ func (b *BBoltDriver) ConnectBuilder(ctx context.Context, param *models.CommonSy
 
 		// add a new relation for each action ID
 		for _, id := range connParam.ActionIDs {
-			var fromID, toID string
-			if param.ProjectType == models.ProjectType_SaaS {
-				if param.TenantID == "" {
-					return errors.New("tenant id is required if project type is SaaS")
-				}
+			fromID := connParam.ForwardConnectionID
+			toID := id
 
-				switch connParam.ConnectionType {
-				case "forward":
-					fromID = connParam.ForwardConnectionID
-					toID = id
-				case "backward":
-					fromID = id
-					toID = connParam.ForwardConnectionID
-				default:
-					return errors.New("invalid connection type")
-				}
-			} else {
-				fromID = connParam.ForwardConnectionID
-				toID = id
+			if connParam.ConnectionType == "backward" {
+				fromID = id
+				toID = connParam.ForwardConnectionID
 			}
 
-			// insert relation
 			relation := &models.EdgeRelation{
 				Key:       uuid.New().String(),
 				To:        connParam.ForwardConnectionType.Model,
@@ -760,9 +709,6 @@ func (b *BBoltDriver) ConnectBuilder(ctx context.Context, param *models.CommonSy
 			}
 			if connParam.KnownAs != "" {
 				relation.KnownAs = connParam.KnownAs
-			}
-			if param.TenantID != "" {
-				relation.TenantID = param.TenantID
 			}
 
 			err := b.CreateRelation(ctx, param.ProjectID, relation)
@@ -818,23 +764,8 @@ func (b *BBoltDriver) GetSingleProjectDocument(ctx context.Context, param *model
 		}
 	}
 
-	// Handle tenant model
-	if param.TenantModel == param.Model.Name {
-		param.TenantModel = ""
-		param.TenantID = ""
-	}
-
 	// Get collection name
-	var collectionName string
-	if param.ProjectType == models.ProjectType_SaaS {
-		if param.SinglePageData {
-			collectionName = fmt.Sprintf("p_%s_single_docs", param.ProjectID)
-		} else {
-			collectionName = fmt.Sprintf("p_%s_%s", param.ProjectID, param.Model.Name)
-		}
-	} else {
-		collectionName = fmt.Sprintf("p_%s", param.ProjectID)
-	}
+	collectionName := fmt.Sprintf("p_%s", param.ProjectID)
 
 	// Query the document
 	var doc types.DefaultDocumentStructure
@@ -844,15 +775,14 @@ func (b *BBoltDriver) GetSingleProjectDocument(ctx context.Context, param *model
 			return err
 		}
 
-		// Apply tenant filter for SaaS
-		if param.TenantID != "" && doc.TenantID.String() != param.TenantID {
-			return errors.New("no result found with this request id")
-		}
-
 		return nil
 	})
 
 	if err != nil {
+		return nil, errors.New("no result found with this request id")
+	}
+
+	if !bboltDocPassesQueryHook(b.Conf, param, &doc) {
 		return nil, errors.New("no result found with this request id")
 	}
 
@@ -885,16 +815,7 @@ func (b *BBoltDriver) GetSingleProjectDocumentBytes(ctx context.Context, param *
 
 // GetSingleProjectDocumentRevisions retrieves the revision history of a single project document by ID
 func (b *BBoltDriver) GetSingleProjectDocumentRevisions(ctx context.Context, param *models.CommonSystemParams) ([]*models.DocumentRevisionHistory, error) {
-	var collectionName string
-	if param.ProjectType == models.ProjectType_SaaS {
-		if param.SinglePageData {
-			collectionName = fmt.Sprintf("p_%s_single_docs", param.ProjectID)
-		} else {
-			collectionName = fmt.Sprintf("p_%s_%s", param.ProjectID, param.Model.Name)
-		}
-	} else {
-		collectionName = fmt.Sprintf("p_%s", param.ProjectID)
-	}
+	collectionName := fmt.Sprintf("p_%s", param.ProjectID)
 
 	var revisions []*models.DocumentRevisionHistory
 	err := b.Store.View(func(tx *apitobolt.Tx) error {
@@ -909,11 +830,6 @@ func (b *BBoltDriver) GetSingleProjectDocumentRevisions(ctx context.Context, par
 			// Check if this is a revision of the requested document
 			if doc.Meta != nil && doc.Meta.Revision {
 				if doc.Meta.RootRevisionID == param.DocumentID || doc.ID == param.DocumentID {
-					// Apply tenant filter for SaaS
-					if param.TenantID != "" && doc.TenantID.String() != param.TenantID {
-						continue
-					}
-
 					revision := &models.DocumentRevisionHistory{
 						ID:         doc.ID,
 						RevisionAt: doc.Meta.RevisionAt,
@@ -944,12 +860,7 @@ func (b *BBoltDriver) GetSingleRawDocumentFromProject(ctx context.Context, param
 		}, nil
 	}
 
-	var collectionName string
-	if param.ProjectType == models.ProjectType_SaaS {
-		collectionName = fmt.Sprintf("p_%s_%s", param.ProjectID, param.Model.Name)
-	} else {
-		collectionName = fmt.Sprintf("p_%s", param.ProjectID)
-	}
+	collectionName := fmt.Sprintf("p_%s", param.ProjectID)
 
 	var doc types.DefaultDocumentStructure
 	err := b.Store.View(func(tx *apitobolt.Tx) error {
@@ -961,17 +872,16 @@ func (b *BBoltDriver) GetSingleRawDocumentFromProject(ctx context.Context, param
 		return nil, errors.New("document not found")
 	}
 
+	if !bboltDocPassesQueryHook(b.Conf, param, &doc) {
+		return nil, errors.New("document not found")
+	}
+
 	return &doc, nil
 }
 
 // QueryMultiDocumentOfProject retrieves multiple documents from a project
 func (b *BBoltDriver) QueryMultiDocumentOfProject(ctx context.Context, param *models.CommonSystemParams) ([]*types.DefaultDocumentStructure, error) {
-	var collectionName string
-	if param.ProjectType == models.ProjectType_SaaS {
-		collectionName = fmt.Sprintf("p_%s_%s", param.ProjectID, param.Model.Name)
-	} else {
-		collectionName = fmt.Sprintf("p_%s", param.ProjectID)
-	}
+	collectionName := fmt.Sprintf("p_%s", param.ProjectID)
 
 	var results []*types.DefaultDocumentStructure
 	err := b.Store.View(func(tx *apitobolt.Tx) error {
@@ -980,23 +890,24 @@ func (b *BBoltDriver) QueryMultiDocumentOfProject(ctx context.Context, param *mo
 			return err
 		}
 
-		// Apply tenant filtering for SaaS
-		if param.TenantID != "" && !strings.HasPrefix(param.TenantID, "0000") {
-			var filtered []*types.DefaultDocumentStructure
-			for _, doc := range results {
-				if doc.TenantID.String() == param.TenantID {
-					filtered = append(filtered, doc)
-				}
-			}
-			results = filtered
-		}
-
 		return nil
 	})
 
 	if err != nil {
 		return nil, err
 	}
+
+	var filtered []*types.DefaultDocumentStructure
+	for _, doc := range results {
+		if param.Model != nil && doc.Type != "" && doc.Type != param.Model.Name {
+			continue
+		}
+		if !bboltDocPassesQueryHook(b.Conf, param, doc) {
+			continue
+		}
+		filtered = append(filtered, doc)
+	}
+	results = filtered
 
 	// Handle payload for non-system requests
 	if !param.IsSystemRequest {
@@ -1052,17 +963,21 @@ func (b *BBoltDriver) QueryMultiDocumentOfProjectBytes(ctx context.Context, para
 
 // AddDocumentToProject adds a document to a project
 func (b *BBoltDriver) AddDocumentToProject(ctx context.Context, param *models.CommonSystemParams, doc *types.DefaultDocumentStructure) (interface{}, error) {
-	var collectionName string
-	if param.ProjectType == models.ProjectType_SaaS {
-		collectionName = fmt.Sprintf("p_%s_%s", param.ProjectID, param.Model.Name)
-	} else {
-		collectionName = fmt.Sprintf("p_%s", param.ProjectID)
-	}
+	collectionName := fmt.Sprintf("p_%s", param.ProjectID)
 
 	// Generate new ObjectId and set it as the Key
 	objectID := uuid.New().String()
 	doc.Key = objectID
 	doc.ID = objectID
+
+	row := map[string]interface{}{}
+	if err := runDocumentPreInsertHook(b.Conf, ctx, param, row); err != nil {
+		return nil, err
+	}
+	mergeHookRowIntoDocData(doc, row)
+	if err := runDocumentPreInsertDocHook(b.Conf, ctx, param, doc); err != nil {
+		return nil, err
+	}
 
 	err := b.Store.Update(func(tx *apitobolt.Tx) error {
 		col := tx.Collection(collectionName)
@@ -1079,16 +994,7 @@ func (b *BBoltDriver) AddDocumentToProject(ctx context.Context, param *models.Co
 
 // UpdateDocumentOfProject updates a document in a project
 func (b *BBoltDriver) UpdateDocumentOfProject(ctx context.Context, param *models.CommonSystemParams, doc *types.DefaultDocumentStructure, replace bool) error {
-	var collectionName string
-	if param.ProjectType == models.ProjectType_SaaS {
-		if param.SinglePageData {
-			collectionName = fmt.Sprintf("p_%s_single_docs", param.ProjectID)
-		} else {
-			collectionName = fmt.Sprintf("p_%s_%s", param.ProjectID, param.Model.Name)
-		}
-	} else {
-		collectionName = fmt.Sprintf("p_%s", param.ProjectID)
-	}
+	collectionName := fmt.Sprintf("p_%s", param.ProjectID)
 
 	// Update metadata
 	doc.Meta.UpdatedAt = utility.GetCurrentTime()
@@ -1174,63 +1080,26 @@ func (b *BBoltDriver) UpdateDocumentOfProject(ctx context.Context, param *models
 
 // DeleteDocumentFromProject deletes a document from a project
 func (b *BBoltDriver) DeleteDocumentFromProject(ctx context.Context, param *models.CommonSystemParams) error {
-	var collectionName string
-	if param.ProjectType == models.ProjectType_SaaS {
-		if param.SinglePageData {
-			collectionName = fmt.Sprintf("p_%s_single_docs", param.ProjectID)
-		} else {
-			collectionName = fmt.Sprintf("p_%s_%s", param.ProjectID, param.Model.Name)
-		}
-	} else {
-		collectionName = fmt.Sprintf("p_%s", param.ProjectID)
+	collectionName := fmt.Sprintf("p_%s", param.ProjectID)
+
+	if err := b.bboltDeleteAllowed(ctx, param, collectionName); err != nil {
+		return err
 	}
 
 	return b.Store.Update(func(tx *apitobolt.Tx) error {
 		col := tx.Collection(collectionName)
-
-		// Apply tenant filter for SaaS
-		if param.TenantID != "" {
-			var doc types.DefaultDocumentStructure
-			if err := col.FindByID(param.DocumentID, &doc); err != nil {
-				return err
-			}
-			if doc.TenantID.String() != param.TenantID {
-				return errors.New("document not found or access denied")
-			}
-		}
-
 		return col.DeleteStruct(&types.DefaultDocumentStructure{ID: param.DocumentID})
 	})
 }
 
 // DeleteDocumentsFromProject deletes multiple documents from the project
 func (b *BBoltDriver) DeleteDocumentsFromProject(ctx context.Context, param *models.CommonSystemParams) error {
-	var collectionName string
-	if param.ProjectType == models.ProjectType_SaaS {
-		if param.SinglePageData {
-			collectionName = fmt.Sprintf("p_%s_single_docs", param.ProjectID)
-		} else {
-			collectionName = fmt.Sprintf("p_%s_%s", param.ProjectID, param.Model.Name)
-		}
-	} else {
-		collectionName = fmt.Sprintf("p_%s", param.ProjectID)
-	}
+	collectionName := fmt.Sprintf("p_%s", param.ProjectID)
 
 	return b.Store.Update(func(tx *apitobolt.Tx) error {
 		col := tx.Collection(collectionName)
 
 		for _, docID := range param.DocumentIDs {
-			// Apply tenant filter for SaaS
-			if param.TenantID != "" {
-				var doc types.DefaultDocumentStructure
-				if err := col.FindByID(docID, &doc); err != nil {
-					continue
-				}
-				if doc.TenantID.String() != param.TenantID {
-					continue
-				}
-			}
-
 			if err := col.DeleteStruct(&types.DefaultDocumentStructure{ID: docID}); err != nil {
 				// Continue even if delete fails
 				continue
@@ -1301,16 +1170,7 @@ func (b *BBoltDriver) CountMultiDocumentOfProject(ctx context.Context, param *mo
 			return err
 		}
 
-		// Apply tenant filtering for SaaS
-		if param.TenantID != "" {
-			for _, doc := range docs {
-				if doc.TenantID.String() == param.TenantID {
-					count++
-				}
-			}
-		} else {
-			count = len(docs)
-		}
+		count = len(docs)
 
 		// TODO: Apply where filter from param.ResolveParams
 
@@ -1326,16 +1186,7 @@ func (b *BBoltDriver) CountMultiDocumentOfProject(ctx context.Context, param *mo
 
 // DropField drops/deletes a field and its data from the project
 func (b *BBoltDriver) DropField(ctx context.Context, param *models.CommonSystemParams) error {
-	var collectionName string
-	if param.ProjectType == models.ProjectType_SaaS {
-		if param.SinglePageData {
-			collectionName = fmt.Sprintf("p_%s_single_docs", param.ProjectID)
-		} else {
-			collectionName = fmt.Sprintf("p_%s_%s", param.ProjectID, param.Model.Name)
-		}
-	} else {
-		collectionName = fmt.Sprintf("p_%s", param.ProjectID)
-	}
+	collectionName := fmt.Sprintf("p_%s", param.ProjectID)
 
 	fieldName := param.FieldInfo.Identifier
 
@@ -1347,11 +1198,6 @@ func (b *BBoltDriver) DropField(ctx context.Context, param *models.CommonSystemP
 		}
 
 		for _, doc := range docs {
-			// Apply tenant filter for SaaS
-			if param.TenantID != "" && doc.TenantID.String() != param.TenantID {
-				continue
-			}
-
 			if doc.Data != nil {
 				delete(doc.Data, fieldName)
 				if _, err := col.Save(&doc); err != nil {
@@ -1551,12 +1397,7 @@ func (b *BBoltDriver) RelationshipDataLoader(ctx context.Context, param *models.
 	}
 
 	// Get the target collection name
-	var collectionName string
-	if param.ProjectType == models.ProjectType_SaaS {
-		collectionName = fmt.Sprintf("p_%s_%s", param.ProjectID, modelName)
-	} else {
-		collectionName = fmt.Sprintf("p_%s", param.ProjectID)
-	}
+	collectionName := fmt.Sprintf("p_%s", param.ProjectID)
 
 	// Get relation IDs for the source document
 	relationCollectionName := fmt.Sprintf("relation_%s_%s", param.Model.Name, modelName)

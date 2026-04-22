@@ -6,6 +6,7 @@ import (
 
 	_const "github.com/apito-io/engine/const"
 	"github.com/apito-io/engine/database/system/driver/bbolt"
+	mongodb "github.com/apito-io/engine/database/system/driver/mongodb"
 	"github.com/apito-io/engine/interfaces"
 	"github.com/apito-io/engine/models"
 )
@@ -31,8 +32,10 @@ func GetSystemDriver(conf *models.Config, engineConfig *models.DriverCredentials
 	log.Printf("Getting system driver: %s", engineConfig.Engine)
 
 	switch engineConfig.Engine {
-	case _const.CoreDB:
+	case _const.CoreDB, "coreDB":
 		db, err = bbolt.GetSystemBBoltDriver(conf, engineConfig, nil)
+	case _const.MongoDBDriver:
+		db, err = mongodb.GetSystemMongoDriver(engineConfig)
 	default: // default set embedded database
 		db, err = bbolt.GetSystemBBoltDriver(conf, engineConfig, nil)
 	}

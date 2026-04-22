@@ -1,0 +1,44 @@
+[
+  {
+    "input": "food_order",
+    "canonical": "food_order",
+    "camel": "foodOrder",
+    "pascal": "FoodOrder",
+    "listPascal": "FoodOrderList",
+    "createMutation": "Create_FoodOrder",
+    "listWherePayloadUpper": "FOODORDERLIST_INPUT_WHERE_PAYLOAD",
+    "listSortPayloadUpper": "FOODORDERLIST_INPUT_SORT_PAYLOAD",
+    "listKeyConditionUpper": "FOODORDERLIST_KEY_CONDITION",
+    "connectionFilterUpper": "FOOD_ORDER_CONNECTION_FILTER_CONDITION",
+    "listCountFilterName": "Food_Order_List_Count",
+    "listCountWherePayloadUpper": "FOOD_ORDER_LIST_COUNT_INPUT_WHERE_PAYLOAD"
+  },
+  {
+    "input": "bankAccounts",
+    "canonical": "bank_account",
+    "camel": "bankAccount",
+    "pascal": "BankAccount",
+    "listPascal": "BankAccountList",
+    "createMutation": "Create_BankAccount",
+    "listWherePayloadUpper": "BANKACCOUNTLIST_INPUT_WHERE_PAYLOAD",
+    "listSortPayloadUpper": "BANKACCOUNTLIST_INPUT_SORT_PAYLOAD",
+    "listKeyConditionUpper": "BANKACCOUNTLIST_KEY_CONDITION",
+    "connectionFilterUpper": "BANK_ACCOUNT_CONNECTION_FILTER_CONDITION",
+    "listCountFilterName": "Bank_Account_List_Count",
+    "listCountWherePayloadUpper": "BANK_ACCOUNT_LIST_COUNT_INPUT_WHERE_PAYLOAD"
+  },
+  {
+    "input": "blog post",
+    "canonical": "blog_post",
+    "camel": "blogPost",
+    "pascal": "BlogPost",
+    "listPascal": "BlogPostList",
+    "createMutation": "Create_BlogPost",
+    "listWherePayloadUpper": "BLOGPOSTLIST_INPUT_WHERE_PAYLOAD",
+    "listSortPayloadUpper": "BLOGPOSTLIST_INPUT_SORT_PAYLOAD",
+    "listKeyConditionUpper": "BLOGPOSTLIST_KEY_CONDITION",
+    "connectionFilterUpper": "BLOG_POST_CONNECTION_FILTER_CONDITION",
+    "listCountFilterName": "Blog_Post_List_Count",
+    "listCountWherePayloadUpper": "BLOG_POST_LIST_COUNT_INPUT_WHERE_PAYLOAD"
+  }
+]

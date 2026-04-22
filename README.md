@@ -2,11 +2,11 @@
   <img src="https://raw.githubusercontent.com/apito-io/engine/main/docs/cover-photo.png" alt="Apito Logo" />
 </p>
 
-# Apito Engine
+# Apito open-core
 
-**Build, Scale & Ship GraphQL APIs Faster with Apito**
+**Build, scale, and ship GraphQL APIs with Apito open-core**
 
-Apito is the open-source GraphQL platform that turns your database into a production-ready API in minutes. Built with Go and designed for extensibility, Apito offers a plugin-first architecture that scales from prototype to enterprise.
+Apito open-core is the open-source GraphQL stack that turns your database into a production-ready API in minutes. Built with Go and designed for extensibility, it offers a plugin-first architecture that scales from prototype to demanding production workloads.
 
 <p align="center">
   <a href="https://apito.io"><strong>Website</strong></a> ·
@@ -36,7 +36,7 @@ Apito is the open-source GraphQL platform that turns your database into a produc
 - **🚀 Instant GraphQL APIs** - Connect your database and get a production-ready GraphQL API instantly. [Docs](https://docs.apito.io/graphql)
 - **🔌 Dual Plugin Architecture** - Extend functionality with both high-performance Go plugins and secure process-isolated HashiCorp plugins. [Docs](https://docs.apito.io/plugins)
 - **🗄️ Multi-Database Support** - Works with MongoDB, PostgreSQL, MySQL, MariaDB, MSSQL, SQLite, and more with connection pooling. [Docs](https://docs.apito.io/databases)
-- **🔐 Enterprise Authentication** - JWT-based auth with role-based access control, API keys, and multi-tenant isolation. [Docs](https://docs.apito.io/auth)
+- **🔐 Authentication** - JWT-based auth with role-based access control, API keys, and multi-tenant isolation. [Docs](https://docs.apito.io/auth)
 - **⚡ Real-time Subscriptions** - WebSocket-based GraphQL subscriptions for live data updates. [Docs](https://docs.apito.io/subscriptions)
 - **🎯 Custom Functions** - Serverless-style function execution within GraphQL queries and mutations. [Docs](https://docs.apito.io/functions)
 - **📁 File Storage** - Built-in file upload and management with multiple storage backends. [Docs](https://docs.apito.io/storage)
@@ -192,21 +192,21 @@ chmod +x engine
 
 ## How it works
 
-Apito is a GraphQL-first platform that combines proven open-source technologies with a powerful plugin architecture. Unlike traditional backends, Apito is designed to be extended and customized through plugins while maintaining high performance and security.
+open-core is a GraphQL-first stack that combines proven open-source technologies with a plugin architecture. It is designed to be extended through plugins while keeping performance and security in focus.
 
 ### Architecture
 
-Apito uses a modern, cloud-native architecture built for scalability:
+open-core uses a modern, cloud-native layout built for scalability:
 
 ```mermaid
 graph TB
     Client[🌐 Client Applications<br/>Web, Mobile, Desktop]
 
-    subgraph "🔥 Apito Engine"
+    subgraph "🔥 Apito open-core"
         Router[🌐 Echo Router<br/>HTTP/WebSocket Server]
         Auth[🔐 Auth Service<br/>JWT + API Keys]
-        GraphQL[🧠 GraphQL Engine<br/>Schema + Resolvers]
-        Realtime[⚡ Real-time Engine<br/>WebSocket Subscriptions]
+        GraphQL[🧠 GraphQL layer<br/>Schema + Resolvers]
+        Realtime[⚡ Real-time layer<br/>WebSocket Subscriptions]
         Storage[📁 Storage Service<br/>File Management]
 
         subgraph "🔌 Plugin System"
@@ -236,7 +236,7 @@ graph TB
         CDN[🌍 CDN<br/>Static Assets]
     end
 
-    %% Client to Engine
+    %% Client to open-core
     Client --> Router
 
     %% Router routing
@@ -275,12 +275,12 @@ graph TB
     Storage --> CDN
 
     %% Styling
-    classDef engineCore fill:#ff6b6b,stroke:#ffffff,stroke-width:2px,color:#ffffff
+    classDef openCoreNode fill:#ff6b6b,stroke:#ffffff,stroke-width:2px,color:#ffffff
     classDef database fill:#4ecdc4,stroke:#ffffff,stroke-width:2px,color:#ffffff
     classDef plugin fill:#ffe66d,stroke:#ffffff,stroke-width:2px,color:#000000
     classDef external fill:#a8e6cf,stroke:#ffffff,stroke-width:2px,color:#000000
 
-    class Router,Auth,GraphQL,Realtime,Storage engineCore
+    class Router,Auth,GraphQL,Realtime,Storage openCoreNode
     class MongoDB,PostgreSQL,MySQL,MariaDB,MSSQL,SQLite,Redis database
     class GoPlugins,HCPlugins plugin
     class S3,Monitoring,CDN external
@@ -288,17 +288,17 @@ graph TB
 
 **Core Components:**
 
-- **🧠 GraphQL Engine** - Built with [`graphql-go/graphql`](https://github.com/graphql-go/graphql) for dynamic schema generation and high-performance query execution
+- **🧠 GraphQL layer** - Built with [`graphql-go/graphql`](https://github.com/graphql-go/graphql) for dynamic schema generation and high-performance query execution
 - **🌐 Echo Router** - High-performance HTTP router with middleware for REST endpoints and GraphQL over HTTP
 - **🔌 Plugin System** - Dual architecture supporting both Go built-in plugins (`.so` files) and HashiCorp process-isolated plugins
 - **🗄️ Database Drivers** - Multi-database support (MongoDB, PostgreSQL, MySQL, MariaDB, MSSQL, SQLite) with connection pooling and transaction management
 - **🔐 Auth Service** - JWT-based authentication with RSA signing, API keys, and session management
-- **⚡ Real-time Engine** - WebSocket-based subscriptions for live data updates
+- **⚡ Real-time layer** - WebSocket-based subscriptions for live data updates
 - **📁 Storage Service** - File upload and management with multiple backend support
 
 ### Plugin Architecture
 
-Apito's unique dual plugin system provides the best of both worlds:
+The dual plugin system combines:
 
 #### Go Built-in Plugins (High Performance)
 

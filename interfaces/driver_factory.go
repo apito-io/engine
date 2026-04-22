@@ -20,6 +20,12 @@ type DatabaseDriverFactory interface {
 	SupportsEngine(engine string) bool
 }
 
+// ProProjectDriverFactory is implemented by factories that need pro-only credentials (e.g. Firestore service account JSON) when creating project DB drivers.
+type ProProjectDriverFactory interface {
+	DatabaseDriverFactory
+	CreateProjectDriverWithProExtras(conf *models.Config, engineConfig *models.DriverCredentials, proExtras interface{}) (ProjectDBInterface, error)
+}
+
 // GraphQLServerFactory interface for creating GraphQL servers
 // This allows pro version to inject its own enhanced GraphQL server while keeping core intact
 type GraphQLServerFactory interface {

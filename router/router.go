@@ -8,6 +8,7 @@ import (
 
 	"github.com/apito-io/engine/controller"
 	"github.com/apito-io/engine/database"
+	"github.com/apito-io/engine/telemetry"
 
 	//"github.com/apito-io/engine/controller/middleware"
 	"github.com/apito-io/engine/models"
@@ -125,6 +126,7 @@ func InitRouter(cfg *models.Config) (*echo.Echo, error) {
 	concreteServer := server.GetConcreteServer().(*resolver.GraphQLServer)
 	connectionManager := concreteServer.GetConnectionManager()
 	if connectionManager != nil {
+		telemetry.RegisterConnectionManagerObservers(cfg, connectionManager)
 		connectionMonitor := database.NewConnectionMonitor(connectionManager)
 		go func() {
 			connectionMonitor.StartMonitoring(ctx)
@@ -215,8 +217,13 @@ func InitRouter(cfg *models.Config) (*echo.Echo, error) {
 
 		databaseRoutes := systemRoutes.Group("/database")
 		{
-
-			databaseRoutes.POST("/check", authCtrl.DatabaseCheck)
+			dbCheck := authCtrl.DatabaseCheck
+			if cfg.DatabaseCheckWrapper != nil {
+				if wrap, ok := cfg.DatabaseCheckWrapper.(func(any) echo.HandlerFunc); ok {
+					dbCheck = wrap(authCtrl)
+				}
+			}
+			databaseRoutes.POST("/check", dbCheck)
 		}
 
 		systemRoutes.GET("/cache/list", graphCtrl.GetSystemCacheInfo)

@@ -17,7 +17,7 @@ func CreateKVDriver(engineType string, cfg *models.Config) (interfaces.KeyValueS
 	switch engineType {
 	case "redis":
 		return redis.GetKVRedisDriver(cfg)
-	case "coreDB", "bbolt", "bolt":
+	case "coredb", "coreDB", "bbolt", "bolt":
 		return bbolt.GetKVBoltDriver(cfg)
 	case "memory":
 		return memory.GetKVMemoryDriver(cfg)

@@ -141,7 +141,12 @@ func (s *GraphQLServer) ListProjectsResolverFn(p graphql.ResolveParams) (interfa
 	param.ResolveParams = &p
 	param.SystemCollectionName = "projects"
 
-	return s.SystemDriver.SearchProjects(p.Context, param)
+	res, err := s.SystemDriver.SearchProjects(p.Context, param)
+	if err != nil {
+		return nil, err
+	}
+
+	return res.Results, nil
 }
 
 func (s *GraphQLServer) ListAllProjectsResolverFn(p graphql.ResolveParams) (interface{}, error) {
@@ -238,7 +243,8 @@ func (s *GraphQLServer) GetProjectResolverFn(p graphql.ResolveParams) (interface
 
 	var projectID string
 	if val, ok := p.Args["_id"].(string); ok {
-		projectID = strings.TrimSpace(utility.SingularResourceName(val))
+		// Opaque project id — do not use SingularResourceName (it lowerCamels e.g. fitness_abcdef → fitnessAbcdef).
+		projectID = strings.TrimSpace(val)
 	} else {
 		return nil, errors.New(ae.MODEL_NAME_REQUIRED)
 	}
@@ -270,74 +276,6 @@ func (s *GraphQLServer) GetLoggedInUserFn(p graphql.ResolveParams) (interface{},
 	}
 
 	return user, nil
-}
-
-type TenantsResponse struct {
-	ID   string `json:"_id"`
-	Name string `json:"name"`
-	Logo string `json:"logo"`
-}
-
-func (s *GraphQLServer) GetProjectTenantsResolverFn(p graphql.ResolveParams) (interface{}, error) {
-
-	var (
-		v      = p.Context.Value
-		router = v("router").(echo.Context)
-	)
-
-	cache, err := s.GetApplicationCache(router)
-	if err != nil {
-		return nil, err
-	}
-
-	project := cache.Project
-
-	var modelType *models.ModelType
-	for _, field := range cache.Project.Schema.Models {
-		if field.Name == project.TenantModelName {
-			modelType = field
-		}
-	}
-
-	if modelType == nil {
-		return nil, errors.New("tenant model not found. check project settings")
-	}
-
-	param := s.NewParam(cache.Param)
-	param.Model = modelType
-	param.ResolveParams = &p
-
-	param.IsSystemRequest = true
-	param.TenantID = "" // we are getting all tenants so no tenant id is required
-
-	driver, err := s.GraphQLExecutor.GetProjectDriver(cache.Ctx)
-	if err != nil {
-		return nil, err
-	}
-
-	resp, err := driver.QueryMultiDocumentOfProject(cache.Ctx, param)
-	if err != nil {
-		return nil, err
-	}
-
-	var tenants []TenantsResponse
-	for _, t := range resp {
-		tenant := TenantsResponse{
-			ID: t.ID,
-		}
-		if val, ok := t.Data["name"]; ok && val != nil {
-			tenant.Name = val.(string)
-		} else {
-			tenant.Name = "N/A"
-		}
-		if val, ok := t.Data["logo"].(map[string]interface{}); ok && len(val) > 0 {
-			if _val, ok := val["url"]; ok && _val != nil {
-				tenant.Logo = _val.(string)
-			}
-		}
-		tenants = append(tenants, tenant)
-	}
-	return tenants, nil
 }
 
 func (s *GraphQLServer) ListAuditLogsFn(p graphql.ResolveParams) (interface{}, error) {
@@ -415,15 +353,16 @@ func (s *GraphQLServer) ListModelsInfoResolverFn(p graphql.ResolveParams) (inter
 		return []*models.ModelType{}, nil
 	}
 
-	var modelName string
+	var rawModelName string
 	if val, ok := p.Args["model_name"].(string); ok {
-		modelName = strings.TrimSpace(utility.SingularResourceName(val))
+		rawModelName = strings.TrimSpace(val)
 	}
 
-	if modelName != "" {
+	if rawModelName != "" {
+		singular := utility.SingularResourceName(rawModelName)
 		var modelType *models.ModelType
 		for _, model := range project.Schema.Models {
-			if model.Name == modelName {
+			if utility.ModelIDMatchesGraphQLField(model.Name, singular) || model.Name == rawModelName {
 				modelType = model
 				break
 			}
@@ -465,6 +404,44 @@ func (s *GraphQLServer) ListModelsInfoResolverFn(p graphql.ResolveParams) (inter
 	return project.Schema.Models, nil
 }
 
+// resolveProjectModelFromSchema maps admin GraphQL `model` / `model_name` to ProjectSchema.Models[].Name.
+// Naming V2 stores canonical snake_case (e.g. food_order). Using only utility.SingularResourceName("food_order")
+// yields foodOrder and misses the schema row, leaving param.Model nil (breaks list/count and builds wrong Arango collection).
+func resolveProjectModelFromSchema(schemaModels []*models.ModelType, modelArg string) *models.ModelType {
+	raw := strings.TrimSpace(modelArg)
+	if raw == "" {
+		return nil
+	}
+	seen := make(map[string]struct{})
+	add := func(keys *[]string, s string) {
+		s = strings.TrimSpace(s)
+		if s == "" {
+			return
+		}
+		if _, ok := seen[s]; ok {
+			return
+		}
+		seen[s] = struct{}{}
+		*keys = append(*keys, s)
+	}
+	var candidates []string
+	add(&candidates, raw)
+	if c, err := utility.CanonicalizeModelName(raw); err == nil {
+		add(&candidates, c)
+	}
+	if sn := utility.SingularResourceName(raw); sn != "" {
+		add(&candidates, sn)
+	}
+	for _, k := range candidates {
+		for _, field := range schemaModels {
+			if field.Name == k {
+				return field
+			}
+		}
+	}
+	return nil
+}
+
 func (s *GraphQLServer) ProjectModelInfoResolverFn(p graphql.ResolveParams) (interface{}, error) {
 
 	s.Lock()
@@ -482,9 +459,9 @@ func (s *GraphQLServer) ProjectModelInfoResolverFn(p graphql.ResolveParams) (int
 
 	doc := cache.Project
 
-	var modelName string
+	var modelArg string
 	if val, ok := p.Args["model_name"].(string); ok {
-		modelName = strings.TrimSpace(utility.SingularResourceName(val))
+		modelArg = strings.TrimSpace(val)
 	} else {
 		return nil, errors.New(ae.MODEL_NAME_REQUIRED)
 	}
@@ -493,13 +470,7 @@ func (s *GraphQLServer) ProjectModelInfoResolverFn(p graphql.ResolveParams) (int
 		return nil, ae.SchemaIsNil
 	}
 
-	var modelType *models.ModelType
-	for _, model := range doc.Schema.Models {
-		if model.Name == modelName {
-			modelType = model
-			break
-		}
-	}
+	modelType := resolveProjectModelFromSchema(doc.Schema.Models, modelArg)
 
 	if modelType == nil {
 		return nil, ae.ModelTypeNotFound
@@ -533,16 +504,6 @@ func (s *GraphQLServer) SystemPlugins(p graphql.ResolveParams) (interface{}, err
 	s.Lock()
 	defer s.Unlock()
 
-	/* var (
-		v      = p.Context.Value
-		//router = v("router").(echo.Context)
-	) */
-
-/* 	var projectID string
-	if val, ok := p.Args["_id"].(string); ok {
-		projectID = strings.TrimSpace(utility.SingularResourceName(val))
-	} */
-
 	// Load HashiCorp plugins from registry
 	_hashiCorpPlugins, err := pluginService.LoadHashiCorpPluginRegistry(s.Cfg)
 	if err != nil {
@@ -556,31 +517,48 @@ func (s *GraphQLServer) SystemPlugins(p graphql.ResolveParams) (interface{}, err
 		if pluginCache, ok := s.HashiCorpPluginCache[plugin.Id]; ok {
 			// overwrite the plugin configurations with the loaded plugin configurations
 			_plugins = append(_plugins, pluginCache.PluginConfigurations)
-		} else{
+		} else {
 			_plugins = append(_plugins, plugin)
 		}
 	}
 
-	/* // Create a map to store the local plugins indexed by ID
-	localPluginMap := make(map[string]*models.SavedPluginDetails)
-	for _, plugin := range project.Plugins {
-		localPluginMap[plugin.ID] = plugin
+	return _plugins, nil
+}
+
+func (s *GraphQLServer) ProjectSpecificInstalledPlugins(p graphql.ResolveParams) (interface{}, error) {
+
+	s.Lock()
+	defer s.Unlock()
+
+	var (
+		v      = p.Context.Value
+		router = v("router").(echo.Context)
+	)
+
+	cache, err := s.GetApplicationCache(router)
+	if err != nil {
+		return nil, err
 	}
 
-	// Iterate through the project plugins
-	for _, projectPlugin := range project.Plugins {
-		// Check if the plugin exists in the local map
-		if localPlugin, ok := localPluginMap[projectPlugin.ID]; ok {
-			// Update the local plugin with the project plugin's data
-			localPlugin.EnvVars = projectPlugin.EnvVars
-			localPlugin.ActivateStatus = projectPlugin.ActivateStatus
-			localPlugin.Enable = projectPlugin.Enable
-			localPlugin.LoadStatus = projectPlugin.LoadStatus
-		} else {
-			// If the plugin doesn't exist locally, add it to the list
-			project.Plugins = append(project.Plugins, projectPlugin)
+	project := cache.Project
+
+	// Load HashiCorp plugins from registry
+	_hashiCorpPlugins, err := pluginService.LoadHashiCorpPluginRegistry(s.Cfg)
+	if err != nil {
+		return nil, fmt.Errorf("failed to load HashiCorp plugin registry: %w", err)
+	}
+
+	// Convert map to slice
+	var _plugins []*protobuff.PluginDetails
+	for _, plugin := range _hashiCorpPlugins {
+		for _, projectPlugin := range project.Plugins {
+			if projectPlugin.ID == plugin.Id {
+				plugin.LoadStatus = protobuff.PluginLoadStatus_PLUGIN_LOAD_STATUS_INSTALLED
+				_plugins = append(_plugins, plugin)
+				break
+			}
 		}
-	} */
+	}
 
 	return _plugins, nil
 }
@@ -628,19 +606,14 @@ func (s *GraphQLServer) ListDetailedModelsDataInfoResolverFn(p graphql.ResolvePa
 	// forward the proxy
 	p.Args = p.Source.(graphql.ResolveParams).Args
 
-	var modelName string
+	var modelArg string
 	if val, ok := p.Args["model"].(string); ok && val != "" {
-		modelName = utility.SingularResourceName(val)
+		modelArg = val
 	} else {
 		return nil, errors.New(ae.MODEL_NAME_REQUIRED)
 	}
 
-	var modelType *models.ModelType
-	for _, field := range cache.Project.Schema.Models {
-		if field.Name == modelName {
-			modelType = field
-		}
-	}
+	modelType := resolveProjectModelFromSchema(cache.Project.Schema.Models, modelArg)
 
 	param := s.NewParam(cache.Param)
 	param.Model = modelType
@@ -673,19 +646,14 @@ func (s *GraphQLServer) ListDetailedModelsDataCountResolverFn(p graphql.ResolveP
 	// forward the proxy
 	p.Args = p.Source.(graphql.ResolveParams).Args
 
-	var modelName string
+	var modelArg string
 	if val, ok := p.Args["model"].(string); ok && val != "" {
-		modelName = utility.SingularResourceName(val)
+		modelArg = val
 	} else {
 		return nil, errors.New(ae.MODEL_NAME_REQUIRED)
 	}
 
-	var modelType *models.ModelType
-	for _, field := range cache.Project.Schema.Models {
-		if field.Name == modelName {
-			modelType = field
-		}
-	}
+	modelType := resolveProjectModelFromSchema(cache.Project.Schema.Models, modelArg)
 
 	param := s.NewParam(cache.Param)
 	param.Model = modelType
@@ -957,20 +925,14 @@ func (s *GraphQLServer) ListSingleModelDataInfoResolverFn(p graphql.ResolveParam
 		param.Revision = val
 	}
 
-	var modelName string
+	var modelArg string
 	if val, ok := p.Args["model"].(string); ok && val != "" {
-		modelName = utility.SingularResourceName(val)
+		modelArg = val
 	} else {
 		return nil, errors.New(ae.MODEL_NAME_REQUIRED)
 	}
 
-	var modelType *models.ModelType
-	for _, field := range cache.Project.Schema.Models {
-		if field.Name == modelName {
-			modelType = field
-			break
-		}
-	}
+	modelType := resolveProjectModelFromSchema(cache.Project.Schema.Models, modelArg)
 
 	if modelType == nil {
 		return nil, ae.ModelTypeNotFound
@@ -1044,9 +1006,9 @@ func (s *GraphQLServer) ListDocumentRevisionInfoResolverFn(p graphql.ResolvePara
 	param.ResolveParams = &p
 	param.DocumentID = p.Args["_id"].(string)
 
-	var modelName string
+	var modelArg string
 	if val, ok := p.Args["model"].(string); ok && val != "" {
-		modelName = utility.SingularResourceName(val)
+		modelArg = val
 	} else {
 		return nil, errors.New(ae.MODEL_NAME_REQUIRED)
 	}
@@ -1059,13 +1021,7 @@ func (s *GraphQLServer) ListDocumentRevisionInfoResolverFn(p graphql.ResolvePara
 		return []*models.DocumentRevisionHistory{}, nil
 	}*/
 
-	var modelType *models.ModelType
-	for _, field := range cache.Project.Schema.Models {
-		if field.Name == modelName {
-			modelType = field
-			break
-		}
-	}
+	modelType := resolveProjectModelFromSchema(cache.Project.Schema.Models, modelArg)
 
 	if modelType == nil {
 		return nil, ae.ModelTypeNotFound
@@ -1182,9 +1138,9 @@ func (s *GraphQLServer) ListExecutableFunctionsResolverFn(p graphql.ResolveParam
 		return nil, err
 	}
 
-	var model string
+	var modelArg string
 	if val, ok := p.Args["model_name"].(string); ok && val != "" {
-		model = utility.SingularResourceName(val)
+		modelArg = val
 	} else {
 		return nil, errors.New(ae.MODEL_NAME_REQUIRED)
 	}
@@ -1194,13 +1150,7 @@ func (s *GraphQLServer) ListExecutableFunctionsResolverFn(p graphql.ResolveParam
 		return nil, ae.SchemaIsNil
 	}
 
-	var modelType *models.ModelType
-	for _, ct := range cache.Project.Schema.Models {
-		if ct.Name == model {
-			modelType = ct
-			break
-		}
-	}
+	modelType := resolveProjectModelFromSchema(cache.Project.Schema.Models, modelArg)
 
 	if modelType == nil {
 		return nil, ae.ModelTypeNotFound

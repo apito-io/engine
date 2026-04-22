@@ -44,7 +44,7 @@ func ExtractModelNames(schema *models.ProjectSchema, queryDoc *ast.QueryDocument
 				isPluginRequest = true
 			} else {
 				_name := SingularResourceName(_field.Name)
-				if !_modelNames[_name] && _name != "__typename" {
+				if ResolveStoredModelID(_modelNames, _name) == "" && _name != "__typename" {
 					for _, f := range schema.Functions {
 						if f.Name == _name {
 							if f.Request != nil && f.Request.Model != "JSON" {
@@ -100,15 +100,15 @@ func findModelNames(modelNames map[string]bool, selectionSet ast.SelectionSet, f
 			name = ExtractRelationName(name) // for known_as relation node
 			if strings.HasPrefix(name, "create") || strings.HasPrefix(name, "delete") || strings.HasPrefix(name, "update") || strings.HasPrefix(name, "upsert") {
 				modelName := SingularResourceName(strings.TrimPrefix(strings.TrimPrefix(strings.TrimPrefix(strings.TrimPrefix(name, "create"), "delete"), "update"), "upsert"))
-				if modelNames[modelName] {
+				if stored := ResolveStoredModelID(modelNames, modelName); stored != "" {
 					foundModelNames = append(foundModelNames, &models.FilteredModel{
-						Name:         modelName,
+						Name:         stored,
 						HasMetaQuery: hasMeta,
 					})
 				}
-			} else if modelNames[name] {
+			} else if stored := ResolveStoredModelID(modelNames, name); stored != "" {
 				filteredModel := &models.FilteredModel{
-					Name:         name,
+					Name:         stored,
 					HasMetaQuery: hasMeta,
 				}
 				if _selection.Alias != _selection.Name { // this means we have a different alias for the model

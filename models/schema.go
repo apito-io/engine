@@ -4,6 +4,8 @@ type ProjectSchema struct {
 	ProjectID string           `bun:"type:uuid,pk" json:"project_id,omitempty" firestore:"project_id,omitempty" bson:"_id,omitempty"`
 	Models    []*ModelType     `bun:"rel:has-many" json:"models,omitempty" firestore:"models,omitempty" bson:"models,omitempty"`
 	Functions []*ApitoFunction `bun:"rel:has-many" json:"functions,omitempty" firestore:"functions,omitempty" bson:"functions,omitempty"`
+	// NamingSchemaVersion 0 = legacy; 1 = canonical snake_case model ids (see utility.NamingSchemaVersionV2).
+	NamingSchemaVersion int `json:"naming_schema_version,omitempty" firestore:"naming_schema_version,omitempty" bson:"naming_schema_version,omitempty"`
 }
 
 type KeyValue struct {
@@ -24,11 +26,11 @@ type ModelType struct {
 	SinglePage      bool              `json:"single_page,omitempty" firestore:"system_generated,omitempty" bson:"single_page,omitempty"`
 	SinglePageUUID  string            `json:"single_page_uuid,omitempty" firestore:"system_generated,omitempty" bson:"single_page_uuid,omitempty"`
 	HasConnections  bool              `json:"has_connections,omitempty" firestore:"has_connections,omitempty" bson:"has_connections,omitempty"`
-	IsTenantModel   bool              `json:"is_tenant_model,omitempty" firestore:"is_tenant_model,omitempty" bson:"is_tenant_model,omitempty"`
 	EnableRevision  bool              `json:"enable_revision,omitempty" firestore:"enable_revision,omitempty" bson:"enable_revision,omitempty"`
-	// is common model is used in saas application where inserting or querying data from this model doesnt require tenant id
-	IsCommonModel   bool              `json:"is_common_model,omitempty" firestore:"is_common_model,omitempty" bson:"is_common_model,omitempty"`
 	RevisionFilter  []*KeyValue       `json:"revision_filter,omitempty" firestore:"revision_filter,omitempty" bson:"revision_filter,omitempty"`
+
+	// Ext holds opaque extension data populated by the extension layer (e.g. model classification metadata).
+	Ext map[string]interface{} `json:"ext,omitempty" firestore:"ext,omitempty" bson:"ext,omitempty"`
 }
 
 type Validation struct {

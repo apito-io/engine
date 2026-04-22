@@ -12,12 +12,7 @@ func ConnectDisconnectParamBuilder(project *models.Project, uid string, connecti
 
 	projectID := project.ID
 
-	var collectionName string
-	if project.ProjectType == models.ProjectType_SaaS {
-		collectionName = fmt.Sprintf("p_%s_%s", projectID, modelType.Name)
-	} else {
-		collectionName = fmt.Sprintf("p_%s", projectID)
-	}
+	collectionName := fmt.Sprintf("p_%s", projectID)
 
 	var connParams []*models.ConnectDisconnectParam
 

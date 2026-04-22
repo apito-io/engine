@@ -2,6 +2,7 @@ package interfaces
 
 import (
 	"context"
+
 	"github.com/apito-io/engine/models"
 )
 
@@ -10,6 +11,10 @@ type ApitoSystemDB interface {
 
 	// RunMigration runs the database migrations
 	RunMigration(ctx context.Context) error
+
+	// EnsureSystemBootstrap creates idempotent first-run data for this engine (default admin,
+	// default org/team/project where applicable). Safe to call on every startup after RunMigration.
+	EnsureSystemBootstrap(ctx context.Context) error
 
 	// Project-related functions CreateProject creates a new project
 	CreateProject(ctx context.Context, userId string, project *models.Project) (*models.Project, error)

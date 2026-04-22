@@ -26,58 +26,105 @@ func getEnv(key, defaults string) string {
 	return defaults
 }
 
-// DeleteProject implements the deletion of a project
-func (m *MongoDriver) DeleteProject(ctx context.Context, projectId string) error {
-	// Define collection names
+// mongoNamespaceNotFound is MongoDB error code 26 (ns not found).
+const mongoNamespaceNotFound = 26
+
+func mongoDropCollectionIgnoringNotFound(ctx context.Context, coll *mongo.Collection) error {
+	err := coll.Drop(ctx)
+	if err == nil {
+		return nil
+	}
+	var ce mongo.CommandError
+	if errors.As(err, &ce) && ce.Code == mongoNamespaceNotFound {
+		return nil
+	}
+	return err
+}
+
+// DeleteProjectBase drops the collections created by InitProjectBase for this project (p_{id}, media, relation).
+func (m *MongoDriver) DeleteProjectBase(ctx context.Context, param *models.CommonSystemParams) error {
+	if param == nil || strings.TrimSpace(param.ProjectID) == "" {
+		return errors.New("DeleteProjectBase: project id is required")
+	}
+	projectId := strings.TrimSpace(param.ProjectID)
 	projectCollection := fmt.Sprintf("p_%s", projectId)
 	projectMediaCollection := fmt.Sprintf("%s_media", projectCollection)
 	projectEdgeCollection := fmt.Sprintf("%s_relation", projectCollection)
 
-	// Start a session for transaction
 	session, err := m.Client.StartSession()
 	if err != nil {
 		return err
 	}
 	defer session.EndSession(ctx)
 
-	// Execute operations in a transaction
 	_, err = session.WithTransaction(ctx, func(sessCtx context.Context) (interface{}, error) {
-		// Drop the main project collection
-		err := m.Database.Collection(projectCollection).Drop(sessCtx)
-		if err != nil {
+		if err := mongoDropCollectionIgnoringNotFound(sessCtx, m.Database.Collection(projectCollection)); err != nil {
 			return nil, err
 		}
-
-		// Drop the media collection
-		err = m.Database.Collection(projectMediaCollection).Drop(sessCtx)
-		if err != nil {
+		if err := mongoDropCollectionIgnoringNotFound(sessCtx, m.Database.Collection(projectMediaCollection)); err != nil {
 			return nil, err
 		}
-
-		// Drop the relation collection
-		err = m.Database.Collection(projectEdgeCollection).Drop(sessCtx)
-		if err != nil {
+		if err := mongoDropCollectionIgnoringNotFound(sessCtx, m.Database.Collection(projectEdgeCollection)); err != nil {
 			return nil, err
 		}
-
 		return nil, nil
 	})
-
 	return err
 }
 
-// CheckCollectionExists checks if a collection exists in the project
-func (m *MongoDriver) CheckCollectionExists(ctx context.Context, param *models.CommonSystemParams, isRelationCollection bool) (bool, error) {
-	var collectionName string
-	if param.ProjectType == models.ProjectType_SaaS {
-		if isRelationCollection {
-			collectionName = fmt.Sprintf("p_%s_relation", param.ProjectID)
-		} else {
-			collectionName = fmt.Sprintf("p_%s_%s", param.ProjectID, param.Model.Name)
-		}
-	} else {
-		collectionName = param.Model.Name
-		if isRelationCollection {
+// DeleteProject removes the project’s physical collections; it delegates to DeleteProjectBase (same scope as InitProjectBase).
+func (m *MongoDriver) DeleteProject(ctx context.Context, projectId string) error {
+	return m.DeleteProjectBase(ctx, &models.CommonSystemParams{ProjectID: projectId})
+}
+
+// InitProjectBase creates the default media bucket, relation collection (with edge indexes), and main
+// document collection p_{projectID} with standard document indexes. Driver v2 CreateCollection returns only error;
+// use Database.Collection after CreateCollection.
+func (m *MongoDriver) InitProjectBase(ctx context.Context, param *models.CommonSystemParams, indexes []string) error {
+	if param == nil {
+		return errors.New("param is required")
+	}
+
+	pid := strings.TrimSpace(param.ProjectID)
+	if pid == "" {
+		return errors.New("project id is required")
+	}
+
+	media := fmt.Sprintf("p_%s_media", pid)
+	if err := m.Database.CreateCollection(ctx, media); err != nil {
+		return err
+	}
+
+	relation := fmt.Sprintf("p_%s_relation", pid)
+	if err := m.Database.CreateCollection(ctx, relation); err != nil {
+		return err
+	}
+	relColl := m.Database.Collection(relation)
+	if err := ensureMongoRelationEdgeIndexes(ctx, relColl); err != nil {
+		return err
+	}
+
+	main := fmt.Sprintf("p_%s", pid)
+	if err := m.Database.CreateCollection(ctx, main); err != nil {
+		return err
+	}
+	if err := ensureMongoDocumentIndexes(ctx, m.Database.Collection(main)); err != nil {
+		return err
+	}
+
+	_ = indexes // reserved for optional caller-defined indexes on the main bucket
+	return nil
+}
+
+// CheckTableOrCollectionExists checks if a collection exists in the project.
+// When param.Ext[models.ExtKeyRelationCollectionCheck] is true, checks relation_{model} instead of the model collection.
+func (m *MongoDriver) CheckTableOrCollectionExists(ctx context.Context, param *models.CommonSystemParams) (bool, error) {
+	if param == nil || param.Model == nil {
+		return false, errors.New("model is required")
+	}
+	collectionName := param.Model.Name
+	if param.Ext != nil {
+		if v, ok := param.Ext[models.ExtKeyRelationCollectionCheck].(bool); ok && v {
 			collectionName = "relation_" + collectionName
 		}
 	}
@@ -95,121 +142,142 @@ func (m *MongoDriver) CheckCollectionExists(ctx context.Context, param *models.C
 	return false, nil
 }
 
-// AddCollection adds a new collection to the project
-func (m *MongoDriver) AddCollection(ctx context.Context, param *models.CommonSystemParams, isRelationCollection bool) error {
-	var collectionName string
-	if param.ProjectType == models.ProjectType_SaaS {
-		if isRelationCollection {
-			collectionName = fmt.Sprintf("p_%s_relation", param.ProjectID)
-		} else {
-			collectionName = fmt.Sprintf("p_%s_%s", param.ProjectID, param.Model.Name)
-		}
-	} else {
-		collectionName = param.Model.Name
-		if isRelationCollection {
-			collectionName = "relation_" + collectionName
-		}
+// ensureMongoDocumentIndexes adds TTL, type, and publish-status indexes used on the main project document bucket.
+// for each general collection we create we ahve to run this function to ensure the indexes are created
+func ensureMongoDocumentIndexes(ctx context.Context, collection *mongo.Collection) error {
+	ttlIndex := mongo.IndexModel{
+		Keys:    bson.D{bson.E{Key: "expire_at", Value: 1}},
+		Options: options.Index().SetName("doc_expire_at").SetExpireAfterSeconds(1),
+	}
+	if _, err := collection.Indexes().CreateOne(ctx, ttlIndex); err != nil {
+		return err
+	}
+	typeIndex := mongo.IndexModel{
+		Keys:    bson.D{bson.E{Key: "type", Value: 1}},
+		Options: options.Index().SetName("doc_type"),
+	}
+	if _, err := collection.Indexes().CreateOne(ctx, typeIndex); err != nil {
+		return err
+	}
+	statusIndex := mongo.IndexModel{
+		Keys:    bson.D{bson.E{Key: "meta.status", Value: 1}},
+		Options: options.Index().SetName("doc_publish_status"),
+	}
+	_, err := collection.Indexes().CreateOne(ctx, statusIndex)
+	return err
+}
+
+// ensureMongoRelationEdgeIndexes adds indexes for a relation edge collection (same layout as p_{pid}_relation).
+func ensureMongoRelationEdgeIndexes(ctx context.Context, collection *mongo.Collection) error {
+	ttlIndex := mongo.IndexModel{
+		Keys:    bson.D{bson.E{Key: "expire_at", Value: 1}},
+		Options: options.Index().SetName("doc_expire_at").SetExpireAfterSeconds(1),
+	}
+	if _, err := collection.Indexes().CreateOne(ctx, ttlIndex); err != nil {
+		return err
+	}
+	fromIndex := mongo.IndexModel{
+		Keys:    bson.D{bson.E{Key: "from", Value: 1}},
+		Options: options.Index().SetName("from_relation"),
+	}
+	if _, err := collection.Indexes().CreateOne(ctx, fromIndex); err != nil {
+		return err
+	}
+	toIndex := mongo.IndexModel{
+		Keys:    bson.D{bson.E{Key: "to", Value: 1}},
+		Options: options.Index().SetName("to_relation"),
+	}
+	if _, err := collection.Indexes().CreateOne(ctx, toIndex); err != nil {
+		return err
+	}
+	knownAsIndex := mongo.IndexModel{
+		Keys:    bson.D{bson.E{Key: "known_as", Value: 1}},
+		Options: options.Index().SetName("known_as_relation"),
+	}
+	if _, err := collection.Indexes().CreateOne(ctx, knownAsIndex); err != nil {
+		return err
+	}
+	fromIDIndex := mongo.IndexModel{
+		Keys:    bson.D{bson.E{Key: "from_id", Value: 1}},
+		Options: options.Index().SetName("from_id_relation"),
+	}
+	if _, err := collection.Indexes().CreateOne(ctx, fromIDIndex); err != nil {
+		return err
+	}
+	toIDIndex := mongo.IndexModel{
+		Keys:    bson.D{bson.E{Key: "to_id", Value: 1}},
+		Options: options.Index().SetName("to_id_relation"),
+	}
+	_, err := collection.Indexes().CreateOne(ctx, toIDIndex)
+	return err
+}
+
+// CreateTableOrCollection creates a new table or collection in the project.
+// For general project bootstrap, param.Model may be nil: in that case (and when not creating a
+// relation collection) the primary bucket p_{projectID} and p_{projectID}_media are created, matching
+// Arango AddCollection which does not require a model for the default collection name.
+func (m *MongoDriver) CreateTableOrCollection(ctx context.Context, param *models.CommonSystemParams, indexes []string) error {
+	if param == nil {
+		return errors.New("param is required")
 	}
 
-	// Create the collection
+	var collectionName string
+	if param.Model == nil {
+		pid := strings.TrimSpace(param.ProjectID)
+		if pid == "" {
+			return errors.New("project id is required")
+		}
+		main := fmt.Sprintf("p_%s", pid)
+		if err := m.Database.CreateCollection(ctx, main); err != nil {
+			return err
+		}
+		if err := ensureMongoDocumentIndexes(ctx, m.Database.Collection(main)); err != nil {
+			return err
+		}
+		media := fmt.Sprintf("p_%s_media", pid)
+		if err := m.Database.CreateCollection(ctx, media); err != nil {
+			return err
+		}
+		return nil
+	}
+
+	isRelation := false
+	var fieldIndexes []string
+	for _, ix := range indexes {
+		if ix == models.IndexesRelationCollectionToken {
+			isRelation = true
+			continue
+		}
+		fieldIndexes = append(fieldIndexes, ix)
+	}
+
+	collectionName = param.Model.Name
+	if isRelation {
+		collectionName = "relation_" + collectionName
+	}
+
 	err := m.Database.CreateCollection(ctx, collectionName)
 	if err != nil {
 		return err
 	}
 
-	// Create indexes
 	collection := m.Database.Collection(collectionName)
 
-	// Create TTL index for expire_at
-	ttlIndex := mongo.IndexModel{
-		Keys:    bson.D{{"expire_at", 1}},
-		Options: options.Index().SetName("doc_expire_at").SetExpireAfterSeconds(1),
-	}
-	_, err = collection.Indexes().CreateOne(ctx, ttlIndex)
-	if err != nil {
-		return err
+	if isRelation {
+		return ensureMongoRelationEdgeIndexes(ctx, collection)
 	}
 
-	if param.ProjectType == models.ProjectType_SaaS {
-		// Create tenant_id index for SaaS projects
-		tenantIndex := mongo.IndexModel{
-			Keys:    bson.D{{"tenant_id", 1}},
-			Options: options.Index().SetName("tenant_id"),
+	for _, index := range fieldIndexes {
+		indexModel := mongo.IndexModel{
+			Keys:    bson.D{bson.E{Key: index, Value: 1}},
+			Options: options.Index().SetName(index + "_index"),
 		}
-		_, err = collection.Indexes().CreateOne(ctx, tenantIndex)
-		if err != nil {
+		if _, err = collection.Indexes().CreateOne(ctx, indexModel); err != nil {
 			return err
 		}
 	}
 
-	if isRelationCollection {
-		// Create indexes for relation collections
-		fromIndex := mongo.IndexModel{
-			Keys:    bson.D{{"from", 1}},
-			Options: options.Index().SetName("from_relation"),
-		}
-		_, err = collection.Indexes().CreateOne(ctx, fromIndex)
-		if err != nil {
-			return err
-		}
-
-		toIndex := mongo.IndexModel{
-			Keys:    bson.D{{"to", 1}},
-			Options: options.Index().SetName("to_relation"),
-		}
-		_, err = collection.Indexes().CreateOne(ctx, toIndex)
-		if err != nil {
-			return err
-		}
-
-		knownAsIndex := mongo.IndexModel{
-			Keys:    bson.D{{"known_as", 1}},
-			Options: options.Index().SetName("known_as_relation"),
-		}
-		_, err = collection.Indexes().CreateOne(ctx, knownAsIndex)
-		if err != nil {
-			return err
-		}
-
-		fromIdIndex := mongo.IndexModel{
-			Keys:    bson.D{{"from_id", 1}},
-			Options: options.Index().SetName("from_id_relation"),
-		}
-		_, err = collection.Indexes().CreateOne(ctx, fromIdIndex)
-		if err != nil {
-			return err
-		}
-
-		toIdIndex := mongo.IndexModel{
-			Keys:    bson.D{{"to_id", 1}},
-			Options: options.Index().SetName("to_id_relation"),
-		}
-		_, err = collection.Indexes().CreateOne(ctx, toIdIndex)
-		if err != nil {
-			return err
-		}
-	} else {
-		// Create indexes for regular collections
-		typeIndex := mongo.IndexModel{
-			Keys:    bson.D{{"type", 1}},
-			Options: options.Index().SetName("doc_type"),
-		}
-		_, err = collection.Indexes().CreateOne(ctx, typeIndex)
-		if err != nil {
-			return err
-		}
-
-		statusIndex := mongo.IndexModel{
-			Keys:    bson.D{{"meta.status", 1}},
-			Options: options.Index().SetName("doc_publish_status"),
-		}
-		_, err = collection.Indexes().CreateOne(ctx, statusIndex)
-		if err != nil {
-			return err
-		}
-	}
-
-	return nil
+	return ensureMongoDocumentIndexes(ctx, collection)
 }
 
 // TransferProject transfers a project from one user to another
@@ -387,29 +455,12 @@ func (m *MongoDriver) GetSingleProjectDocument(ctx context.Context, param *model
 		}
 	}
 
-	// Handle tenant model
-	if param.TenantModel == param.Model.Name {
-		param.TenantModel = ""
-		param.TenantID = ""
-	}
-
 	// Build filter
 	filter := bson.M{"_id": param.DocumentID}
-	if param.TenantID != "" {
-		filter["tenant_id"] = param.TenantID
-	}
+	mergeQueryFilterBSON(m.Conf, param, filter)
 
 	// Get collection name
-	var collectionName string
-	if param.ProjectType == models.ProjectType_SaaS {
-		if param.SinglePageData {
-			collectionName = fmt.Sprintf("p_%s_single_docs", param.ProjectID)
-		} else {
-			collectionName = fmt.Sprintf("p_%s_%s", param.ProjectID, param.Model.Name)
-		}
-	} else {
-		collectionName = fmt.Sprintf("p_%s", param.ProjectID)
-	}
+	collectionName := fmt.Sprintf("p_%s", param.ProjectID)
 
 	// Query the document
 	collection := m.Database.Collection(collectionName)
@@ -432,23 +483,11 @@ func (m *MongoDriver) GetSingleProjectDocument(ctx context.Context, param *model
 
 // DeleteDocumentFromProject deletes a document from a project
 func (m *MongoDriver) DeleteDocumentFromProject(ctx context.Context, param *models.CommonSystemParams) error {
-	var collectionName string
-	if param.ProjectType == models.ProjectType_SaaS {
-		if param.SinglePageData {
-			collectionName = fmt.Sprintf("p_%s_single_docs", param.ProjectID)
-		} else {
-			collectionName = fmt.Sprintf("p_%s_%s", param.ProjectID, param.Model.Name)
-		}
-	} else {
-		collectionName = fmt.Sprintf("p_%s", param.ProjectID)
-	}
+	collectionName := fmt.Sprintf("p_%s", param.ProjectID)
 
 	collection := m.Database.Collection(collectionName)
 	filter := bson.M{"_id": param.DocumentID}
-
-	if param.TenantID != "" {
-		filter["tenant_id"] = param.TenantID
-	}
+	mergeQueryFilterBSON(m.Conf, param, filter)
 
 	_, err := collection.DeleteOne(ctx, filter)
 	return err
@@ -456,25 +495,13 @@ func (m *MongoDriver) DeleteDocumentFromProject(ctx context.Context, param *mode
 
 // QueryMultiDocumentOfProject retrieves multiple documents from a project
 func (m *MongoDriver) QueryMultiDocumentOfProject(ctx context.Context, param *models.CommonSystemParams) ([]*types.DefaultDocumentStructure, error) {
-	var collectionName string
-	if param.ProjectType == models.ProjectType_SaaS {
-		if param.SinglePageData {
-			collectionName = fmt.Sprintf("p_%s_single_docs", param.ProjectID)
-		} else {
-			collectionName = fmt.Sprintf("p_%s_%s", param.ProjectID, param.Model.Name)
-		}
-	} else {
-		collectionName = fmt.Sprintf("p_%s", param.ProjectID)
-	}
+	collectionName := fmt.Sprintf("p_%s", param.ProjectID)
 
 	collection := m.Database.Collection(collectionName)
 	findOpts := options.Find()
 
 	// Build filter
 	filter := bson.M{}
-	if param.TenantID != "" && !strings.HasPrefix(param.TenantID, "0000") {
-		filter["tenant_id"] = param.TenantID
-	}
 
 	// Apply pagination if provided in resolve params
 	if param.ResolveParams != nil {
@@ -505,6 +532,7 @@ func (m *MongoDriver) QueryMultiDocumentOfProject(ctx context.Context, param *mo
 			}
 		}
 	}
+	mergeQueryFilterBSON(m.Conf, param, filter)
 
 	cursor, err := collection.Find(ctx, filter, findOpts)
 	if err != nil {
@@ -577,7 +605,7 @@ func (m *MongoDriver) AddModel(ctx context.Context, project *models.Project, mod
 	collection := m.Database.Collection(collectionName)
 	indexOpts := options.Index().SetName("id_index")
 	indexModel := mongo.IndexModel{
-		Keys:    bson.D{{Key: "_id", Value: 1}},
+		Keys:    bson.D{bson.E{Key: "_id", Value: 1}},
 		Options: indexOpts,
 	}
 
@@ -759,7 +787,7 @@ func (m *MongoDriver) CreateIndex(ctx context.Context, param *models.CommonSyste
 
 	// Create index model
 	indexModel := mongo.IndexModel{
-		Keys:    bson.D{{Key: fieldName, Value: 1}},
+		Keys:    bson.D{bson.E{Key: fieldName, Value: 1}},
 		Options: indexOpts,
 	}
 
@@ -789,7 +817,7 @@ func (m *MongoDriver) AddRelationFields(ctx context.Context, from *models.Connec
 	// Create index for from field
 	fromIndexOpts := options.Index().SetName("from_index")
 	fromIndex := mongo.IndexModel{
-		Keys:    bson.D{{Key: "from", Value: 1}},
+		Keys:    bson.D{bson.E{Key: "from", Value: 1}},
 		Options: fromIndexOpts,
 	}
 	_, err = collection.Indexes().CreateOne(ctx, fromIndex)
@@ -800,7 +828,7 @@ func (m *MongoDriver) AddRelationFields(ctx context.Context, from *models.Connec
 	// Create index for to field
 	toIndexOpts := options.Index().SetName("to_index")
 	toIndex := mongo.IndexModel{
-		Keys:    bson.D{{Key: "to", Value: 1}},
+		Keys:    bson.D{bson.E{Key: "to", Value: 1}},
 		Options: toIndexOpts,
 	}
 	_, err = collection.Indexes().CreateOne(ctx, toIndex)
@@ -969,28 +997,14 @@ func (m *MongoDriver) ConnectBuilder(ctx context.Context, param *models.CommonSy
 
 		// add a new relation for each action ID
 		for _, id := range connParam.ActionIDs {
-			var fromID, toID string
-			if param.ProjectType == models.ProjectType_SaaS {
-				if param.TenantID == "" {
-					return errors.New("tenant id is required if project type is SaaS")
-				}
+			fromID := connParam.ForwardConnectionID
+			toID := id
 
-				switch connParam.ConnectionType {
-				case "forward":
-					fromID = connParam.ForwardConnectionID
-					toID = id
-				case "backward":
-					fromID = id
-					toID = connParam.ForwardConnectionID
-				default:
-					return errors.New("invalid connection type")
-				}
-			} else {
-				fromID = connParam.ForwardConnectionID
-				toID = id
+			if connParam.ConnectionType == "backward" {
+				fromID = id
+				toID = connParam.ForwardConnectionID
 			}
 
-			// insert relation
 			relation := &models.EdgeRelation{
 				Key:       primitive.NewObjectID().Hex(),
 				To:        connParam.ForwardConnectionType.Model,
@@ -1002,9 +1016,6 @@ func (m *MongoDriver) ConnectBuilder(ctx context.Context, param *models.CommonSy
 			}
 			if connParam.KnownAs != "" {
 				relation.KnownAs = connParam.KnownAs
-			}
-			if param.TenantID != "" {
-				relation.TenantID = param.TenantID
 			}
 
 			err := m.CreateRelation(ctx, param.ProjectID, relation)
@@ -1115,16 +1126,7 @@ func (m *MongoDriver) GetSingleProjectDocumentBytes(ctx context.Context, param *
 
 // GetSingleProjectDocumentRevisions retrieves the revision history of a single project document by ID.
 func (m *MongoDriver) GetSingleProjectDocumentRevisions(ctx context.Context, param *models.CommonSystemParams) ([]*models.DocumentRevisionHistory, error) {
-	var collectionName string
-	if param.ProjectType == models.ProjectType_SaaS {
-		if param.SinglePageData {
-			collectionName = fmt.Sprintf("p_%s_single_docs", param.ProjectID)
-		} else {
-			collectionName = fmt.Sprintf("p_%s_%s", param.ProjectID, param.Model.Name)
-		}
-	} else {
-		collectionName = fmt.Sprintf("p_%s", param.ProjectID)
-	}
+	collectionName := fmt.Sprintf("p_%s", param.ProjectID)
 
 	collection := m.Database.Collection(collectionName)
 
@@ -1137,12 +1139,8 @@ func (m *MongoDriver) GetSingleProjectDocumentRevisions(ctx context.Context, par
 		"meta.revision": true,
 	}
 
-	if param.TenantID != "" {
-		filter["tenant_id"] = param.TenantID
-	}
-
 	// Sort by revision date descending
-	findOpts := options.Find().SetSort(bson.D{{"meta.revision_at", -1}})
+	findOpts := options.Find().SetSort(bson.D{bson.E{Key: "meta.revision_at", Value: -1}})
 
 	cursor, err := collection.Find(ctx, filter, findOpts)
 	if err != nil {
@@ -1181,12 +1179,7 @@ func (m *MongoDriver) GetSingleRawDocumentFromProject(ctx context.Context, param
 		}, nil
 	}
 
-	var collectionName string
-	if param.ProjectType == models.ProjectType_SaaS {
-		collectionName = fmt.Sprintf("p_%s_%s", param.ProjectID, param.Model.Name)
-	} else {
-		collectionName = fmt.Sprintf("p_%s", param.ProjectID)
-	}
+	collectionName := fmt.Sprintf("p_%s", param.ProjectID)
 
 	collection := m.Database.Collection(collectionName)
 	filter := bson.M{"_id": param.DocumentID}
@@ -1276,23 +1269,10 @@ func (m *MongoDriver) AddTeamMetaInfo(ctx context.Context, users []*models.Syste
 }
 
 func (m *MongoDriver) DeleteDocumentsFromProject(ctx context.Context, param *models.CommonSystemParams) error {
-	var collectionName string
-	if param.ProjectType == models.ProjectType_SaaS {
-		if param.SinglePageData {
-			collectionName = fmt.Sprintf("p_%s_single_docs", param.ProjectID)
-		} else {
-			collectionName = fmt.Sprintf("p_%s_%s", param.ProjectID, param.Model.Name)
-		}
-	} else {
-		collectionName = fmt.Sprintf("p_%s", param.ProjectID)
-	}
+	collectionName := fmt.Sprintf("p_%s", param.ProjectID)
 
 	collection := m.Database.Collection(collectionName)
 	filter := bson.M{"_id": bson.M{"$in": param.DocumentIDs}}
-
-	if param.TenantID != "" {
-		filter["tenant_id"] = param.TenantID
-	}
 
 	_, err := collection.DeleteMany(ctx, filter)
 	return err
@@ -1342,12 +1322,7 @@ func (m *MongoDriver) RelationshipDataLoader(ctx context.Context, param *models.
 	}
 
 	// Get the target collection name
-	var collectionName string
-	if param.ProjectType == models.ProjectType_SaaS {
-		collectionName = fmt.Sprintf("p_%s_%s", param.ProjectID, modelName)
-	} else {
-		collectionName = fmt.Sprintf("p_%s", param.ProjectID)
-	}
+	collectionName := fmt.Sprintf("p_%s", param.ProjectID)
 
 	// Get relation IDs for the source document
 	relationCollectionName := fmt.Sprintf("relation_%s_%s", param.Model.Name, modelName)
@@ -1381,10 +1356,6 @@ func (m *MongoDriver) RelationshipDataLoader(ctx context.Context, param *models.
 	targetCollection := m.Database.Collection(collectionName)
 	filter := bson.M{
 		"_id": bson.M{"$in": targetIds},
-	}
-
-	if param.TenantID != "" {
-		filter["tenant_id"] = param.TenantID
 	}
 
 	cursor, err := targetCollection.Find(ctx, filter)
@@ -1425,23 +1396,10 @@ func (m *MongoDriver) RelationshipDataLoaderBytes(ctx context.Context, param *mo
 }
 
 func (m *MongoDriver) CountDocOfProject(ctx context.Context, param *models.CommonSystemParams) (interface{}, error) {
-	var collectionName string
-	if param.ProjectType == models.ProjectType_SaaS {
-		if param.SinglePageData {
-			collectionName = fmt.Sprintf("p_%s_single_docs", param.ProjectID)
-		} else {
-			collectionName = fmt.Sprintf("p_%s_%s", param.ProjectID, param.Model.Name)
-		}
-	} else {
-		collectionName = fmt.Sprintf("p_%s", param.ProjectID)
-	}
+	collectionName := fmt.Sprintf("p_%s", param.ProjectID)
 
 	collection := m.Database.Collection(collectionName)
 	filter := bson.M{}
-
-	if param.TenantID != "" {
-		filter["tenant_id"] = param.TenantID
-	}
 
 	if param.ResolveParams != nil {
 		if where, ok := param.ResolveParams.Args["where"].(map[string]interface{}); ok {
@@ -1450,6 +1408,7 @@ func (m *MongoDriver) CountDocOfProject(ctx context.Context, param *models.Commo
 			}
 		}
 	}
+	mergeQueryFilterBSON(m.Conf, param, filter)
 
 	count, err := collection.CountDocuments(ctx, filter)
 	if err != nil {
@@ -1482,37 +1441,30 @@ func (m *MongoDriver) CountDocOfProjectBytes(ctx context.Context, param *models.
 }
 
 func (m *MongoDriver) AggregateDocOfProject(ctx context.Context, param *models.CommonSystemParams) (interface{}, error) {
-	var collectionName string
-	if param.ProjectType == models.ProjectType_SaaS {
-		if param.SinglePageData {
-			collectionName = fmt.Sprintf("p_%s_single_docs", param.ProjectID)
-		} else {
-			collectionName = fmt.Sprintf("p_%s_%s", param.ProjectID, param.Model.Name)
-		}
-	} else {
-		collectionName = fmt.Sprintf("p_%s", param.ProjectID)
-	}
+	collectionName := fmt.Sprintf("p_%s", param.ProjectID)
 
 	collection := m.Database.Collection(collectionName)
 	pipeline := mongo.Pipeline{}
 
-	// Add match stage for tenant ID
-	if param.TenantID != "" {
-		pipeline = append(pipeline, bson.D{{"$match", bson.M{"tenant_id": param.TenantID}}})
-	}
-
 	// Add match stage if filter exists
+	match := bson.M{}
 	if param.ResolveParams != nil {
 		if where, ok := param.ResolveParams.Args["where"].(map[string]interface{}); ok {
-			pipeline = append(pipeline, bson.D{{"$match", where}})
+			for k, v := range where {
+				match[k] = v
+			}
 		}
+	}
+	mergeQueryFilterBSON(m.Conf, param, match)
+	if len(match) > 0 {
+		pipeline = append(pipeline, bson.D{bson.E{Key: "$match", Value: match}})
 	}
 
 	// Add group stage
 	pipeline = append(pipeline, bson.D{
-		{"$group", bson.D{
-			{"_id", nil},
-			{"count", bson.D{{"$sum", 1}}},
+		bson.E{Key: "$group", Value: bson.D{
+			bson.E{Key: "_id", Value: nil},
+			bson.E{Key: "count", Value: bson.D{bson.E{Key: "$sum", Value: 1}}},
 		}},
 	})
 
@@ -1555,24 +1507,11 @@ func (m *MongoDriver) AggregateDocOfProjectBytes(ctx context.Context, param *mod
 }
 
 func (m *MongoDriver) DropField(ctx context.Context, param *models.CommonSystemParams) error {
-	var collectionName string
-	if param.ProjectType == models.ProjectType_SaaS {
-		if param.SinglePageData {
-			collectionName = fmt.Sprintf("p_%s_single_docs", param.ProjectID)
-		} else {
-			collectionName = fmt.Sprintf("p_%s_%s", param.ProjectID, param.Model.Name)
-		}
-	} else {
-		collectionName = fmt.Sprintf("p_%s", param.ProjectID)
-	}
+	collectionName := fmt.Sprintf("p_%s", param.ProjectID)
 
 	collection := m.Database.Collection(collectionName)
 
-	// Build filter for tenant ID if needed
 	filter := bson.M{}
-	if param.TenantID != "" {
-		filter["tenant_id"] = param.TenantID
-	}
 
 	// Update all documents to unset the field
 	update := bson.M{
@@ -1641,12 +1580,7 @@ func (m *MongoDriver) searchAndAppend(fields []*models.FieldInfo, isUpdate bool,
 
 // AddDocumentToProject adds a document to a project
 func (m *MongoDriver) AddDocumentToProject(ctx context.Context, param *models.CommonSystemParams, doc *types.DefaultDocumentStructure) (interface{}, error) {
-	var collectionName string
-	if param.ProjectType == models.ProjectType_SaaS {
-		collectionName = fmt.Sprintf("p_%s_%s", param.ProjectID, param.Model.Name)
-	} else {
-		collectionName = fmt.Sprintf("p_%s", param.ProjectID)
-	}
+	collectionName := fmt.Sprintf("p_%s", param.ProjectID)
 
 	collection := m.Database.Collection(collectionName)
 
@@ -1654,6 +1588,15 @@ func (m *MongoDriver) AddDocumentToProject(ctx context.Context, param *models.Co
 	objectID := primitive.NewObjectID().Hex()
 	doc.Key = objectID
 	doc.ID = objectID
+
+	row := map[string]interface{}{}
+	if err := runDocumentPreInsertHook(m.Conf, ctx, param, row); err != nil {
+		return nil, err
+	}
+	mergeHookRowIntoDocData(doc, row)
+	if err := runDocumentPreInsertDocHook(m.Conf, ctx, param, doc); err != nil {
+		return nil, err
+	}
 
 	_, err := collection.InsertOne(ctx, doc)
 	if err != nil {
@@ -1665,16 +1608,7 @@ func (m *MongoDriver) AddDocumentToProject(ctx context.Context, param *models.Co
 
 // UpdateDocumentOfProject updates a document in a project
 func (m *MongoDriver) UpdateDocumentOfProject(ctx context.Context, param *models.CommonSystemParams, doc *types.DefaultDocumentStructure, replace bool) error {
-	var collectionName string
-	if param.ProjectType == models.ProjectType_SaaS {
-		if param.SinglePageData {
-			collectionName = fmt.Sprintf("p_%s_single_docs", param.ProjectID)
-		} else {
-			collectionName = fmt.Sprintf("p_%s_%s", param.ProjectID, param.Model.Name)
-		}
-	} else {
-		collectionName = fmt.Sprintf("p_%s", param.ProjectID)
-	}
+	collectionName := fmt.Sprintf("p_%s", param.ProjectID)
 
 	collection := m.Database.Collection(collectionName)
 
@@ -1746,7 +1680,9 @@ func (m *MongoDriver) UpdateDocumentOfProject(ctx context.Context, param *models
 	// Check if document exists for single page data
 	if param.SinglePageData {
 		var existingDoc types.DefaultDocumentStructure
-		err := collection.FindOne(ctx, bson.M{"_id": doc.ID}).Decode(&existingDoc)
+		ef := bson.M{"_id": doc.ID}
+		mergeQueryFilterBSON(m.Conf, param, ef)
+		err := collection.FindOne(ctx, ef).Decode(&existingDoc)
 		if err != nil {
 			if err == mongo.ErrNoDocuments {
 				// Document doesn't exist, create it
@@ -1761,13 +1697,15 @@ func (m *MongoDriver) UpdateDocumentOfProject(ctx context.Context, param *models
 	}
 
 	// Update or replace the document
+	upf := bson.M{"_id": doc.ID}
+	mergeQueryFilterBSON(m.Conf, param, upf)
 	if replace {
-		_, err := collection.ReplaceOne(ctx, bson.M{"_id": doc.ID}, doc)
+		_, err := collection.ReplaceOne(ctx, upf, doc)
 		if err != nil {
 			return err
 		}
 	} else {
-		_, err := collection.UpdateOne(ctx, bson.M{"_id": doc.ID}, bson.M{"$set": doc})
+		_, err := collection.UpdateOne(ctx, upf, bson.M{"$set": doc})
 		if err != nil {
 			return err
 		}

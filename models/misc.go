@@ -39,16 +39,12 @@ type DriverCredentials struct {
 	User     string `json:"user,omitempty" bson:"user,omitempty"`
 	Password string `json:"password,omitempty" bson:"password,omitempty"`
 	Database string `json:"database,omitempty" bson:"database,omitempty"`
-	// for firebase
-	FirebaseProjectID             string `json:"firebase_project_id,omitempty" bson:"firebase_project_id,omitempty"`
-	FirebaseProjectCredentialJSON string `json:"firebase_project_credential_json,omitempty" bson:"firebase_project_credential_json,omitempty"`
-	// for dynamodb
-	AccessKey string `json:"access_key,omitempty" bson:"access_key,omitempty"`
-	SecretKey string `json:"secret_key,omitempty" bson:"secret_key,omitempty"`
 	// for embedded database
 	DatabaseDir string `json:"database_dir,omitempty" bson:"database_dir,omitempty"`
 	// for sqlite and other file based databases
-	File        string `json:"file,omitempty" bson:"file,omitempty"`
+	File string `json:"file,omitempty" bson:"file,omitempty"`
+	// SSLMode for PostgreSQL when the server requires TLS. Empty defaults to disable in DSN builder.
+	SSLMode string `json:"ssl_mode,omitempty" bson:"ssl_mode,omitempty"`
 }
 
 type ProjectToken struct {

@@ -175,11 +175,6 @@ func (s *GraphQLServer) createAndConnectDocument(ctx context.Context, cache *mod
 		},
 	}
 
-	// ignore tenant id for common models
-	if !param.Model.IsCommonModel {
-		doc.TenantID = types.ID(param.TenantID)
-	}
-
 	input := param.ResolveParams.Args
 	// local support
 	local := "en"
@@ -248,16 +243,10 @@ func (s *GraphQLServer) createAndConnectDocument(ctx context.Context, cache *mod
 
 func (s *GraphQLServer) MutationResolverFn(p graphql.ResolveParams) (interface{}, error) {
 
-	var (
-		v = p.Context.Value
-		//router = v("router").(echo.Context)
-		cache = v("cache").(*models.ApplicationCache)
-	)
-
-	/*cache, err := s.GetApplicationCache(router)
-	if err != nil {
-		return nil, err
-	}*/
+	cache, ok := utility.LegacyApplicationCache(p.Context)
+	if !ok || cache == nil {
+		return nil, errors.New("graphql context: application cache missing")
+	}
 
 	ctx := p.Context
 
@@ -267,21 +256,11 @@ func (s *GraphQLServer) MutationResolverFn(p graphql.ResolveParams) (interface{}
 		return "", errors.New("bad request. Reload the Page again")
 	}
 
-	/*tenantId := router.Get("tenant")
-	switch param.Role.ID {
-	case "tenant":
-		if tenantId == nil {
-			return nil, errors.New("Unable to Identify the User")
-		}
-		param.TenantId = tenantId.(string)
-		break
-	}*/
-
 	fieldName := utility.ExtractResourceName(p.Info.FieldName)
 
 	var modelType *models.ModelType
 	for _, model := range cache.Project.Schema.Models {
-		if model.Name == fieldName {
+		if utility.ModelIDMatchesGraphQLField(model.Name, fieldName) {
 			modelType = model
 		}
 	}
@@ -293,12 +272,12 @@ func (s *GraphQLServer) MutationResolverFn(p graphql.ResolveParams) (interface{}
 	param.Model = modelType
 	param.ResolveParams = &p
 
-	// p == "none" || p == "all" || p == "own" || p == "tenant" || p == "auth"
+	// p == "none" || p == "all" || p == "own" || p == "auth"
 	var permission *models.APIPermission
 
 	// filter based on roles
 	if param.Role.ID != "admin" {
-		if val, ok := param.Role.APIPermissions[modelType.Name]; ok && param.Role.APIPermissions != nil {
+		if val, ok := utility.LookupAPIPermission(param.Role, modelType.Name); ok {
 			permission = val
 		}
 	}

@@ -11,6 +11,15 @@ import (
 	"github.com/vektah/gqlparser/v2/ast"
 )
 
+const (
+	// ExtKeyRelationCollectionCheck on CommonSystemParams.Ext makes CheckTableOrCollectionExists
+	// probe the relation_* collection for param.Model (resolver ↔ driver contract).
+	ExtKeyRelationCollectionCheck = "_apito_relation_collection_check"
+	// IndexesRelationCollectionToken in CreateTableOrCollection's indexes slice requests creating
+	// the relation edge collection for param.Model instead of the document collection.
+	IndexesRelationCollectionToken = "__apito_relation_collection__"
+)
+
 type SearchResponse[T any] struct {
 	Results        []*T
 	GroupedResults map[string][]*T
@@ -92,10 +101,6 @@ type CommonSystemParams struct {
 	Email         string `json:"email,omitempty"`
 	ProjectID     string `json:"project_id,omitempty"`
 
-	// For SaaS project
-	TenantID    string `json:"tenant_id,omitempty"` // used in SaaS project user token
-	TenantModel string `json:"tenant_model"`        // used in SaaS project user token
-
 	ResolveParams *graphql.ResolveParams `json:"resolve_params,omitempty"`
 
 	SystemCollectionName string `json:"system_collection_name,omitempty"`
@@ -136,7 +141,12 @@ type CommonSystemParams struct {
 
 	UnmarshalStructure interface{} `json:"unmarshal_structure"`
 
-	ProjectType ProjectType `json:"project_type"`
+	// Ext holds opaque extension data populated by the pro layer (e.g. scoping metadata).
+	Ext map[string]interface{} `json:"ext,omitempty"`
+
+	// RuntimeConfig is the engine Config pointer for optional hooks (QueryFilterHook, DocumentPreInsertHook)
+	// used by drivers and AQL builders. Set on each request from GraphQLServer (see NewParam / GetApplicationCache).
+	RuntimeConfig *Config `json:"-"`
 }
 
 type DocumentRevisionHistory struct {
@@ -188,9 +198,7 @@ type EdgeRelation struct {
 	KnownAs     string   `json:"known_as,omitempty" bson:"known_as,omitempty"`
 	Permissions []string `json:"permissions,omitempty" bson:"permissions,omitempty"`
 	CreatedAt   string   `json:"created_at,omitempty" bson:"created_at,omitempty"`
-
-	TenantID    string `json:"tenant_id,omitempty" bson:"tenant_id,omitempty"`
-	TenantModel string `json:"tenant_model,omitempty" bson:"tenant_model,omitempty"`
+	Ext         map[string]interface{} `json:"ext,omitempty" bson:"ext,omitempty"`
 }
 
 type ModelDocsResponse struct {

@@ -358,7 +358,11 @@ func (s *JWTService) GenerateLoginIDToken(ctx context.Context, projectWithRoles 
 	// overwrite if project exists
 	if projectWithRoles.Project != nil {
 
-		claims["project_type"] = projectWithRoles.Project.ProjectType
+		if s.Cfg != nil && s.Cfg.ProjectTypeForClaims != nil {
+			claims["project_type"] = s.Cfg.ProjectTypeForClaims(projectWithRoles.Project)
+		} else {
+			claims["project_type"] = "general"
+		}
 
 		claims["project_id"] = projectWithRoles.Project.ID
 		claims["project_role"] = projectWithRoles.Role
@@ -369,10 +373,6 @@ func (s *JWTService) GenerateLoginIDToken(ctx context.Context, projectWithRoles 
 			claims["project_access"] = strings.Join(projectWithRoles.Permissions, ",")
 		}
 
-		// inject tenant related information
-		if projectWithRoles.Project.Settings != nil && projectWithRoles.Project.TenantModelName != "" {
-			claims["tenant_model"] = projectWithRoles.Project.TenantModelName
-		}
 	}
 
 	token.Claims = claims

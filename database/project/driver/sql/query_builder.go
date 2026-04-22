@@ -105,8 +105,6 @@ func ConditionBuilder(variable string, args map[string]interface{}, modelType *m
 			switch field { // default is x.data
 			case "role":
 				variable = "x"
-			case "tenant":
-				variable = "x"
 			}
 
 			// if AND / OR found
@@ -352,13 +350,16 @@ func MediaDocTransformation(docType string, result map[string]interface{}) (*mod
 	return &doc, nil
 }
 
-func RootConnectionResolverQueryBuilder(param *models.CommonSystemParams) (string, error) {
+func RootConnectionResolverQueryBuilder(cfg *models.Config, param *models.CommonSystemParams) (string, error) {
 
 	projectId := param.ProjectID
 	_args := param.ResolveParams.Args
 
 	filters, err := ConditionBuilder("x.data", _args, param.Model)
 	if err != nil {
+		return "", err
+	}
+	if err := mergeQueryFilterHookAQL(cfg, param, filters, "x"); err != nil {
 		return "", err
 	}
 
@@ -382,7 +383,7 @@ func RootConnectionResolverQueryBuilder(param *models.CommonSystemParams) (strin
 	return strings.Join(queries, " "), nil
 }
 
-func RootResolverQueryBuilder(param *models.CommonSystemParams, returnCount bool) (string, error) {
+func RootResolverQueryBuilder(cfg *models.Config, param *models.CommonSystemParams, returnCount bool) (string, error) {
 
 	var modelName string
 	if param.Model == nil {
@@ -462,13 +463,14 @@ func RootResolverQueryBuilder(param *models.CommonSystemParams, returnCount bool
 	}
 
 	// filter based on roles
-	if permission, ok := param.Role.APIPermissions[modelName]; ok && param.Role.APIPermissions != nil {
+	if permission, ok := utility.LookupAPIPermission(param.Role, modelName); ok {
 		switch permission.Read {
 		case "own":
 			filters["AND"] = []string{fmt.Sprintf(`y.created_by == '%s'`, param.UserID)}
-		case "tenant":
-			filters["AND"] = []string{fmt.Sprintf(`y.tenant_id == '%s'`, param.TenantID)}
 		}
+	}
+	if err := mergeQueryFilterHookSQL(cfg, param, filters, "x"); err != nil {
+		return "", err
 	}
 
 	var mergedFilter []string
@@ -515,7 +517,7 @@ func RootResolverQueryBuilder(param *models.CommonSystemParams, returnCount bool
 	return query, nil
 }
 
-func BuildCombinedRelationQuery(relationType string, parentModel string, arg *models.CommonSystemParams) (*string, *string, error) {
+func BuildCombinedRelationQuery(cfg *models.Config, relationType string, parentModel string, arg *models.CommonSystemParams) (*string, *string, error) {
 
 	var local string
 	if val, ok := arg.ResolveParams.Args["local"].(string); ok {
@@ -524,6 +526,9 @@ func BuildCombinedRelationQuery(relationType string, parentModel string, arg *mo
 
 	filters, err := ConditionBuilder("x", arg.ResolveParams.Args, arg.Model)
 	if err != nil {
+		return nil, nil, err
+	}
+	if err := mergeQueryFilterHookSQL(cfg, arg, filters, "x"); err != nil {
 		return nil, nil, err
 	}
 

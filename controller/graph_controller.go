@@ -16,6 +16,7 @@ import (
 	"github.com/apito-io/wsgraphql/v1/compat/gorillaws"
 	"github.com/apito-io/engine/models"
 	"github.com/apito-io/engine/resolver"
+	"github.com/apito-io/engine/telemetry"
 	"github.com/apito-io/engine/scaler"
 	"github.com/getsentry/sentry-go"
 	"github.com/gorilla/websocket"
@@ -260,6 +261,7 @@ func (g *GraphCtrl) FunctionExecute(c echo.Context) error {
 	// inject project id to context value
 	//ctx = context.WithValue(ctx, "project_id", projectId)
 
+	fnStart := time.Now()
 	resp, _fn, err := g.gqlServer.HandleApitoFunction(ctx, &models.ApplicationCache{
 		Project: project,
 		Param: &models.CommonSystemParams{
@@ -268,6 +270,7 @@ func (g *GraphCtrl) FunctionExecute(c echo.Context) error {
 	}, fnName, map[string]interface{}{
 		"payload": req,
 	})
+	telemetry.RecordFunctionExecute(ctx, g.cfg, fnName, err, time.Since(fnStart))
 	if err != nil {
 		return c.JSON(http.StatusBadRequest, &models.HttpResponse{
 			Message: err.Error(),
@@ -433,7 +436,13 @@ func (g *GraphCtrl) RestToGraphQL(c echo.Context) error {
 		}
 		req := &models.GraphQLIncomingRequest{Query: builderResponse.Query, OperationName: builderResponse.OperationName}
 
+		restStart := time.Now()
 		res, err := g.exePublicGraphql(c, req)
+		st := http.StatusOK
+		if err != nil {
+			st = http.StatusInternalServerError
+		}
+		telemetry.RecordRESTToGraphQL(c.Request().Context(), g.cfg, model, c.Request().Method, st, time.Since(restStart))
 		if err != nil {
 			return c.JSON(http.StatusInternalServerError, &models.HttpResponse{
 				Message: err.Error(),
@@ -608,24 +617,33 @@ func (g *GraphCtrl) exePublicGraphql(i echo.Context, req *models.GraphQLIncoming
 	token := i.Get("token")
 
 	//loaderCtx := context.WithValue(ctx, "loaders", cache.Dataloaders)
-	reqCtx := context.WithValue(ctx, "selectionSet", xx.SelectionSet) // pass the schema for input validation purpose
-	cacheCtx := context.WithValue(ctx, "cache", cache)
+	reqCtx := utility.WithSelectionSet(ctx, xx.SelectionSet)
+	cacheCtx := utility.WithApplicationCache(ctx, cache)
 	projectID := context.WithValue(ctx, "project_id", cache.Param.ProjectID)
 	userID := context.WithValue(ctx, "user_id", cache.Param.UserID)
-	tenantID := context.WithValue(ctx, "tenant_id", cache.Param.TenantID)
 	tokenCtx := context.WithValue(ctx, "token", token)
 	requestVar := context.WithValue(ctx, "variableValues", req.Variables)
 
-	ctx, closeContext := onecontext.Merge(reqCtx, cacheCtx, userID, tenantID, projectID, tokenCtx, requestVar)
+	ctx, closeContext := onecontext.Merge(reqCtx, cacheCtx, userID, projectID, tokenCtx, requestVar)
 	defer closeContext()
 
-	res, err := graphql.Do(graphql.Params{
+	gqlStart := time.Now()
+	opName := req.OperationName
+	if opName == "" {
+		opName = "anonymous"
+	}
+	res := graphql.Do(graphql.Params{
 		Context:        ctx,
 		Schema:         schema,
 		RequestString:  req.Query,
 		VariableValues: req.Variables,
 		OperationName:  req.OperationName,
-	}), nil
+	})
+	var gqlErr error
+	if len(res.Errors) > 0 {
+		gqlErr = fmt.Errorf("%s", res.Errors[0].Message)
+	}
+	telemetry.RecordGraphQLOperation(ctx, g.cfg, "public", req.QueryType, opName, gqlErr, time.Since(gqlStart))
 
 	// catch all the internal server error
 	if len(res.Errors) > 0 {
@@ -640,7 +658,7 @@ func (g *GraphCtrl) exePublicGraphql(i echo.Context, req *models.GraphQLIncoming
 		return nil, errors.New(errMsg) */
 	}
 
-	return res, err
+	return res, nil
 }
 
 func (g *GraphCtrl) GetSystemCacheInfo(i echo.Context) error {
@@ -695,7 +713,23 @@ func (g *GraphCtrl) SystemGraphQL(i echo.Context) error {
 
 	ctx := i.Request().Context()
 
+	sysStart := time.Now()
 	res, err := schemas.SystemSchema(ctx, &req, g.gqlServer, i)
+	opName := req.OperationName
+	if opName == "" {
+		opName = "anonymous"
+	}
+	qtype := req.QueryType
+	if qtype == "" {
+		qtype = "query"
+	}
+	var gqlErr error
+	if err != nil {
+		gqlErr = err
+	} else if res != nil && len(res.Errors) > 0 {
+		gqlErr = fmt.Errorf("%s", res.Errors[0].Message)
+	}
+	telemetry.RecordGraphQLOperation(ctx, g.cfg, "system", qtype, opName, gqlErr, time.Since(sysStart))
 	if err != nil {
 		return i.JSON(http.StatusBadRequest, &models.HttpResponse{
 			Message: utility.CaptureInternalServerError(err, map[string]interface{}{

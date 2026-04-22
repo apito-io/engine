@@ -141,12 +141,14 @@ func (s *GraphQLExecutor) DataLoaderHandler(ctx context.Context, keys []string) 
 	}
 
 	resultBytes, err := driver.RelationshipDataLoaderBytes(ctx, param, connection)
+
 	if err != nil {
 		return handleError[interface{}](len(keys), err)
 	}
 
 	var results DataloaderResultTyped[map[string]interface{}]
 	err = json.Unmarshal(resultBytes, &results)
+
 	if err != nil {
 		return handleError[interface{}](len(keys), err)
 	}
@@ -155,7 +157,19 @@ func (s *GraphQLExecutor) DataLoaderHandler(ctx context.Context, keys []string) 
 
 	for _, key := range keys {
 		result := results.Result[0]
-		if vals, ok := result[key].([]interface{}); ok && len(vals) > 0 {
+		if result == nil {
+			dataloaderResults = append(dataloaderResults, &dataloader.Result[interface{}]{Data: nil})
+			continue
+		}
+		raw := result[key]
+		var vals []interface{}
+		if s, ok := raw.([]interface{}); ok {
+			vals = s
+		} else if m, ok := raw.(map[string]interface{}); ok && len(m) > 0 {
+			// has_one: MERGE/COLLECT may yield a single object instead of a slice
+			vals = []interface{}{m}
+		}
+		if len(vals) > 0 {
 			_val := map[string]interface{}{
 				"result":  vals,
 				"count":   len(vals),
@@ -290,16 +304,6 @@ func (s *GraphQLExecutor) SolvePublicMutation(ctx context.Context, resolverName 
 		return nil, errors.New("bad request. Reload the Page again")
 	}
 
-	/*tenantId := router.Get("tenant")
-	switch param.Role.ID {
-	case "tenant":
-		if tenantId == nil {
-			return nil, errors.New("unable to Identify the User")
-		}
-		param.TenantId = tenantId.(string)
-		break
-	}*/
-
 	model := utility.ExtractResourceName(resolverName)
 
 	var modelType *models.ModelType
@@ -316,12 +320,12 @@ func (s *GraphQLExecutor) SolvePublicMutation(ctx context.Context, resolverName 
 	param.Model = modelType
 	//param.ResolveParams = &p
 
-	// p == "none" || p == "all" || p == "own" || p == "tenant" || p == "auth"
+	// p == "none" || p == "all" || p == "own" || p == "auth"
 	var permission *models.APIPermission
 
 	// filter based on roles
 	if param.Role.ID != "admin" {
-		if val, ok := param.Role.APIPermissions[modelType.Name]; ok && param.Role.APIPermissions != nil {
+		if val, ok := utility.LookupAPIPermission(param.Role, modelType.Name); ok {
 			permission = val
 		}
 	}
@@ -394,10 +398,9 @@ func (s *GraphQLExecutor) SolvePublicMutation(ctx context.Context, resolverName 
 
 		_uid := uuid.New().String()
 		doc := types.DefaultDocumentStructure{
-			Key:      _uid,
-			ID:       _uid,
-			Type:     model,
-			TenantID: types.ID(param.TenantID),
+			Key:  _uid,
+			ID:   _uid,
+			Type: model,
 			Meta: &types.MetaField{
 				CreatedAt: utility.GetCurrentTime(),
 				UpdatedAt: utility.GetCurrentTime(),
@@ -412,10 +415,6 @@ func (s *GraphQLExecutor) SolvePublicMutation(ctx context.Context, resolverName 
 				Status: _status,
 			},
 		}
-
-		/*if param.TenantId != "" {
-			doc.Meta.TenantId = param.TenantId
-		}*/
 
 		if userInputPayload != nil && len(userInputPayload) > 0 {
 			//#todo need image param validation
@@ -433,139 +432,13 @@ func (s *GraphQLExecutor) SolvePublicMutation(ctx context.Context, resolverName 
 		if err != nil {
 			return nil, err
 		}
-
-		// update the count		if s.Param.Role.ID != "admin" {
-		//			switch permission.Create {
-		//			case "none":
-		//				return nil, errors.New("Creation is not permitted")
-		//			case "auth":
-		//				if !s.Param.IsProjectUser {
-		//					return nil, errors.New("Authentication is required to Create a Document")
-		//				}
-		//			}
-		//		}
-		//
-		//		// check connection first before creating
-		//		if len(modelType.Connections) > 0 {
-		//			if connections, ok := p.Args["connect"].(map[string]interface{}); ok {
-		//				v, err := s.ConnectDisconnectParamBuilder("", collectionName, connections, modelType)
-		//				if err != nil {
-		//					return nil, err
-		//				}
-		//				param.ConDisParam = v
-		//				for _, p := range v {
-		//					isOneToOne, err := s.GetProjectDriver().CheckOneToOneRelationExists(p)
-		//					if err != nil {
-		//						return nil, err
-		//					}
-		//					if isOneToOne {
-		//						return nil, errors.New("The document that you are connecting with already has a one-to-one relation")
-		//					}
-		//				}
-		//			}
-		//		}
-		//
-		//		fields := p.Args
-		//
-		//		var status string
-		//		if val, ok := fields["status"]; ok {
-		//			status = val.(string)
-		//		} else {
-		//			status = "draft" // default is draft
-		//		}
-		//
-		//		var doc shared.DefaultDocumentStructure
-		//		uid := uuid.New()
-		//		doc.Key = uid.String()
-		//		doc.ID = doc.Key
-		//		doc.Type = fieldName
-		//		doc.TenantId = s.Param.TenantId
-		//		doc.Data = fields["payload"].(map[string]interface{})
-		//		doc.Meta = &protobuff.MetaField{
-		//			CreatedAt: utility.GetCurrentTime(),
-		//			UpdatedAt: utility.GetCurrentTime(),
-		//			CreatedBy: &protobuff.UserMeta{
-		//				Id:          s.Param.UserId,
-		//				ProjectUser: s.Param.IsProjectUser,
-		//			},
-		//			LastModifiedBy: &protobuff.UserMeta{
-		//				Id:          s.Param.UserId,
-		//				ProjectUser: s.Param.IsProjectUser,
-		//			},
-		//			Status: status,
-		//		}
-		//
-		//		payload, _, err := s.HandlePayloadFormatting(doc.Data)
-		//		if err != nil {
-		//			return nil, err
-		//		}
-		//		doc.Data = payload
-		//
-		//		updatedDoc := doc
-		//
-		//		switch param.Role.ID {
-		//		case "tenant":
-		//			updatedDoc.Meta.TenantId = param.TenantId
-		//			break
-		//		}
-		//
-		//		// create a new doc
-		//		_, err = s.GetProjectDriver().AddDocumentToProject(param.ProjectId, fieldName, &updatedDoc)
-		//		if err != nil {
-		//			return nil, err
-		//		}
-		//
-		//		// update the count
-		//		usage, err := s.SystemDriver.GetProjectUsages(param.ProjectId, nil)
-		//		if err != nil {
-		//			return nil, err
-		//		}
-		//
-		//		inMb := (float64(unsafe.Sizeof(doc)) / 1024.0) / 1024.0 // in mb
-		//		usage.Usages.ApiBandwidth = usage.Usages.ApiBandwidth + inMb
-		//		usage.Usages.ApiCalls++
-		//		usage.Usages.NumberOfRecords++
-		//		err = s.SystemDriver.UpdateProjectUsagesDoc(usage, false)
-		//		if err != nil {
-		//			return nil, err
-		//		}
-		//
-		//		if len(modelType.Connections) > 0 {
-		//
-		//			// there is no disconnect builder in create !
-		//			if connections, ok := p.Args["connect"].(map[string]interface{}); ok {
-		//				v, err := s.ConnectDisconnectParamBuilder(updatedDoc.ID, collectionName, connections, modelType)
-		//				if err != nil {
-		//					return nil, err
-		//				}
-		//				param.ConDisParam = v
-		//				err = s.GetProjectDriver().ConnectBuilder(*param)
-		//				if err != nil {
-		//					return nil, err
-		//				}
-		//			}
-		//		}
-		//
-		//		// if hook has actions
-		//		for _, h := range hooks {
-		//			if contains(h.Events, "create") {
-		//				if h.Url != "" {
-		//					go s.runWebHook("create", h, updatedDoc)
-		//				}
-		//				if len(h.LogicExecutions) > 0 {
-		//					for _, t := range h.LogicExecutions {
-		//						for _, f := range s.ProjectRawSchemas.Functions {
-		//							if f.Name == t {
-		//								go s.triggerFunction(f, "create", h, updatedDoc)
-		//								break
-		//							}
-		//						}
-		//					}
-		//				}
-		//			}
-		//		}
-		//
-		//		return &updatedDoc, nil
+		if nd, ok := newDoc.(*types.DefaultDocumentStructure); ok {
+			if cfg := s.connectionManager.GetConfig(); cfg != nil && cfg.PostDocumentInsertHook != nil {
+				if err := cfg.PostDocumentInsertHook(ctx, param, nd.ID); err != nil {
+					return nil, err
+				}
+			}
+		}
 
 		/*usage, err := s.SystemDriver.GetProjectUsages(ctx, param.ProjectId, nil)
 		if err != nil {

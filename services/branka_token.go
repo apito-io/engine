@@ -37,10 +37,6 @@ func (t *BrankaToken) GenerateProjectToken(claims *models.TokenClaims, ttl uint3
 		claims.ProjectID,
 		number,
 	}
-	// optional values
-	if claims.TenantID != "" {
-		_payloadValues = append(_payloadValues, claims.TenantID)
-	}
 	if claims.TokenType != "" {
 		_payloadValues = append(_payloadValues, claims.TokenType)
 	}
@@ -87,14 +83,14 @@ func (t *BrankaToken) Validate(ctx context.Context, token string) (*models.Token
 		return nil, errors.New("invalid token format")
 	}
 
-	var userID, projectID, tenantID, tokenType, expireAtStr, tokenUniqueID string
+	var userID, projectID, tokenType, expireAtStr, tokenUniqueID string
 
 	// Detect token format based on structure and content
 	if len(messages) == 6 && isNumeric(messages[5]) {
-		// GenerateAPIKey format: userID|projectID|tenantID|randomNumber|tokenType|expireAt
+		// GenerateAPIKey format: userID|projectID|_legacy_|randomNumber|tokenType|expireAt
 		userID = messages[0]
 		projectID = messages[1]
-		tenantID = messages[2]
+		// messages[2] is a legacy field, ignored
 		tokenUniqueID = messages[3]
 		tokenType = messages[4]
 		expireAtStr = messages[5]
@@ -135,7 +131,6 @@ func (t *BrankaToken) Validate(ctx context.Context, token string) (*models.Token
 		Role:          "admin", // default role for api key
 		UserID:        userID,
 		ProjectID:     projectID,
-		TenantID:      tenantID,
 		TokenType:     tokenType,
 		TokenUniqueID: tokenUniqueID,
 	}
@@ -176,10 +171,6 @@ func (t *BrankaToken) ValidateAndSetContext(c echo.Context, token string) (*mode
 	// role is optional for blank token since we are not using it for api token
 	if tokenObj.Role != "" {
 		c.Set("role", tokenObj.Role)
-	}
-
-	if tokenObj.TenantID != "" {
-		c.Set("tenant", tokenObj.TenantID)
 	}
 
 	return tokenObj, nil

@@ -136,11 +136,14 @@ func (s *SchemaObjects) GetProjectDetailsObject(userDefinedSchemaObj, pluginDeta
 			"workspaces":                   &graphql.Field{Type: graphql.NewList(workSpaceObj)},
 			"default_storage_plugin":       &graphql.Field{Type: graphql.String},
 			"default_function_plugin":      &graphql.Field{Type: graphql.String},
-			"project_type":                 &graphql.Field{Type: graphql.String},
+			"project_type": &graphql.Field{
+				Type: graphql.String,
+				Resolve: func(p graphql.ResolveParams) (interface{}, error) {
+					return "general", nil
+				},
+			},
 			"project_plan":                 &graphql.Field{Type: graphql.String},
 			"project_secret_key":           &graphql.Field{Type: graphql.String},
-			"tenant_model_name":            &graphql.Field{Type: graphql.String},
-			"per_tenant_separate_database": &graphql.Field{Type: graphql.Boolean},
 		},
 	})
 }
@@ -159,8 +162,6 @@ func (s *SchemaObjects) GetModelTypeObject(fieldInfoObj, connectionTypeObj *grap
 			"single_page":      &graphql.Field{Type: graphql.Boolean},
 			"single_page_uuid": &graphql.Field{Type: graphql.String},
 			"has_connections":  &graphql.Field{Type: graphql.Boolean},
-			"is_tenant_model":  &graphql.Field{Type: graphql.Boolean},
-			"is_common_model":  &graphql.Field{Type: graphql.Boolean},
 			"enable_revision":  &graphql.Field{Type: graphql.Boolean},
 			"revision_filter": &graphql.Field{Type: graphql.NewList(graphql.NewObject(graphql.ObjectConfig{
 				Name: "RevisionFilter",
@@ -243,6 +244,7 @@ func (s *SchemaObjects) GetPluginDetailsObject(funcEnvVarObject *graphql.Object)
 			"author":            &graphql.Field{Type: graphql.String},
 			"load_status":       &graphql.Field{Type: enums.PluginLoadTypeEnums},  // Adjust the type accordingly
 			"activate_status":   &graphql.Field{Type: enums.PluginActivationType}, // Adjust the type accordingly
+			"used_in_projects":  &graphql.Field{Type: graphql.NewList(graphql.String)},
 		},
 	})
 }
@@ -477,7 +479,6 @@ func (s *SchemaObjects) GetMetaObject() *graphql.Object {
 				},
 			},
 			"status":           &graphql.Field{Type: graphql.String},
-			"tenant_id":        &graphql.Field{Type: graphql.String},
 			"root_revision_id": &graphql.Field{Type: graphql.String},
 			"revision":         &graphql.Field{Type: graphql.Boolean},
 			"revision_at":      &graphql.Field{Type: graphql.String},

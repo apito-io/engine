@@ -2,13 +2,6 @@ package models
 
 import "github.com/apito-io/types/protobuff"
 
-type ProjectType int32
-
-const (
-	ProjectType_General ProjectType = 0
-	ProjectType_SaaS    ProjectType = 1
-)
-
 type MetaField struct {
 	SourceID string `json:"source_id,omitempty" firestore:"source_id,omitempty" bson:"source_id,omitempty"`
 
@@ -18,7 +11,6 @@ type MetaField struct {
 	LastModifiedBy *SystemUser `json:"last_modified_by,omitempty" firestore:"created_by,omitempty" bson:"last_modified_by,omitempty"`
 
 	Status string `json:"status,omitempty" firestore:"status,omitempty" bson:"status,omitempty"`
-	//TenantId       string `json:"tenant_id,omitempty" firestore:"tenant_id,omitempty"` move to root removed from meta
 	RootRevisionID string `json:"root_revision_id,omitempty" firestore:"root_revision_id,omitempty" bson:"root_revision_id,omitempty"`
 	Revision       bool   `json:"revision,omitempty" firestore:"revision,omitempty" bson:"revision,omitempty"`
 	RevisionAt     string `json:"revision_at,omitempty" firestore:"revision_at,omitempty" bson:"revision_at,omitempty"`
@@ -127,11 +119,7 @@ type Project struct {
 	// for sync
 	SyncedProperty *SyncProject `bun:"rel:belongs-to,join:id=project_id" json:"synced_property,omitempty" firestore:"synced_property,omitempty" bson:"synced_property,omitempty"`
 
-	// for SaaS Project
-	ProjectType               ProjectType `json:"project_type,omitempty" firestore:"project_type,omitempty" bson:"project_type,omitempty"` // general, saas, ecom etc
-	PerTenantSeparateDatabase bool        `json:"per_tenant_separate_database,omitempty" firestore:"per_tenant_separate_database,omitempty" bson:"per_tenant_separate_database,omitempty"`
-	ProjectSecretKey          string      `json:"project_secret_key,omitempty" firestore:"project_secret_key,omitempty" bson:"project_secret_key,omitempty"`
-	TenantModelName           string      `json:"tenant_model_name,omitempty" firestore:"tenant_model_name,omitempty" bson:"tenant_model_name,omitempty"`
+	ProjectSecretKey string `json:"project_secret_key,omitempty" firestore:"project_secret_key,omitempty" bson:"project_secret_key,omitempty"`
 }
 
 type SyncProject struct {

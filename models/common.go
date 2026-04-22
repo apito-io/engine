@@ -111,6 +111,8 @@ type InitParams struct {
 	ProjectDB *DriverCredentials `json:"system_credentials" bson:"system_credentials,omitempty"`
 	CacheDB   *DriverCredentials `json:"cache_db" bson:"cache_db,omitempty"`
 	SharedDB  *DriverCredentials `json:"shared_db" bson:"shared_db,omitempty"`
+	// ProDriverExtras is pro-binary-only metadata (e.g. *ProDriverCredentials) for project drivers that need secrets outside DriverCredentials. Not serialized.
+	ProDriverExtras interface{} `json:"-" bson:"-"`
 }
 
 type Response struct {

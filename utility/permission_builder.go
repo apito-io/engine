@@ -13,6 +13,20 @@ type CRUDPermissions struct {
 	Delete bool
 }
 
+// LookupAPIPermission returns role permissions for a model id (canonical snake or legacy camel key).
+func LookupAPIPermission(role *models.Role, modelName string) (*models.APIPermission, bool) {
+	if role == nil || role.APIPermissions == nil {
+		return nil, false
+	}
+	if ap, ok := role.APIPermissions[modelName]; ok {
+		return ap, true
+	}
+	if ap, ok := role.APIPermissions[CamelFromAny(modelName)]; ok {
+		return ap, true
+	}
+	return nil, false
+}
+
 func BuildCRUDPermissions(modelName string, role *models.Role) (*models.APIPermission, error) {
 
 	if role == nil {
@@ -28,7 +42,7 @@ func BuildCRUDPermissions(modelName string, role *models.Role) (*models.APIPermi
 		}, nil
 	}
 
-	if ap, ok := role.APIPermissions[modelName]; ok {
+	if ap, ok := LookupAPIPermission(role, modelName); ok {
 		return ap, nil
 	}
 	// if not found then assign none for all thing

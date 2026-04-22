@@ -119,9 +119,6 @@ func (s *SQLDriver) AggregateDocOfProject(ctx context.Context, param *models.Com
 
 	// Add where conditions if provided
 	var conditions []string
-	if param.TenantID != "" {
-		conditions = append(conditions, "x.tenant_id = ?")
-	}
 
 	if param.ResolveParams != nil {
 		if where, ok := param.ResolveParams.Args["where"].(map[string]interface{}); ok && len(where) > 0 {
@@ -137,7 +134,7 @@ func (s *SQLDriver) AggregateDocOfProject(ctx context.Context, param *models.Com
 	}
 
 	var result map[string]interface{}
-	err := s.ORM.NewRaw(query, param.TenantID).Scan(ctx, &result)
+	err := s.ORM.NewRaw(query).Scan(ctx, &result)
 	if err != nil {
 		return nil, err
 	}
@@ -263,10 +260,6 @@ func (s *SQLDriver) CreateRelation(ctx context.Context, projectId string, relati
 		utility.SingularResourceName(relation.From) + "_id": relation.FromID,
 		utility.SingularResourceName(relation.To) + "_id":   relation.ToID,
 		"created_at": relation.CreatedAt,
-	}
-
-	if relation.TenantID != "" {
-		data["tenant_id"] = relation.TenantID
 	}
 
 	_, err := s.ORM.NewInsert().Table(tableName).Model(&data).Exec(ctx)

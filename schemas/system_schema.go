@@ -75,8 +75,6 @@ func SystemSchema(ctx context.Context, graphqlRequest *models.GraphQLIncomingReq
 	}
 
 	routerCtx := context.WithValue(context.Background(), "router", echo)
-	//projectID := context.WithValue(context.Background(), "project_id", cache.Project.ID)
-	//tempTenantID := context.WithValue(context.Background(), "tenant_id", cache.Param.TenantID)
 	ctx, closeContext := onecontext.Merge(ctx, routerCtx)
 	defer closeContext()
 

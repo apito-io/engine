@@ -6,19 +6,21 @@ import (
 	"fmt"
 	"log"
 	"sort"
+	"strings"
 	"sync"
 	"time"
 
 	"github.com/apito-io/engine/database/project"
 	"github.com/apito-io/engine/interfaces"
 	"github.com/apito-io/engine/models"
+	"github.com/apito-io/engine/telemetry"
 	"github.com/patrickmn/go-cache"
 	"golang.org/x/sync/singleflight"
 )
 
-// ConnectionConfig holds the database connection configuration for a tenant
+// ConnectionConfig holds the database connection configuration for a scoped connection
 type ConnectionConfig struct {
-	TenantID    string
+	ScopeKey    string
 	Driver      string
 	ConnString  string
 	MaxIdleConn int
@@ -33,13 +35,13 @@ type Closeable interface {
 
 // Connection represents a database connection with metadata
 type Connection struct {
-	TenantID     string
+	ScopeKey     string
 	DBConn       interfaces.ProjectDBInterface
 	LastAccessed time.Time
 	IsActive     bool
 }
 
-// ConnectionManager manages database connections for multiple tenants
+// ConnectionManager manages database connections for multiple scopes
 type ConnectionManager struct {
 	cfg *models.Config
 	// Cache for active connections
@@ -48,8 +50,10 @@ type ConnectionManager struct {
 	mu sync.RWMutex
 	// Maximum number of concurrent connections
 	maxConnections int
-	// Connection configs by tenant
+	// Connection configs by scope key
 	configs map[string]*models.DriverCredentials
+	// proDriverExtras holds pro-only credentials keyed like configs (e.g. *ProDriverCredentials for Firestore/DynamoDB).
+	proDriverExtras map[string]interface{}
 	// Prevent thundering herd
 	requestGroup singleflight.Group
 	// For monitoring active connections
@@ -86,15 +90,15 @@ func NewConnectionManager(cfg *models.Config, maxConns int, systemDB interfaces.
 
 	// Create cache with OnEvicted callback to properly track and close connections
 	cm.activeConns = cache.New(2*time.Hour, 30*time.Minute)
-	cm.activeConns.OnEvicted(func(tenantID string, item interface{}) {
-		cm.handleEviction(tenantID, item)
+	cm.activeConns.OnEvicted(func(connKey string, item interface{}) {
+		cm.handleEviction(connKey, item)
 	})
 
 	return cm
 }
 
 // handleEviction is called when a connection is evicted from cache (expired or deleted)
-func (cm *ConnectionManager) handleEviction(tenantID string, item interface{}) {
+func (cm *ConnectionManager) handleEviction(connKey string, item interface{}) {
 	cm.mu.Lock()
 	defer cm.mu.Unlock()
 
@@ -110,15 +114,15 @@ func (cm *ConnectionManager) handleEviction(tenantID string, item interface{}) {
 		if closeable, ok := conn.DBConn.(Closeable); ok {
 			if err := closeable.Close(); err != nil {
 				cm.stats.CloseErrors++
-				log.Printf("Error closing connection for tenant %s: %v", tenantID, err)
+				log.Printf("Error closing connection for scope %s: %v", connKey, err)
 			} else {
-				log.Printf("Successfully closed evicted connection for tenant: %s", tenantID)
+				log.Printf("Successfully closed evicted connection for scope: %s", connKey)
 			}
 		}
 	}
 }
 
-// AddDriverCredentials adds a new connection configuration for a tenant
+// AddDriverCredentials adds a new connection configuration for a project
 func (cm *ConnectionManager) AddDriverCredentials(ctx context.Context, config *models.DriverCredentials) {
 	cm.mu.Lock()
 	defer cm.mu.Unlock()
@@ -129,13 +133,97 @@ func (cm *ConnectionManager) AddDriverCredentials(ctx context.Context, config *m
 	} else {
 		projectID = config.ProjectID
 	}
+	// Do NOT overwrite a complete registration with an incomplete one.
+	// Project create / SetProjectDriverCredential stores full host+db; a later Init with
+	// persisted apitoDB-only credentials must not clobber that.
+	if existing, ok := cm.configs[projectID]; ok && existing != nil &&
+		strings.TrimSpace(existing.Host) != "" && strings.TrimSpace(config.Host) == "" {
+		return
+	}
 	cm.configs[projectID] = config
 }
 
-// GetConnection returns a database connection for the given tenant
-func (cm *ConnectionManager) GetConnection(ctx context.Context, tenantID string) (*Connection, error) {
+// AddProDriverExtras registers pro-only driver metadata for a project (or scope composite key). Nil removes the entry.
+func (cm *ConnectionManager) AddProDriverExtras(projectID string, pro interface{}) {
+	cm.mu.Lock()
+	defer cm.mu.Unlock()
+	if cm.proDriverExtras == nil {
+		cm.proDriverExtras = make(map[string]interface{})
+	}
+	if pro == nil {
+		delete(cm.proDriverExtras, projectID)
+		return
+	}
+	cm.proDriverExtras[projectID] = pro
+}
+
+// AddScopedDriverCredentials registers explicit credentials for a composite project:scope cache key
+// (e.g. after Turso API returns a dedicated URL). Normally DeriveScopedCredentials + EnsureScopedCredentials is enough.
+func (cm *ConnectionManager) AddScopedDriverCredentials(projectID, scopeKey string, config *models.DriverCredentials) {
+	cm.mu.Lock()
+	defer cm.mu.Unlock()
+	key := ScopedConnectionCacheKey(projectID, scopeKey)
+	if config != nil {
+		c := *config
+		c.ProjectID = key
+		cm.configs[key] = &c
+	}
+}
+
+// EnsureScopedCredentials registers derived per-scope credentials from the base project config if missing.
+func (cm *ConnectionManager) EnsureScopedCredentials(projectID, scopeKey string) error {
+	if scopeKey == "" {
+		return errors.New("scope key is required")
+	}
+	key := ScopedConnectionCacheKey(projectID, scopeKey)
+	cm.mu.Lock()
+	defer cm.mu.Unlock()
+	if _, ok := cm.configs[key]; ok {
+		return nil
+	}
+	base, ok := cm.configs[projectID]
+	if !ok {
+		return fmt.Errorf("base project configuration not found for: %s", projectID)
+	}
+	derived := DeriveScopedCredentials(base, projectID, scopeKey)
+	if derived == nil {
+		return fmt.Errorf("could not derive scoped credentials for project %s", projectID)
+	}
+	cm.configs[key] = derived
+	return nil
+}
+
+// GetScopedConnection returns a pooled driver for projectID + scopeKey (composite cache key).
+func (cm *ConnectionManager) GetScopedConnection(ctx context.Context, projectID, scopeKey string) (*Connection, error) {
+	if err := cm.EnsureScopedCredentials(projectID, scopeKey); err != nil {
+		return nil, err
+	}
+	key := ScopedConnectionCacheKey(projectID, scopeKey)
+	return cm.GetConnection(ctx, key)
+}
+
+// GetConnection returns a database connection for the given connection key
+func (cm *ConnectionManager) GetConnection(ctx context.Context, connKey string) (_ *Connection, err error) {
+	start := time.Now()
+	projectID := connKey
+	if i := strings.Index(connKey, ":"); i >= 0 {
+		projectID = connKey[:i]
+	}
+	defer func() {
+		if !telemetry.MetricsEnabled(cm.cfg) {
+			return
+		}
+		eng := ""
+		cm.mu.RLock()
+		if cred := cm.configs[connKey]; cred != nil {
+			eng = cred.Engine
+		}
+		cm.mu.RUnlock()
+		telemetry.RecordPoolAcquire(ctx, cm.cfg, projectID, eng, err, time.Since(start))
+	}()
+
 	// Try to get from cache first
-	if cached, found := cm.activeConns.Get(tenantID); found {
+	if cached, found := cm.activeConns.Get(connKey); found {
 		conn := cached.(*Connection)
 		// Update last accessed time for proper LRU behavior
 		conn.LastAccessed = time.Now()
@@ -145,9 +233,9 @@ func (cm *ConnectionManager) GetConnection(ctx context.Context, tenantID string)
 		return conn, nil
 	}
 
-	// Use singleflight to prevent multiple simultaneous connections for the same tenant
-	result, err, _ := cm.requestGroup.Do(tenantID, func() (interface{}, error) {
-		return cm.createConnection(ctx, tenantID)
+	// Use singleflight to prevent multiple simultaneous connections for the same key
+	result, err, _ := cm.requestGroup.Do(connKey, func() (interface{}, error) {
+		return cm.createConnection(ctx, connKey)
 	})
 	if err != nil {
 		return nil, err
@@ -156,12 +244,12 @@ func (cm *ConnectionManager) GetConnection(ctx context.Context, tenantID string)
 	return result.(*Connection), nil
 }
 
-func (cm *ConnectionManager) createConnection(ctx context.Context, tenantID string) (*Connection, error) {
+func (cm *ConnectionManager) createConnection(ctx context.Context, connKey string) (*Connection, error) {
 	cm.mu.Lock()
 	defer cm.mu.Unlock()
 
 	// Double-check: connection might have been created by another goroutine while we were waiting
-	if cached, found := cm.activeConns.Get(tenantID); found {
+	if cached, found := cm.activeConns.Get(connKey); found {
 		conn := cached.(*Connection)
 		conn.LastAccessed = time.Now()
 		cm.stats.CacheHits++
@@ -180,31 +268,32 @@ func (cm *ConnectionManager) createConnection(ctx context.Context, tenantID stri
 		}
 	}
 
-	config, exists := cm.configs[tenantID]
+	config, exists := cm.configs[connKey]
 	if !exists {
-		return nil, fmt.Errorf("tenant configuration not found for: %s", tenantID)
+		return nil, fmt.Errorf("connection configuration not found for: %s", connKey)
 	}
 
-	projectDriver, err := project.GetProjectDriver(config, cm.cfg)
+	proExtras := cm.proDriverExtras[connKey]
+	projectDriver, err := project.GetProjectDriverWithConfig(cm.cfg, config, proExtras)
 	if err != nil {
-		log.Printf("Project db connection create error for tenant %s: %v", tenantID, err)
+		log.Printf("Project db connection create error for %s: %v", connKey, err)
 		return nil, err
 	}
 
 	conn := &Connection{
-		TenantID:     tenantID,
+		ScopeKey:     connKey,
 		DBConn:       projectDriver,
 		LastAccessed: time.Now(),
 		IsActive:     true,
 	}
 
 	// Store in cache with metadata
-	cm.activeConns.Set(tenantID, conn, cache.DefaultExpiration)
+	cm.activeConns.Set(connKey, conn, cache.DefaultExpiration)
 
 	cm.stats.ActiveConnections++
 	cm.stats.CacheMisses++
 
-	log.Printf("Created new connection for tenant: %s (active: %d)", tenantID, cm.stats.ActiveConnections)
+	log.Printf("Created new connection for: %s (active: %d)", connKey, cm.stats.ActiveConnections)
 
 	return conn, nil
 }
@@ -228,17 +317,16 @@ func (cm *ConnectionManager) cleanupLocked() {
 
 	// Sort connections by last accessed time
 	type connectionAge struct {
-		tenantID     string
+		connKey      string
 		lastAccessed time.Time
 		conn         *Connection
 	}
 
 	var connections []connectionAge
-	for tenantID, item := range items {
-		// Fix: type assertion should be *Connection (pointer) not Connection
+	for key, item := range items {
 		if conn, ok := item.Object.(*Connection); ok {
 			connections = append(connections, connectionAge{
-				tenantID:     tenantID,
+				connKey:      key,
 				lastAccessed: conn.LastAccessed,
 				conn:         conn,
 			})
@@ -258,7 +346,7 @@ func (cm *ConnectionManager) cleanupLocked() {
 
 	log.Printf("Cleanup: removing %d oldest connections out of %d", numToRemove, len(connections))
 
-	// Collect tenant IDs to remove
+	// Collect keys to remove
 	toRemove := make([]connectionAge, numToRemove)
 	for i := 0; i < numToRemove; i++ {
 		toRemove[i] = connections[i]
@@ -269,7 +357,7 @@ func (cm *ConnectionManager) cleanupLocked() {
 
 	// Delete items - this triggers OnEvicted callback which handles counter and close
 	for _, item := range toRemove {
-		cm.activeConns.Delete(item.tenantID)
+		cm.activeConns.Delete(item.connKey)
 	}
 
 	// Re-acquire lock for the caller
@@ -303,18 +391,17 @@ func (cm *ConnectionManager) GetDetailedStats() map[string]interface{} {
 
 // CloseAll closes all active connections - call this on graceful shutdown
 func (cm *ConnectionManager) CloseAll() {
-	// Get list of tenant IDs to close
 	items := cm.activeConns.Items()
-	tenantIDs := make([]string, 0, len(items))
-	for tenantID := range items {
-		tenantIDs = append(tenantIDs, tenantID)
+	keys := make([]string, 0, len(items))
+	for k := range items {
+		keys = append(keys, k)
 	}
 
-	log.Printf("Closing all %d connections...", len(tenantIDs))
+	log.Printf("Closing all %d connections...", len(keys))
 
 	// Delete each - this triggers OnEvicted which handles locking internally
-	for _, tenantID := range tenantIDs {
-		cm.activeConns.Delete(tenantID)
+	for _, k := range keys {
+		cm.activeConns.Delete(k)
 	}
 
 	cm.mu.RLock()
@@ -324,9 +411,14 @@ func (cm *ConnectionManager) CloseAll() {
 	log.Printf("All connections closed. Final stats: active=%d", activeCount)
 }
 
-// RemoveConnection explicitly removes a connection for a tenant
-func (cm *ConnectionManager) RemoveConnection(tenantID string) {
-	cm.activeConns.Delete(tenantID) // This triggers OnEvicted
+// RemoveConnection explicitly removes a connection by key
+func (cm *ConnectionManager) RemoveConnection(connKey string) {
+	cm.activeConns.Delete(connKey) // This triggers OnEvicted
+}
+
+// GetConfig returns the configuration used by this connection manager.
+func (cm *ConnectionManager) GetConfig() *models.Config {
+	return cm.cfg
 }
 
 // SetProjectDefaultMediaPlugin sets project dependent settings
