@@ -15,7 +15,6 @@ import (
 	"github.com/apito-io/engine/models"
 	"github.com/apito-io/engine/utility"
 	"github.com/apito-io/types"
-	"github.com/google/uuid"
 	"github.com/graph-gophers/dataloader/v7"
 	"github.com/liangyaopei/structmap"
 	"github.com/tailor-platform/graphql"
@@ -396,7 +395,7 @@ func (s *GraphQLExecutor) SolvePublicMutation(ctx context.Context, resolverName 
 			}
 		}
 
-		_uid := uuid.New().String()
+		_uid := utility.NewID()
 		doc := types.DefaultDocumentStructure{
 			Key:  _uid,
 			ID:   _uid,
@@ -847,7 +846,7 @@ func (s *GraphQLExecutor) HandlePayloadFormatting(ctx context.Context, param *mo
 						if id, ok := repeatedUserInput["_id"].(string); ok && id != "" { // if _id exists on the user input
 							_currentID = id
 						} else {
-							id = uuid.New().String()
+							id = utility.NewID()
 							repeatedUserInput["_id"] = id
 						}
 
@@ -895,7 +894,7 @@ func (s *GraphQLExecutor) HandlePayloadFormatting(ctx context.Context, param *mo
 						if id, ok := repeatedUserInput["_id"].(string); ok { // if found
 							_currentID = id
 						} else {
-							id = uuid.New().String()
+							id = utility.NewID()
 							repeatedUserInput["_id"] = id
 						}
 						var oldUserInput map[string]interface{}

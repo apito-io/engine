@@ -35,7 +35,7 @@ func GetSystemDriver(conf *models.Config, engineConfig *models.DriverCredentials
 	case _const.CoreDB, "coreDB":
 		db, err = bbolt.GetSystemBBoltDriver(conf, engineConfig, nil)
 	case _const.MongoDBDriver:
-		db, err = mongodb.GetSystemMongoDriver(engineConfig)
+		db, err = mongodb.GetSystemMongoDriver(engineConfig, conf)
 	default: // default set embedded database
 		db, err = bbolt.GetSystemBBoltDriver(conf, engineConfig, nil)
 	}

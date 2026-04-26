@@ -36,7 +36,7 @@ type publicSchemaBuildState struct {
 	schemaRole *models.Role
 
 	permissions       map[string]*models.APIPermission
-	filteredModels    []*ModelWithFilter
+	filteredModels    []*models.PublicSchemaModelFilter
 	filteredFunctions []*models.ApitoFunction
 	operationType     string
 
@@ -66,7 +66,7 @@ type publicSchemaBuildState struct {
 // expandModelsForPreConnectionMaps returns filteredModels plus any schema models reachable as
 // direct connection targets (transitive BFS). Pre-connection maps (commonFields, whereArgs, …)
 // must exist for those targets or relation fields on a single filtered model get empty relFields.
-func expandModelsForPreConnectionMaps(project *models.Project, filteredModels []*ModelWithFilter) []*ModelWithFilter {
+func expandModelsForPreConnectionMaps(project *models.Project, filteredModels []*models.PublicSchemaModelFilter) []*models.PublicSchemaModelFilter {
 	if project == nil || project.Schema == nil || len(filteredModels) == 0 {
 		return filteredModels
 	}
@@ -108,7 +108,7 @@ func expandModelsForPreConnectionMaps(project *models.Project, filteredModels []
 			}
 		}
 	}
-	orig := make(map[string]*ModelWithFilter)
+	orig := make(map[string]*models.PublicSchemaModelFilter)
 	for _, mf := range filteredModels {
 		if mf != nil && mf.Model != nil {
 			orig[mf.Model.Name] = mf
@@ -121,14 +121,14 @@ func expandModelsForPreConnectionMaps(project *models.Project, filteredModels []
 		}
 	}
 	sort.Strings(extras)
-	out := make([]*ModelWithFilter, 0, len(seen))
+	out := make([]*models.PublicSchemaModelFilter, 0, len(seen))
 	for _, mf := range filteredModels {
 		if mf != nil && mf.Model != nil && seen[mf.Model.Name] {
 			out = append(out, mf)
 		}
 	}
 	for _, n := range extras {
-		out = append(out, &ModelWithFilter{Model: byName[n], Filter: nil})
+		out = append(out, &models.PublicSchemaModelFilter{Model: byName[n], Filter: nil})
 	}
 	return out
 }

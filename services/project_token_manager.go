@@ -11,13 +11,14 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"strings"
 	"time"
 
 	"github.com/apito-io/engine/interfaces"
 	"github.com/apito-io/engine/models"
 	"github.com/apito-io/engine/utility"
-	"github.com/google/uuid"
 	"github.com/labstack/echo/v4"
+	"github.com/oklog/ulid/v2"
 )
 
 var (
@@ -89,8 +90,12 @@ func (m *ProjectKeyManager) GenerateKey(payload *models.TokenClaims) (string, er
 	// Role (fixed 16 bytes)
 	data = append(data, stringToFixedBytes(payload.Role, 16)...)
 
-	// UserId (UUID - 16 bytes)
-	data = append(data, uuidToBytes(payload.UserID)...)
+	userWire, err := userIDToWireBytes(payload.UserID)
+	if err != nil {
+		return "", err
+	}
+	// UserId (ULID wire form — 16 bytes; empty user id is all zeros)
+	data = append(data, userWire...)
 
 	// ProjectId (variable length)
 	projectIdBytes := []byte(payload.ProjectID)
@@ -166,7 +171,7 @@ func (m *ProjectKeyManager) Validate(ctx context.Context, key string, skipDBChec
 	if offset+16 > len(data) {
 		return nil, ErrInvalidPayload
 	}
-	payload.UserID = bytesToUUID(data[offset : offset+16])
+	payload.UserID = wireBytesToUserID(data[offset : offset+16])
 	offset += 16
 
 	// ProjectId (variable length)
@@ -263,20 +268,36 @@ func stringToFixedBytes(s string, size int) []byte {
 	return b
 }
 
-func uuidToBytes(s string) []byte {
-	u, err := uuid.Parse(s)
-	if err != nil {
-		return make([]byte, 16)
+// userIDToWireBytes encodes TokenClaims.UserID as the 16-byte ULID binary form.
+// Empty or whitespace-only user id yields 16 zero bytes (same as the previous UUID codec for "").
+// Non-empty values must be a valid ULID string (GenerateKey returns an error otherwise).
+func userIDToWireBytes(userID string) ([]byte, error) {
+	s := strings.TrimSpace(userID)
+	if s == "" {
+		return make([]byte, 16), nil
 	}
-	return u[:]
+	id, err := ulid.Parse(s)
+	if err != nil {
+		return nil, fmt.Errorf("UserID must be a valid ULID: %w", err)
+	}
+	out := make([]byte, 16)
+	copy(out, id[:])
+	return out, nil
 }
 
-func bytesToUUID(b []byte) string {
-	u, err := uuid.FromBytes(b)
-	if err != nil {
+// wireBytesToUserID decodes 16 ULID payload bytes to the canonical ULID string, or "" if all zero.
+func wireBytesToUserID(b []byte) string {
+	if len(b) != 16 {
 		return ""
 	}
-	return u.String()
+	for _, x := range b {
+		if x != 0 {
+			var id ulid.ULID
+			copy(id[:], b)
+			return id.String()
+		}
+	}
+	return ""
 }
 
 func boolToByte(b bool) byte {

@@ -10,7 +10,7 @@ import (
 	"time"
 
 	"github.com/apito-io/engine/models"
-	"github.com/google/uuid"
+	"github.com/apito-io/engine/utility"
 	"go.mongodb.org/mongo-driver/v2/bson"
 	"go.mongodb.org/mongo-driver/v2/mongo"
 	"go.mongodb.org/mongo-driver/v2/mongo/options"
@@ -23,6 +23,8 @@ type SystemMongoDriver struct {
 	Client           *mongo.Client
 	Database         *mongo.Database
 	DriverCredential *models.DriverCredentials
+	// Conf is open-core models.Config; OSSBootstrapProjectDriver uses SYSTEM_DB_* + starter constants for the starter project.
+	Conf *models.Config
 }
 
 // buildSystemMongoURI builds a MongoDB connection URI. Empty port implies mongodb+srv (Atlas / SRV).
@@ -76,8 +78,9 @@ func buildSystemMongoURI(c *models.DriverCredentials) (string, bool, error) {
 	return u.String(), false, nil
 }
 
-// GetSystemMongoDriver creates a new MongoDB system driver instance
-func GetSystemMongoDriver(driverCredentials *models.DriverCredentials) (*SystemMongoDriver, error) {
+// GetSystemMongoDriver creates a new MongoDB system driver instance.
+// conf may be nil (e.g. CLI tools); bootstrap and CreateProject then skip default project driver from env.
+func GetSystemMongoDriver(driverCredentials *models.DriverCredentials, conf *models.Config) (*SystemMongoDriver, error) {
 	connectionURI, useSRV, err := buildSystemMongoURI(driverCredentials)
 	if err != nil {
 		return nil, err
@@ -115,6 +118,7 @@ func GetSystemMongoDriver(driverCredentials *models.DriverCredentials) (*SystemM
 		Client:           client,
 		Database:         database,
 		DriverCredential: driverCredentials,
+		Conf:             conf,
 	}, nil
 }
 
@@ -294,7 +298,7 @@ func (m *SystemMongoDriver) FindOrganizationAdmin(ctx context.Context, orgId str
 // SaveAuditLog saves an audit log entry using MongoDB
 func (m *SystemMongoDriver) SaveAuditLog(ctx context.Context, auditLog *models.AuditLogs) error {
 	if auditLog.ID == "" {
-		auditLog.ID = uuid.New().String()
+		auditLog.ID = utility.NewID()
 	}
 
 	collection := m.Database.Collection("audit_logs")

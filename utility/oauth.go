@@ -14,6 +14,11 @@ import (
 	"strings"
 )
 
+// googleOIDCIssuer is Google's OpenID Connect issuer (discovery URL base).
+// oidc.NewProvider expects this URL, not the OAuth client_id.
+// See https://accounts.google.com/.well-known/openid-configuration
+const googleOIDCIssuer = "https://accounts.google.com"
+
 type Authenticator struct {
 	Provider *oidc.Provider
 	Config   oauth2.Config
@@ -23,7 +28,7 @@ type Authenticator struct {
 func NewAuthenticator(cfg *models.Config) (*Authenticator, error) {
 	ctx := context.Background()
 
-	provider, err := oidc.NewProvider(ctx, cfg.GoogleOauthClientID)
+	provider, err := oidc.NewProvider(ctx, googleOIDCIssuer)
 	if err != nil {
 		log.Printf("failed to get provider: %v", err)
 		return nil, err
@@ -47,7 +52,7 @@ func NewAuthenticator(cfg *models.Config) (*Authenticator, error) {
 func NewRefreshTokenAuthenticator(cfg *models.Config, token string) (*models.JWTTokens, error) {
 
 	ctx := context.Background()
-	provider, err := oidc.NewProvider(ctx, cfg.GoogleOauthClientID)
+	provider, err := oidc.NewProvider(ctx, googleOIDCIssuer)
 	if err != nil {
 		return nil, err
 	}

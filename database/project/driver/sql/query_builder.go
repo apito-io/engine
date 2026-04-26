@@ -18,6 +18,45 @@ import (
 	"github.com/tailor-platform/graphql"
 )
 
+// formatSQLMetaTimestamp normalizes meta.created_at / meta.updated_at (and similar) from SQL row scans.
+// SQLite and libsql commonly return DATE/DATETIME as string; PostgreSQL returns time.Time.
+func formatSQLMetaTimestamp(v interface{}) (string, error) {
+	if v == nil {
+		return "", nil
+	}
+	switch t := v.(type) {
+	case time.Time:
+		return t.UTC().Format(time.RFC3339), nil
+	case *time.Time:
+		if t == nil {
+			return "", nil
+		}
+		return t.UTC().Format(time.RFC3339), nil
+	case string:
+		s := strings.TrimSpace(t)
+		if s == "" {
+			return "", nil
+		}
+		if parsed, err := time.Parse(time.RFC3339, s); err == nil {
+			return parsed.UTC().Format(time.RFC3339), nil
+		}
+		if parsed, err := time.Parse(time.RFC3339Nano, s); err == nil {
+			return parsed.UTC().Format(time.RFC3339), nil
+		}
+		if parsed, err := time.ParseInLocation("2006-01-02 15:04:05", s, time.UTC); err == nil {
+			return parsed.UTC().Format(time.RFC3339), nil
+		}
+		if parsed, err := time.ParseInLocation("2006-01-02", s, time.UTC); err == nil {
+			return parsed.UTC().Format(time.RFC3339), nil
+		}
+		return s, nil
+	case []byte:
+		return formatSQLMetaTimestamp(string(t))
+	default:
+		return "", fmt.Errorf("unexpected type for meta timestamp: %T", v)
+	}
+}
+
 type QueryBuilderParam struct {
 	CollectionName string
 	RelationName   string
@@ -37,6 +76,30 @@ var FilterSuffix = map[string]string{
 	"not_in": "NOT IN",
 }
 
+// filterSQLComparator maps GraphQL filter suffixes to SQL operators for the parameterized query path.
+func filterSQLComparator(suffix string) (string, bool) {
+	switch suffix {
+	case "eq":
+		return "=", true
+	case "ne":
+		return "!=", true
+	case "lt":
+		return "<", true
+	case "lte":
+		return "<=", true
+	case "gt":
+		return ">", true
+	case "gte", "gtr":
+		return ">=", true
+	case "in":
+		return "IN", true
+	case "not_in":
+		return "NOT IN", true
+	default:
+		return "", false
+	}
+}
+
 func SelectBuilder(mv string, local string, modelType *models.ModelType, returnCount bool) []string {
 
 	var returnType []string
@@ -46,13 +109,18 @@ func SelectBuilder(mv string, local string, modelType *models.ModelType, returnC
 
 	var dataJson []string
 	for _, f := range modelType.Fields {
+		phys := PhysicalSQLColumnForSystemRelationField(f.Identifier)
 		if f.Validation != nil && local != "en" && utility.ArrayContains(f.Validation.Locals, local) {
-			dataJson = append(dataJson, fmt.Sprintf(`x.%s_%s AS %s`, f.Identifier, local, f.Identifier))
+			dataJson = append(dataJson, fmt.Sprintf(`x.%s_%s AS %s`, phys, local, f.Identifier))
 		} else {
-			dataJson = append(dataJson, fmt.Sprintf(`x.%s AS %s`, f.Identifier, f.Identifier))
+			dataJson = append(dataJson, fmt.Sprintf(`x.%s AS %s`, phys, f.Identifier))
 		}
 	}
-	returnType = append(returnType, []string{"x.id AS id", strings.Join(dataJson, ", ")}...)
+	// Avoid `SELECT x.id AS id, , y.created_at...` when the model has no user fields yet.
+	returnType = append(returnType, "x.id AS id")
+	if len(dataJson) > 0 {
+		returnType = append(returnType, strings.Join(dataJson, ", "))
+	}
 
 	metaQuery := fmt.Sprintf(`%s.created_at AS sys_created_at, %s.updated_at AS sys_updated_at, %s.created_by AS sys_created_by, %s.updated_by AS sys_updated_by, %s.status as sys_status`, mv, mv, mv, mv, mv)
 	returnType = append(returnType, metaQuery)
@@ -60,23 +128,65 @@ func SelectBuilder(mv string, local string, modelType *models.ModelType, returnC
 	return returnType
 }
 
+func graphqlArgInt(m map[string]interface{}, key string, def int) int {
+	v, ok := m[key]
+	if !ok || v == nil {
+		return def
+	}
+	switch n := v.(type) {
+	case int:
+		return n
+	case int32:
+		return int(n)
+	case int64:
+		return int(n)
+	case float64:
+		return int(n)
+	default:
+		return def
+	}
+}
+
+// graphqlArgBool coerces GraphQL / JSON variable shapes into a boolean (used for intersect).
+func graphqlArgBool(m map[string]interface{}, key string) bool {
+	if m == nil {
+		return false
+	}
+	v, ok := m[key]
+	if !ok || v == nil {
+		return false
+	}
+	switch t := v.(type) {
+	case bool:
+		return t
+	case *bool:
+		if t == nil {
+			return false
+		}
+		return *t
+	case string:
+		s := strings.TrimSpace(strings.ToLower(t))
+		return s == "true" || s == "1" || s == "yes"
+	case float64:
+		return t != 0
+	case int:
+		return t != 0
+	case int64:
+		return t != 0
+	case json.Number:
+		i, err := t.Int64()
+		return err == nil && i != 0
+	default:
+		return false
+	}
+}
+
 func LimitBuilder(param *graphql.ResolveParams) (int, int) {
 	arg := param.Args
 
-	limit := 10
-	if val, ok := arg["limit"]; ok {
-		limit = val.(int)
-	}
-
-	start := 0
-	if val, ok := arg["start"]; ok {
-		start = val.(int)
-	}
-
-	page := 1
-	if val, ok := arg["page"]; ok {
-		page = val.(int)
-	}
+	limit := graphqlArgInt(arg, "limit", 10)
+	start := graphqlArgInt(arg, "start", 0)
+	page := graphqlArgInt(arg, "page", 1)
 
 	if page > 1 {
 		offset := limit * (page - 1)
@@ -89,7 +199,7 @@ func getFieldType(val interface{}) reflect.Kind {
 	return reflect.TypeOf(val).Kind()
 }
 
-func ConditionBuilder(variable string, args map[string]interface{}, modelType *models.ModelType) (map[string][]string, error) {
+func ConditionBuilder(variable string, args map[string]interface{}, modelType *models.ModelType, sqlArgs *[]interface{}) (map[string][]string, error) {
 
 	userDefinedFieldNames := make(map[string]reflect.Kind)
 	for _, field := range modelType.Fields {
@@ -110,11 +220,11 @@ func ConditionBuilder(variable string, args map[string]interface{}, modelType *m
 			// if AND / OR found
 			switch field {
 			case "AND":
-				conditions["AND"], _ = FilterBuilder(variable, filterObj.(map[string]interface{}), modelType)
+				conditions["AND"], _ = FilterBuilder(variable, filterObj.(map[string]interface{}), modelType, sqlArgs)
 			case "OR":
-				conditions["OR"], _ = FilterBuilder(variable, filterObj.(map[string]interface{}), modelType)
+				conditions["OR"], _ = FilterBuilder(variable, filterObj.(map[string]interface{}), modelType, sqlArgs)
 			default:
-				conditions["AND"], _ = FilterBuilder(variable, where, modelType)
+				conditions["AND"], _ = FilterBuilder(variable, where, modelType, sqlArgs)
 			}
 		}
 	}
@@ -122,7 +232,7 @@ func ConditionBuilder(variable string, args map[string]interface{}, modelType *m
 	return conditions, nil
 }
 
-func FilterBuilder(variable string, where map[string]interface{}, modelType *models.ModelType) ([]string, error) {
+func FilterBuilder(variable string, where map[string]interface{}, modelType *models.ModelType, sqlArgs *[]interface{}) ([]string, error) {
 
 	userDefinedFieldNames := make(map[string]reflect.Kind)
 	for _, field := range modelType.Fields {
@@ -133,7 +243,12 @@ func FilterBuilder(variable string, where map[string]interface{}, modelType *mod
 
 	for field, filterObj := range where {
 
-		fieldName := fmt.Sprintf("%s.%s", variable, field)
+		sqlField := field
+		// SQL row filters use table alias `x`; Arango-style paths use `x.data` — keep document keys intact there.
+		if variable == "x" {
+			sqlField = PhysicalSQLColumnForSystemRelationField(field)
+		}
+		fieldName := fmt.Sprintf("%s.%s", variable, sqlField)
 
 		var actualValue interface{}
 		for suffix, value := range filterObj.(map[string]interface{}) {
@@ -142,25 +257,57 @@ func FilterBuilder(variable string, where map[string]interface{}, modelType *mod
 
 			switch suffix {
 			case "contains":
-				conditions = append(conditions, fmt.Sprintf(`%s LIKE '%%%s%%'`, fieldName, value.(string)))
+				if sqlArgs != nil {
+					conditions = append(conditions, fmt.Sprintf(`%s LIKE ?`, fieldName))
+					*sqlArgs = append(*sqlArgs, fmt.Sprintf("%%%s%%", value.(string)))
+				} else {
+					conditions = append(conditions, fmt.Sprintf(`%s LIKE '%%%s%%'`, fieldName, value.(string)))
+				}
 			case "eq", "ne", "lt", "lte", "gt", "gtr", "in", "not_in":
-				switch value := value.(type) {
-				case int, float64, bool:
-					conditions = append(conditions, fmt.Sprintf(`%s %s %v`, fieldName, FilterSuffix[suffix], value))
-				case string:
-					conditions = append(conditions, fmt.Sprintf(`%s %s '%v'`, fieldName, FilterSuffix[suffix], value))
-				case []interface{}:
-					var vals []string
-					for _, v := range value {
-						switch v.(type) {
-						case int, float64:
-							vals = append(vals, fmt.Sprintf("%v", v))
-						case string:
-							vals = append(vals, fmt.Sprintf("'%v'", v))
-						}
+				if sqlArgs != nil {
+					op, ok := filterSQLComparator(suffix)
+					if !ok {
+						continue
 					}
-					final := fmt.Sprintf("[%s]", strings.Join(vals, ","))
-					conditions = append(conditions, fmt.Sprintf(`COUNT(%s[* FILTER CONTAINS(%s, CURRENT)])`, fieldName, final))
+					switch suffix {
+					case "in", "not_in":
+						arr, ok := value.([]interface{})
+						if !ok || len(arr) == 0 {
+							if suffix == "in" {
+								conditions = append(conditions, "0=1")
+							} else {
+								conditions = append(conditions, "1=1")
+							}
+							break
+						}
+						placeholders := strings.TrimSuffix(strings.Repeat("?,", len(arr)), ",")
+						conditions = append(conditions, fmt.Sprintf(`%s %s (%s)`, fieldName, op, placeholders))
+						for _, v := range arr {
+							*sqlArgs = append(*sqlArgs, v)
+						}
+					default:
+						conditions = append(conditions, fmt.Sprintf(`%s %s ?`, fieldName, op))
+						*sqlArgs = append(*sqlArgs, value)
+					}
+				} else {
+					switch value := value.(type) {
+					case int, float64, bool:
+						conditions = append(conditions, fmt.Sprintf(`%s %s %v`, fieldName, FilterSuffix[suffix], value))
+					case string:
+						conditions = append(conditions, fmt.Sprintf(`%s %s '%v'`, fieldName, FilterSuffix[suffix], value))
+					case []interface{}:
+						var vals []string
+						for _, v := range value {
+							switch v.(type) {
+							case int, float64:
+								vals = append(vals, fmt.Sprintf("%v", v))
+							case string:
+								vals = append(vals, fmt.Sprintf("'%v'", v))
+							}
+						}
+						final := fmt.Sprintf("[%s]", strings.Join(vals, ","))
+						conditions = append(conditions, fmt.Sprintf(`COUNT(%s[* FILTER CONTAINS(%s, CURRENT)])`, fieldName, final))
+					}
 				}
 			}
 		}
@@ -207,11 +354,17 @@ func CommonDocTransformation(model *models.ModelType, local string, result map[s
 		case "sys_status":
 			doc.Meta.Status = v.(string)
 		case "sys_created_at":
-			t := time.Unix(v.(time.Time).Unix(), 0)
-			doc.Meta.CreatedAt = t.Format(time.RFC3339)
+			s, err := formatSQLMetaTimestamp(v)
+			if err != nil {
+				return nil, err
+			}
+			doc.Meta.CreatedAt = s
 		case "sys_updated_at":
-			t := time.Unix(v.(time.Time).Unix(), 0)
-			doc.Meta.UpdatedAt = t.Format(time.RFC3339)
+			s, err := formatSQLMetaTimestamp(v)
+			if err != nil {
+				return nil, err
+			}
+			doc.Meta.UpdatedAt = s
 		case "sys_updated_by":
 			id := v.(string)
 			doc.Meta.LastModifiedBy = &types.SystemUser{
@@ -311,9 +464,10 @@ func MediaDocTransformation(docType string, result map[string]interface{}) (*mod
 		return nil, nil
 	}
 
-	if val, ok := result["created_at"].(time.Time); ok {
-		t := time.Unix((val).Unix(), 0)
-		doc.CreatedAt = t.Format(time.RFC3339)
+	if s, err := formatSQLMetaTimestamp(result["created_at"]); err != nil {
+		return nil, err
+	} else if s != "" {
+		doc.CreatedAt = s
 	}
 
 	if val, ok := result["model"].(string); ok {
@@ -355,7 +509,7 @@ func RootConnectionResolverQueryBuilder(cfg *models.Config, param *models.Common
 	projectId := param.ProjectID
 	_args := param.ResolveParams.Args
 
-	filters, err := ConditionBuilder("x.data", _args, param.Model)
+	filters, err := ConditionBuilder("x.data", _args, param.Model, nil)
 	if err != nil {
 		return "", err
 	}
@@ -383,7 +537,7 @@ func RootConnectionResolverQueryBuilder(cfg *models.Config, param *models.Common
 	return strings.Join(queries, " "), nil
 }
 
-func RootResolverQueryBuilder(cfg *models.Config, param *models.CommonSystemParams, returnCount bool) (string, error) {
+func RootResolverQueryBuilder(cfg *models.Config, param *models.CommonSystemParams, returnCount bool) (string, []interface{}, error) {
 
 	var modelName string
 	if param.Model == nil {
@@ -406,6 +560,14 @@ func RootResolverQueryBuilder(cfg *models.Config, param *models.CommonSystemPara
 		connection = val
 	}
 
+	intersect := false
+	if param.ResolveParams != nil && param.ResolveParams.Args != nil {
+		intersect = graphqlArgBool(param.ResolveParams.Args, "intersect")
+	}
+
+	var connPreds []string
+	var connArgs []interface{}
+
 	if len(connection) > 0 {
 		var relationType string
 		if val, ok := connection["relation_type"].(string); ok && val != "" {
@@ -416,7 +578,7 @@ func RootResolverQueryBuilder(cfg *models.Config, param *models.CommonSystemPara
 		if val, ok := connection["connection_type"].(string); ok && val != "" {
 			connectionType = val
 		} else {
-			return "", errors.New("connection type is required if passing connection object")
+			return "", nil, errors.New("connection type is required if passing connection object")
 		}
 
 		var fromModel string
@@ -429,16 +591,89 @@ func RootResolverQueryBuilder(cfg *models.Config, param *models.CommonSystemPara
 			fromModel = connection["model"].(string)
 			toModel = connection["to_model"].(string)
 		default:
-			return "", errors.New("invalid connection type")
+			return "", nil, errors.New("invalid connection type")
 		}
 
 		switch relationType {
 		case "has_many":
-			pivotTable := fmt.Sprintf(`%s_%s`, utility.SingularResourceName(fromModel), utility.SingularResourceName(toModel))
-			leftJoins = append(leftJoins, fmt.Sprintf(`left join `+"`%s`"+` as z on z.%s_id = x.id`, pivotTable, toModel))
-			returnType = []string{fmt.Sprintf("z.%s_id", toModel)}
+			anchorID, okAnchor := sqlConnectionAnchorID(connection)
+			if !okAnchor {
+				return "", nil, errors.New("connection _id is required when filtering by relation")
+			}
+			// Console sends relation_type=has_many for "parent has many children"; SQL may use either a
+			// pivot (true M:N) or a FK on the child table (e.g. Work has_one Person → person_id on work).
+			usePivot := len(param.ProjectSchemaModels) == 0 || sqlConnectionIsTrueManyToMany(param.ProjectSchemaModels, fromModel, toModel)
+			if usePivot {
+				pivotTable := fmt.Sprintf(`%s_%s`, utility.SingularResourceName(fromModel), utility.SingularResourceName(toModel))
+				// Pivot columns must follow the *listed* model (x) and *anchor* document (connection._id),
+				// not connection fromModel/toModel order (backward vs forward swaps which side is listed).
+				if param.Model == nil {
+					return "", nil, errors.New("model is required for pivot relation filter")
+				}
+				listedPivotCol := utility.SingularResourceName(param.Model.Name) + "_id"
+				anchorModelName := sqlConnectionAnchorModelName(connectionType, fromModel, toModel)
+				if anchorModelName == "" {
+					return "", nil, errors.New("invalid connection type")
+				}
+				anchorPivotCol := utility.SingularResourceName(anchorModelName) + "_id"
+				if intersect {
+					// Same as Arango: listed rows whose id is NOT IN pivot ids linked to the anchor.
+					if !returnCount {
+						returnType = SelectBuilder("y", local, param.Model, false)
+					}
+					connPreds = append(connPreds, fmt.Sprintf("`x`.`id` NOT IN (SELECT `p`.`%s` FROM `%s` AS `p` WHERE `p`.`%s` = ?)", listedPivotCol, pivotTable, anchorPivotCol))
+					connArgs = append(connArgs, anchorID)
+				} else {
+					leftJoins = append(leftJoins, fmt.Sprintf(`left join `+"`%s`"+` as z on z.%s = x.id`, pivotTable, listedPivotCol))
+					// Keep default returnType (full `x` row + meta): pivot only filters; overwriting
+					// returnType would omit `id` and break CommonDocTransformation.
+					connPreds = append(connPreds, fmt.Sprintf("`z`.`%s` = ?", anchorPivotCol))
+					connArgs = append(connArgs, anchorID)
+				}
+			} else {
+				xfk := utility.SingularResourceName(fromModel) + "_id"
+				if intersect {
+					connPreds = append(connPreds, fmt.Sprintf("(`x`.`%s` IS NULL OR `x`.`%s` != ?)", xfk, xfk))
+					connArgs = append(connArgs, anchorID)
+				} else {
+					connPreds = append(connPreds, fmt.Sprintf("`x`.`%s` = ?", xfk))
+					connArgs = append(connArgs, anchorID)
+				}
+			}
 		case "has_one":
-			leftJoins = append(leftJoins, fmt.Sprintf(`left join `+"`%s`"+` as z on z.%s_id = x.id`, utility.SingularResourceName(fromModel), utility.SingularResourceName(toModel))) //toModel := connection["model"].(string)
+			anchorID, okAnchor := sqlConnectionAnchorID(connection)
+			if !okAnchor {
+				return "", nil, errors.New("connection _id is required when filtering by relation")
+			}
+			anchorM := sqlConnectionAnchorModelName(connectionType, fromModel, toModel)
+			if anchorM == "" {
+				return "", nil, errors.New("invalid connection type")
+			}
+			listedMT := param.Model
+			if listedMT == nil {
+				return "", nil, errors.New("model is required for connection filter")
+			}
+			if len(param.ProjectSchemaModels) > 0 {
+				anchorMT := findSchemaModel(param.ProjectSchemaModels, anchorM)
+				if col, ok := fkPhysicalColumnOnModelToTarget(listedMT, anchorM); ok {
+					connPreds = append(connPreds, fmt.Sprintf("`x`.`%s` = ?", col))
+					connArgs = append(connArgs, anchorID)
+				} else if anchorMT != nil {
+					if col, ok := fkPhysicalColumnOnModelToTarget(anchorMT, listedMT.Name); ok {
+						anchTbl := utility.SingularResourceName(anchorM)
+						connPreds = append(connPreds, fmt.Sprintf("EXISTS (SELECT 1 FROM `%s` AS anch WHERE anch.id = ? AND anch.`%s` = `x`.`id`)", anchTbl, col))
+						connArgs = append(connArgs, anchorID)
+					} else {
+						return "", nil, fmt.Errorf("could not resolve SQL FK for has_one connection (listed=%s anchor=%s)", listedMT.Name, anchorM)
+					}
+				} else {
+					return "", nil, fmt.Errorf("unknown anchor model %q for has_one connection", anchorM)
+				}
+			} else {
+				col := utility.SingularResourceName(anchorM) + "_id"
+				connPreds = append(connPreds, fmt.Sprintf("`x`.`%s` = ?", col))
+				connArgs = append(connArgs, anchorID)
+			}
 		}
 	}
 
@@ -457,20 +692,28 @@ func RootResolverQueryBuilder(cfg *models.Config, param *models.CommonSystemPara
 		strings.Join(leftJoins, "\n"),
 	))
 
-	filters, err := ConditionBuilder("x", param.ResolveParams.Args, param.Model)
+	var sqlArgs []interface{}
+	filters, err := ConditionBuilder("x", param.ResolveParams.Args, param.Model, &sqlArgs)
 	if err != nil {
-		return "", err
+		return "", nil, err
 	}
 
 	// filter based on roles
 	if permission, ok := utility.LookupAPIPermission(param.Role, modelName); ok {
 		switch permission.Read {
 		case "own":
-			filters["AND"] = []string{fmt.Sprintf(`y.created_by == '%s'`, param.UserID)}
+			if !returnCount {
+				filters["AND"] = append(filters["AND"], `y.created_by = ?`)
+				sqlArgs = append(sqlArgs, param.UserID)
+			}
 		}
 	}
-	if err := mergeQueryFilterHookSQL(cfg, param, filters, "x"); err != nil {
-		return "", err
+	if err := mergeQueryFilterHookSQL(cfg, param, filters, "x", &sqlArgs); err != nil {
+		return "", nil, err
+	}
+	for i := range connPreds {
+		filters["AND"] = append(filters["AND"], connPreds[i])
+		sqlArgs = append(sqlArgs, connArgs[i])
 	}
 
 	var mergedFilter []string
@@ -478,63 +721,40 @@ func RootResolverQueryBuilder(cfg *models.Config, param *models.CommonSystemPara
 		mergedFilter = append(mergedFilter, fmt.Sprintf(`(%s)`, strings.Join(filters[condition], fmt.Sprintf(` %s `, condition))))
 	}
 
-	/* var intersect bool
-	if val, ok := param.ResolveParams.Args["intersect"].(bool); ok {
-		intersect = val
-	} */
-
-	/* if len(connection) > 0 {
-		fromModel := connection["to_model"].(string)
-		toModel := connection["model"].(string)
-		id := connection["_id"].(string)
-
-		if intersect { // get the other result
-			subQuery := fmt.Sprintf("SELECT z.%s_id FROM `%s` as x %s WHERE z.%s_id = '%s'",
-				toModel,
-				utility.SingularResourceName(toModel),
-				strings.Join(leftJoins, "\n"),
-				fromModel,
-				id,
-			)
-			mergedFilter = append(mergedFilter, fmt.Sprintf(`x.id not in (%s)`, subQuery))
-		} else { // else get the exact match
-			mergedFilter = append(mergedFilter, fmt.Sprintf(`z.%s_id = '%s'`, fromModel, id))
-		}
-	} */
-
 	if len(mergedFilter) > 0 {
 		queries = append(queries, fmt.Sprintf(`WHERE %s`, strings.Join(mergedFilter, " AND ")))
 	}
 
 	// default sort
 	if !returnCount { // limit & Order if not counting
-		queries = append(queries, `ORDER BY y.created_at DESC`)
+		queries = append(queries, `ORDER BY y.created_at DESC, x.id DESC`)
 		queries = append(queries, fmt.Sprintf(`LIMIT %d OFFSET %d`, limit, offset))
 	}
 
 	query := strings.Join(queries, " ")
 
-	return query, nil
+	return query, sqlArgs, nil
 }
 
-func BuildCombinedRelationQuery(cfg *models.Config, relationType string, parentModel string, arg *models.CommonSystemParams) (*string, *string, error) {
+func BuildCombinedRelationQuery(cfg *models.Config, relationType string, parentModel string, arg *models.CommonSystemParams) (string, []interface{}, *string, error) {
 
 	var local string
 	if val, ok := arg.ResolveParams.Args["local"].(string); ok {
 		local = val
 	}
 
-	filters, err := ConditionBuilder("x", arg.ResolveParams.Args, arg.Model)
+	var filterArgs []interface{}
+	filters, err := ConditionBuilder("x", arg.ResolveParams.Args, arg.Model, &filterArgs)
 	if err != nil {
-		return nil, nil, err
+		return "", nil, nil, err
 	}
-	if err := mergeQueryFilterHookSQL(cfg, arg, filters, "x"); err != nil {
-		return nil, nil, err
+	if err := mergeQueryFilterHookSQL(cfg, arg, filters, "x", &filterArgs); err != nil {
+		return "", nil, nil, err
 	}
 
 	var mergedFilter []string
 	for condition, _ := range filters {
-		mergedFilter = append(mergedFilter, strings.Join(filters[condition], condition))
+		mergedFilter = append(mergedFilter, fmt.Sprintf(`(%s)`, strings.Join(filters[condition], fmt.Sprintf(` %s `, condition))))
 	}
 
 	var relationshipDirection string
@@ -547,7 +767,7 @@ func BuildCombinedRelationQuery(cfg *models.Config, relationType string, parentM
 	}
 
 	if relationshipDirection == "" {
-		return nil, nil, errors.New("could not decide form/to relations")
+		return "", nil, nil, errors.New("could not decide form/to relations")
 	}
 
 	relationInput := map[string]interface{}{}
@@ -562,8 +782,17 @@ func BuildCombinedRelationQuery(cfg *models.Config, relationType string, parentM
 	}
 
 	keys := arg.DocumentIDs
+	if len(keys) == 0 {
+		return "", nil, nil, errors.New("BuildCombinedRelationQuery: document ids required")
+	}
+	keyPH := strings.TrimSuffix(strings.Repeat("?,", len(keys)), ",")
+	keyArgs := make([]interface{}, len(keys))
+	for i, k := range keys {
+		keyArgs[i] = k
+	}
 
 	selectThing := SelectBuilder("z", local, arg.Model, arg.OnlyReturnCount)
+	selectList := strings.Join(selectThing, ", ")
 
 	relationTo := relationInput["to_model"].(string)
 	tableName := utility.SingularResourceName(relationTo)
@@ -586,10 +815,10 @@ func BuildCombinedRelationQuery(cfg *models.Config, relationType string, parentM
 		var keyField string
 		if manyToManyRelation {
 
-			if len(filters) > 0 {
-				whereCondition = fmt.Sprintf(`y.%s_id IN ('%s') AND %s`, parentModel, strings.Join(keys, "','"), strings.Join(mergedFilter, " AND "))
+			if len(mergedFilter) > 0 {
+				whereCondition = fmt.Sprintf(`y.%s_id IN (%s) AND %s`, parentModel, keyPH, strings.Join(mergedFilter, " AND "))
 			} else {
-				whereCondition = fmt.Sprintf(`y.%s_id IN ('%s')`, parentModel, strings.Join(keys, "','"))
+				whereCondition = fmt.Sprintf(`y.%s_id IN (%s)`, parentModel, keyPH)
 			}
 
 			keyField = fmt.Sprintf(`y.%s_id`, parentModel)
@@ -597,21 +826,19 @@ func BuildCombinedRelationQuery(cfg *models.Config, relationType string, parentM
 			switch relationshipDirection {
 			case "to":
 				pivotTable = fmt.Sprintf(`%s_%s`, utility.SingularResourceName(relationInput["from_model"].(string)), utility.SingularResourceName(relationTo))
-				break
 			case "from":
 				pivotTable = fmt.Sprintf(`%s_%s`, utility.SingularResourceName(relationTo), utility.SingularResourceName(relationInput["from_model"].(string)))
-				break
 			}
 			query = fmt.Sprintf(`SELECT %s as key, %s FROM `+"`%s`"+` AS y 
 				LEFT JOIN `+"`%s`"+` AS x ON x.id = y.%s_id 
 				LEFT JOIN meta AS z ON z.doc_id = x.id
-				WHERE %s`, keyField, selectThing, pivotTable, tableName, relationTo, whereCondition)
+				WHERE %s`, keyField, selectList, pivotTable, tableName, relationTo, whereCondition)
 		} else {
 
-			if len(filters) > 0 {
-				whereCondition = fmt.Sprintf(`y.id IN ('%s') AND %s`, strings.Join(keys, "','"), strings.Join(mergedFilter, " AND "))
+			if len(mergedFilter) > 0 {
+				whereCondition = fmt.Sprintf(`y.id IN (%s) AND %s`, keyPH, strings.Join(mergedFilter, " AND "))
 			} else {
-				whereCondition = fmt.Sprintf(`y.id IN ('%s')`, strings.Join(keys, "','"))
+				whereCondition = fmt.Sprintf(`y.id IN (%s)`, keyPH)
 			}
 
 			keyField = fmt.Sprintf(`y.id`)
@@ -625,13 +852,13 @@ func BuildCombinedRelationQuery(cfg *models.Config, relationType string, parentM
 			query = fmt.Sprintf(`SELECT %s AS sys_key, %s FROM `+"`%s`"+` AS y 
 				LEFT JOIN `+"`%s`"+` AS x ON x.%s_id = y.id 
 				LEFT JOIN meta AS z ON z.doc_id = x.id
-				WHERE %s`, keyField, selectThing, pivotTable, tableName, relationInput["from_model"].(string), whereCondition)
+				WHERE %s`, keyField, selectList, pivotTable, tableName, relationInput["from_model"].(string), whereCondition)
 		}
 	case "has_one":
-		if len(filters) > 0 {
-			whereCondition = fmt.Sprintf(`y.id IN ('%s') AND %s`, strings.Join(keys, "','"), strings.Join(mergedFilter, " AND "))
+		if len(mergedFilter) > 0 {
+			whereCondition = fmt.Sprintf(`y.id IN (%s) AND %s`, keyPH, strings.Join(mergedFilter, " AND "))
 		} else {
-			whereCondition = fmt.Sprintf(`y.id IN ('%s') `, strings.Join(keys, "','"))
+			whereCondition = fmt.Sprintf(`y.id IN (%s)`, keyPH)
 		}
 
 		keyField := `y.id`
@@ -642,19 +869,21 @@ func BuildCombinedRelationQuery(cfg *models.Config, relationType string, parentM
 			query = fmt.Sprintf(`SELECT %s AS sys_key, %s FROM `+"`%s`"+` AS y 
 				LEFT JOIN `+"`%s`"+` AS x ON x.%s_id = y.id 
 				LEFT JOIN meta AS z ON z.doc_id = x.id
-				WHERE %s LIMIT 1`, keyField, selectThing, pivotTable, tableName, relationInput["from_model"].(string), whereCondition)
+				WHERE %s LIMIT 1`, keyField, selectList, pivotTable, tableName, relationInput["from_model"].(string), whereCondition)
 		case "from":
 			pivotTable = utility.SingularResourceName(relationInput["from_model"].(string))
 			query = fmt.Sprintf(`SELECT %s AS sys_key, %s FROM  `+"`%s`"+` AS y 
 				LEFT JOIN `+"`%s`"+` AS x ON x.id = y.%s_id 
 				LEFT JOIN meta AS z ON z.doc_id = x.id
-				WHERE %s LIMIT 1`, keyField, selectThing, pivotTable, tableName, relationTo, whereCondition)
+				WHERE %s LIMIT 1`, keyField, selectList, pivotTable, tableName, relationTo, whereCondition)
 		}
+	default:
+		return "", nil, nil, fmt.Errorf("unsupported relation_type %v", relationInput["relation_type"])
 	}
 
 	rt := relationInput["relation_type"].(string)
-
-	return &query, &rt, nil
+	outArgs := append(keyArgs, filterArgs...)
+	return query, outArgs, &rt, nil
 }
 
 func RootResolverMediaQueryBuilder(param *graphql.ResolveParams) (string, error) {

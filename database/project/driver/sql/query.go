@@ -3,6 +3,7 @@ package sql
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"strings"
@@ -12,41 +13,75 @@ import (
 	"github.com/apito-io/engine/utility"
 	"github.com/apito-io/types"
 	"github.com/tailor-platform/graphql"
-	_ "github.com/uptrace/bun"
+	"github.com/uptrace/bun"
 )
 
+func (S *SQLDriver) maybeEnsureRelationDDL(ctx context.Context, param *models.CommonSystemParams) error {
+	if S == nil || param == nil || param.ResolveParams == nil {
+		return nil
+	}
+	conn, ok := param.ResolveParams.Args["connection"].(map[string]interface{})
+	if !ok || len(conn) == 0 {
+		return nil
+	}
+	if len(param.ProjectSchemaModels) == 0 {
+		return nil
+	}
+	return S.EnsureRelationArtifactsFromSchema(ctx, param.ProjectSchemaModels)
+}
+
 func (S *SQLDriver) CountDocOfProject(ctx context.Context, param *models.CommonSystemParams) (interface{}, error) {
-	query, err := RootConnectionResolverQueryBuilder(S.Conf, param)
+	// Must use RootResolverQueryBuilder(..., true): RootConnectionResolverQueryBuilder emits Arango AQL (FOR/FILTER/...), not SQL.
+	if n, ok, err := S.tryCountFromRowCountTable(ctx, param); ok {
+		return int(n), err
+	}
+	if err := S.maybeEnsureRelationDDL(ctx, param); err != nil {
+		return nil, err
+	}
+	query, args, err := RootResolverQueryBuilder(S.Conf, param, true)
 	if err != nil {
 		return nil, err
 	}
 
-	_, err = S.ORM.NewRaw(query).Exec(ctx)
-	if err != nil {
-		return nil, err
+	var result int64
+	var scanErr error
+	if len(args) > 0 {
+		scanErr = S.ORM.NewRaw(query, args...).Scan(ctx, &result)
+	} else {
+		scanErr = S.ORM.NewRaw(query).Scan(ctx, &result)
+	}
+	if scanErr != nil {
+		return nil, fmt.Errorf("failed to execute SQL:\n%w", scanErr)
 	}
 
-	return map[string]interface{}{
-		"total": 0,
-	}, nil
+	return int(result), nil
 }
 
 func (S *SQLDriver) CountDocOfProjectBytes(ctx context.Context, param *models.CommonSystemParams) ([]byte, error) {
-	query, err := RootConnectionResolverQueryBuilder(S.Conf, param)
+	n, err := S.CountDocOfProject(ctx, param)
 	if err != nil {
 		return nil, err
 	}
-
-	_, err = S.ORM.NewRaw(query).Exec(ctx)
-	if err != nil {
-		return nil, err
-	}
-
-	return []byte{}, nil
+	return json.Marshal(map[string]interface{}{"total": n})
 }
 
 func (S *SQLDriver) AddAuthAddOns(ctx context.Context, project *models.Project, auth map[string]interface{}) error {
 	panic("add auth addons not implemented")
+}
+
+// pivotManyManyInsertRow builds column names for a pivot INSERT. ForwardConnectionID is always the
+// document being updated; relatedID is the other endpoint (ConnectDisconnectParamBuilder).
+func pivotManyManyInsertRow(cdp *models.ConnectDisconnectParam, relatedID string) map[string]interface{} {
+	if cdp.ForwardConnectionModelType != nil && cdp.BackwardConnectionModelType != nil {
+		return map[string]interface{}{
+			fmt.Sprintf(`%s_id`, utility.SingularResourceName(cdp.ForwardConnectionModelType.Name)): cdp.ForwardConnectionID,
+			fmt.Sprintf(`%s_id`, utility.SingularResourceName(cdp.BackwardConnectionModelType.Name)):  relatedID,
+		}
+	}
+	return map[string]interface{}{
+		fmt.Sprintf(`%s_id`, utility.SingularResourceName(cdp.BackwardConnectionType.Model)): cdp.ForwardConnectionID,
+		fmt.Sprintf(`%s_id`, utility.SingularResourceName(cdp.ForwardConnectionType.Model)):  relatedID,
+	}
 }
 
 func (S *SQLDriver) ConnectBuilder(ctx context.Context, root *models.CommonSystemParams) error {
@@ -55,11 +90,11 @@ func (S *SQLDriver) ConnectBuilder(ctx context.Context, root *models.CommonSyste
 		for _, id := range cdp.ActionIDs {
 			switch cdp.ConnectionType {
 			case "forward":
-				tableName := utility.MultipleResourceName(cdp.ForwardConnectionType.Model)
+				tableName := utility.SingularResourceName(cdp.ForwardConnectionType.Model)
 				switch cdp.BackwardConnectionType.Relation {
 				case "has_one":
 					u := map[string]interface{}{
-						fmt.Sprintf(`%s_id`, cdp.BackwardConnectionType.Model): cdp.ForwardConnectionID,
+						fmt.Sprintf(`%s_id`, utility.SingularResourceName(cdp.BackwardConnectionType.Model)): cdp.ForwardConnectionID,
 					}
 					qu := S.ORM.NewUpdate().Table(tableName).Where("id = ?", id)
 					qu = applyBunHookWheresUpdate(S.Conf, ctx, root, qu)
@@ -69,12 +104,9 @@ func (S *SQLDriver) ConnectBuilder(ctx context.Context, root *models.CommonSyste
 					}
 					break
 				case "has_many":
-					tableName = fmt.Sprintf(`%s_%s`, utility.MultipleResourceName(cdp.BackwardConnectionType.Model), tableName)
-					u := map[string]interface{}{
-						fmt.Sprintf(`%s_id`, cdp.BackwardConnectionType.Model): cdp.ForwardConnectionID,
-						fmt.Sprintf(`%s_id`, cdp.ForwardConnectionType.Model):  id,
-					}
-					_, err = S.ORM.NewInsert().Table(tableName).Model(&u).Exec(ctx)
+					tableName = fmt.Sprintf(`%s_%s`, utility.SingularResourceName(cdp.BackwardConnectionType.Model), tableName)
+					row := pivotManyManyInsertRow(cdp, id)
+					_, err = S.ORM.NewInsert().Table(tableName).Model(&row).Exec(ctx)
 					if err != nil {
 						return err
 					}
@@ -82,11 +114,11 @@ func (S *SQLDriver) ConnectBuilder(ctx context.Context, root *models.CommonSyste
 				}
 				break
 			case "backward":
-				tableName := utility.MultipleResourceName(cdp.ForwardConnectionType.Model)
+				tableName := utility.SingularResourceName(cdp.ForwardConnectionType.Model)
 				switch cdp.ForwardConnectionType.Relation {
 				case "has_one":
 					u := map[string]interface{}{
-						fmt.Sprintf(`%s_id`, cdp.BackwardConnectionType.Model): cdp.ForwardConnectionID,
+						fmt.Sprintf(`%s_id`, utility.SingularResourceName(cdp.BackwardConnectionType.Model)): cdp.ForwardConnectionID,
 					}
 					qu := S.ORM.NewUpdate().Table(tableName).Where("id = ?", id)
 					qu = applyBunHookWheresUpdate(S.Conf, ctx, root, qu)
@@ -96,12 +128,9 @@ func (S *SQLDriver) ConnectBuilder(ctx context.Context, root *models.CommonSyste
 					}
 					break
 				case "has_many":
-					tableName = fmt.Sprintf(`%s_%s`, utility.MultipleResourceName(cdp.BackwardConnectionType.Model), tableName)
-					u := map[string]interface{}{
-						fmt.Sprintf(`%s_id`, cdp.BackwardConnectionType.Model): cdp.ForwardConnectionID,
-						fmt.Sprintf(`%s_id`, cdp.ForwardConnectionType.Model):  id,
-					}
-					_, err = S.ORM.NewInsert().Table(tableName).Model(&u).Exec(ctx)
+					tableName = fmt.Sprintf(`%s_%s`, utility.SingularResourceName(cdp.BackwardConnectionType.Model), tableName)
+					row := pivotManyManyInsertRow(cdp, id)
+					_, err = S.ORM.NewInsert().Table(tableName).Model(&row).Exec(ctx)
 					if err != nil {
 						return err
 					}
@@ -115,6 +144,72 @@ func (S *SQLDriver) ConnectBuilder(ctx context.Context, root *models.CommonSyste
 }
 
 func (S *SQLDriver) DisconnectBuilder(ctx context.Context, param *models.CommonSystemParams) error {
+	if param == nil || len(param.ConDisParam) == 0 {
+		return nil
+	}
+
+	var err error
+	for _, cdp := range param.ConDisParam {
+		if cdp == nil || cdp.ForwardConnectionType == nil || cdp.BackwardConnectionType == nil {
+			continue
+		}
+		for _, id := range cdp.ActionIDs {
+			switch cdp.ConnectionType {
+			case "forward":
+				tableName := utility.SingularResourceName(cdp.ForwardConnectionType.Model)
+				switch cdp.BackwardConnectionType.Relation {
+				case "has_one":
+					fkCol := fmt.Sprintf("%s_id", utility.SingularResourceName(cdp.BackwardConnectionType.Model))
+					qu := S.ORM.NewUpdate().Table(tableName).
+						Set("? = NULL", bun.Ident(fkCol)).
+						Where("id = ?", id).
+						Where("? = ?", bun.Ident(fkCol), cdp.ForwardConnectionID)
+					qu = applyBunHookWheresUpdate(S.Conf, ctx, param, qu)
+					_, err = qu.Exec(ctx)
+					if err != nil {
+						return err
+					}
+				case "has_many":
+					pivotTable := fmt.Sprintf(`%s_%s`, utility.SingularResourceName(cdp.BackwardConnectionType.Model), tableName)
+					row := pivotManyManyInsertRow(cdp, id)
+					qd := S.ORM.NewDelete().Table(pivotTable)
+					for k, v := range row {
+						qd = qd.Where("? = ?", bun.Ident(k), v)
+					}
+					_, err = qd.Exec(ctx)
+					if err != nil {
+						return err
+					}
+				}
+			case "backward":
+				tableName := utility.SingularResourceName(cdp.ForwardConnectionType.Model)
+				switch cdp.ForwardConnectionType.Relation {
+				case "has_one":
+					fkCol := fmt.Sprintf("%s_id", utility.SingularResourceName(cdp.BackwardConnectionType.Model))
+					qu := S.ORM.NewUpdate().Table(tableName).
+						Set("? = NULL", bun.Ident(fkCol)).
+						Where("id = ?", id).
+						Where("? = ?", bun.Ident(fkCol), cdp.ForwardConnectionID)
+					qu = applyBunHookWheresUpdate(S.Conf, ctx, param, qu)
+					_, err = qu.Exec(ctx)
+					if err != nil {
+						return err
+					}
+				case "has_many":
+					pivotTable := fmt.Sprintf(`%s_%s`, utility.SingularResourceName(cdp.BackwardConnectionType.Model), tableName)
+					row := pivotManyManyInsertRow(cdp, id)
+					qd := S.ORM.NewDelete().Table(pivotTable)
+					for k, v := range row {
+						qd = qd.Where("? = ?", bun.Ident(k), v)
+					}
+					_, err = qd.Exec(ctx)
+					if err != nil {
+						return err
+					}
+				}
+			}
+		}
+	}
 	return nil
 }
 
@@ -195,40 +290,11 @@ func (S *SQLDriver) GetAllPreviewDocumentsByModel(param models.CommonSystemParam
 */
 
 func (S *SQLDriver) GetSingleProjectDocumentBytes(ctx context.Context, param *models.CommonSystemParams) ([]byte, error) {
-
-	var local string
-	if val, ok := param.ResolveParams.Args["local"].(string); ok {
-		local = val
-	}
-
-	returnType := SelectBuilder("y", local, param.Model, false)
-
-	tableName := utility.SingularResourceName(param.Model.Name)
-	result := map[string]interface{}{}
-	escID := strings.ReplaceAll(param.DocumentID, "'", "''")
-	hookWhere, err := singleDocHookWhereSQL(S.Conf, ctx, param)
+	doc, err := S.GetSingleProjectDocument(ctx, param)
 	if err != nil {
 		return nil, err
 	}
-	query := fmt.Sprintf("SELECT %s FROM `%s` AS x LEFT JOIN meta as y on y.doc_id = x.id WHERE x.id = '%s'%s", strings.Join(returnType, ", "), tableName, escID, hookWhere)
-	err = S.ORM.NewRaw(query).Scan(ctx, &result)
-	if err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
-			return []byte{}, nil
-		} else {
-			return nil, err
-		}
-	}
-
-	classification := S.BuildFieldClassification(param.Model.Fields)
-
-	doc, err := CommonDocTransformation(param.Model, local, result, classification)
-	if err != nil {
-		return nil, err
-	}
-
-	doc.Type = param.Model.Name
-	return nil, nil
+	return json.Marshal(doc)
 }
 
 func (S *SQLDriver) GetSingleProjectDocument(ctx context.Context, param *models.CommonSystemParams) (*types.DefaultDocumentStructure, error) {
@@ -242,13 +308,13 @@ func (S *SQLDriver) GetSingleProjectDocument(ctx context.Context, param *models.
 
 	tableName := utility.SingularResourceName(param.Model.Name)
 	result := map[string]interface{}{}
-	escID := strings.ReplaceAll(param.DocumentID, "'", "''")
-	hookWhere, err := singleDocHookWhereSQL(S.Conf, ctx, param)
+	hookWhere, hookArgs, err := singleDocHookWhereSQLAndArgs(S.Conf, ctx, param)
 	if err != nil {
 		return nil, err
 	}
-	query := fmt.Sprintf("SELECT %s FROM `%s` AS x LEFT JOIN meta as y on y.doc_id = x.id WHERE x.id = '%s'%s", strings.Join(returnType, ", "), tableName, escID, hookWhere)
-	err = S.ORM.NewRaw(query).Scan(ctx, &result)
+	query := fmt.Sprintf("SELECT %s FROM `%s` AS x LEFT JOIN meta as y on y.doc_id = x.id WHERE x.id = ?%s", strings.Join(returnType, ", "), tableName, hookWhere)
+	args := append([]interface{}{param.DocumentID}, hookArgs...)
+	err = S.ORM.NewRaw(query, args...).Scan(ctx, &result)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return &types.DefaultDocumentStructure{}, nil
@@ -316,13 +382,13 @@ func (S *SQLDriver) GetSingleRawDocumentFromProject(ctx context.Context, param *
 
 	tableName := utility.SingularResourceName(param.Model.Name)
 	result := map[string]interface{}{}
-	escID := strings.ReplaceAll(param.DocumentID, "'", "''")
-	hookWhere, err := singleDocHookWhereSQL(S.Conf, ctx, param)
+	hookWhere, hookArgs, err := singleDocHookWhereSQLAndArgs(S.Conf, ctx, param)
 	if err != nil {
 		return nil, err
 	}
-	query := fmt.Sprintf("SELECT %s FROM `%s` AS x LEFT JOIN meta as y on y.doc_id = x.id WHERE x.id = '%s'%s", returnType, tableName, escID, hookWhere)
-	err = S.ORM.NewRaw(query).Scan(ctx, &result)
+	query := fmt.Sprintf("SELECT %s FROM `%s` AS x LEFT JOIN meta as y on y.doc_id = x.id WHERE x.id = ?%s", returnType, tableName, hookWhere)
+	args := append([]interface{}{param.DocumentID}, hookArgs...)
+	err = S.ORM.NewRaw(query, args...).Scan(ctx, &result)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return &types.DefaultDocumentStructure{}, nil
@@ -386,7 +452,7 @@ func (S *SQLDriver) GetAllRelationDocumentsOfSingleDocument(ctx context.Context,
 	// query relations and find all docs
 	arg.DocumentIDs = []string{arg.DocumentID}
 	arg.OnlyReturnCount = true
-	query, relationType, err := BuildCombinedRelationQuery(S.Conf, "", from, arg)
+	query, relArgs, relationType, err := BuildCombinedRelationQuery(S.Conf, "", from, arg)
 	if err != nil {
 		return nil, err
 	}
@@ -394,7 +460,11 @@ func (S *SQLDriver) GetAllRelationDocumentsOfSingleDocument(ctx context.Context,
 	switch *relationType {
 	case "has_many":
 		var result []map[string]interface{}
-		err = S.ORM.NewRaw(*query).Scan(ctx, &result)
+		if len(relArgs) > 0 {
+			err = S.ORM.NewRaw(query, relArgs...).Scan(ctx, &result)
+		} else {
+			err = S.ORM.NewRaw(query).Scan(ctx, &result)
+		}
 		if err != nil {
 			return nil, err
 		}
@@ -422,7 +492,11 @@ func (S *SQLDriver) GetAllRelationDocumentsOfSingleDocument(ctx context.Context,
 		return docs, nil
 	case "has_one":
 		result := map[string]interface{}{}
-		err = S.ORM.NewRaw(*query).Scan(ctx, &result)
+		if len(relArgs) > 0 {
+			err = S.ORM.NewRaw(query, relArgs...).Scan(ctx, &result)
+		} else {
+			err = S.ORM.NewRaw(query).Scan(ctx, &result)
+		}
 		if err != nil {
 			return nil, err
 		}
@@ -479,13 +553,20 @@ func (S *SQLDriver) ListMedias(ctx context.Context, projectId string, param *gra
 
 func (f *SQLDriver) CountMultiDocumentOfProject(ctx context.Context, param *models.CommonSystemParams, previewMode bool) (int, error) {
 
-	query, err := RootResolverQueryBuilder(f.Conf, param, true)
+	if err := f.maybeEnsureRelationDDL(ctx, param); err != nil {
+		return 0, err
+	}
+	query, args, err := RootResolverQueryBuilder(f.Conf, param, true)
 	if err != nil {
 		return 0, err
 	}
 
 	var result int64
-	err = f.ORM.NewRaw(query).Scan(ctx, &result)
+	if len(args) > 0 {
+		err = f.ORM.NewRaw(query, args...).Scan(ctx, &result)
+	} else {
+		err = f.ORM.NewRaw(query).Scan(ctx, &result)
+	}
 	if err != nil {
 		return 0, err
 	}
@@ -501,13 +582,20 @@ func (S *SQLDriver) QueryMultiDocumentOfProjectBytes(ctx context.Context, param 
 		local = val
 	}
 
-	query, err := RootResolverQueryBuilder(S.Conf, param, false)
+	if err := S.maybeEnsureRelationDDL(ctx, param); err != nil {
+		return nil, err
+	}
+	query, args, err := RootResolverQueryBuilder(S.Conf, param, false)
 	if err != nil {
 		return nil, err
 	}
 
 	var result []map[string]interface{}
-	err = S.ORM.NewRaw(query).Scan(ctx, &result)
+	if len(args) > 0 {
+		err = S.ORM.NewRaw(query, args...).Scan(ctx, &result)
+	} else {
+		err = S.ORM.NewRaw(query).Scan(ctx, &result)
+	}
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) { // send empty response for table
 			return []byte{}, nil
@@ -532,13 +620,20 @@ func (S *SQLDriver) QueryMultiDocumentOfProjectBytes(ctx context.Context, param 
 
 func (S *SQLDriver) QueryMultiDocumentOfProject(ctx context.Context, param *models.CommonSystemParams) ([]*types.DefaultDocumentStructure, error) {
 
-	query, err := RootResolverQueryBuilder(S.Conf, param, false)
+	if err := S.maybeEnsureRelationDDL(ctx, param); err != nil {
+		return nil, err
+	}
+	query, args, err := RootResolverQueryBuilder(S.Conf, param, false)
 	if err != nil {
 		return nil, err
 	}
 
 	var result []map[string]interface{}
-	err = S.ORM.NewRaw(query).Scan(ctx, &result)
+	if len(args) > 0 {
+		err = S.ORM.NewRaw(query, args...).Scan(ctx, &result)
+	} else {
+		err = S.ORM.NewRaw(query).Scan(ctx, &result)
+	}
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) { // send empty response for table
 			return []*types.DefaultDocumentStructure{}, nil

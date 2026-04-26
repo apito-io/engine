@@ -7,13 +7,12 @@ import (
 	q "github.com/apito-io/apitoBolt/q"
 	"github.com/apito-io/engine/models"
 	"github.com/apito-io/engine/utility"
-	"github.com/google/uuid"
 )
 
 // Webhook-related functions
 
 func (d *ProBBoltSystemDriver) AddWebhookToProject(ctx context.Context, doc *models.Webhook) (*models.Webhook, error) {
-	doc.ID = uuid.New().String()
+	doc.ID = utility.NewID()
 	doc.XKey = doc.ID
 	// Note: Webhook model doesn't have CreatedAt/UpdatedAt in the current definition
 
@@ -89,7 +88,7 @@ func (d *ProBBoltSystemDriver) SearchWebHooks(ctx context.Context, param *models
 // Audit log-related functions
 
 func (d *ProBBoltSystemDriver) SaveAuditLog(ctx context.Context, auditLog *models.AuditLogs) error {
-	auditLog.XKey = uuid.New().String()
+	auditLog.XKey = utility.NewID()
 	auditLog.ID = auditLog.XKey
 	auditLog.CreatedAt = utility.GetCurrentTime()
 
@@ -176,7 +175,7 @@ func (d *ProBBoltSystemDriver) SaveRawData(ctx context.Context, collectionName s
 
 	// Generate ID if not present
 	if _, exists := data["id"]; !exists {
-		data["id"] = uuid.New().String()
+		data["id"] = utility.NewID()
 	}
 	if _, exists := data["_key"]; !exists {
 		data["_key"] = data["id"]

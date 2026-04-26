@@ -148,7 +148,7 @@ func (s *GraphQLServer) registerHndlr(phone, email, secret string) (interface{},
 		data["email"] = email
 	}
 
-	id := uuid.New().String()
+	id := utility.NewID()
 	user = &shared.DefaultDocumentStructure{
 		Key:  id,
 		Id:   id,

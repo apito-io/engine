@@ -3,6 +3,7 @@
 package bootstrapmeta
 
 import (
+	"database/sql"
 	"errors"
 	"log"
 	"strings"
@@ -18,6 +19,15 @@ const (
 	AdminLastName      = "Admin"
 	StarterProjectID   = "apito_website"
 	StarterProjectName = "Apito Website"
+	// OSSStarterSQLiteFile is the SQLite filename (under Config.DefaultDatabaseDir) for the bundled
+	// starter project when SYSTEM_DB_ENGINE=coredb. Not read from PROJECT_DB_* env.
+	OSSStarterSQLiteFile = "apito_starter.sqlite"
+	// StarterMongoDatabaseName is the logical Mongo database for the OSS starter project when the
+	// system database is MongoDB (uses SYSTEM_DB_* connection fields).
+	StarterMongoDatabaseName = "apito_starter_apito_website"
+	// StarterPostgresDatabaseName is the physical database for the OSS starter project when the
+	// system database engine is PostgreSQL (uses SYSTEM_DB_* connection as admin; InitProjectBase creates the DB).
+	StarterPostgresDatabaseName = "apito_starter_apito_website"
 	bboltUserNotFound  = "user not found"
 )
 
@@ -50,6 +60,9 @@ func IsUserLookupMiss(err error) bool {
 		return false
 	}
 	if errors.Is(err, mongo.ErrNoDocuments) {
+		return true
+	}
+	if errors.Is(err, sql.ErrNoRows) {
 		return true
 	}
 	msg := strings.TrimSpace(err.Error())

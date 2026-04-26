@@ -8,10 +8,10 @@ import (
 	"fmt"
 	"strings"
 
+	_const "github.com/apito-io/engine/const"
 	"github.com/apito-io/engine/models"
 	"github.com/apito-io/engine/utility"
 	"github.com/apito-io/types"
-	"github.com/google/uuid"
 	_ "github.com/uptrace/bun"
 )
 
@@ -111,35 +111,24 @@ func (s *SQLDriver) GetSingleProjectDocumentRevisions(ctx context.Context, param
 }
 
 // AggregateDocOfProject aggregates the documents in the project.
+// Uses the same SQL shape as CountDocOfProject (RootResolverQueryBuilder with returnCount=true)
+// so filters, tenant QueryFilterHook, and role-based predicates match list/count behavior.
 func (s *SQLDriver) AggregateDocOfProject(ctx context.Context, param *models.CommonSystemParams) (interface{}, error) {
-	tableName := utility.SingularResourceName(param.Model.Name)
-
-	// Build basic aggregation query
-	query := fmt.Sprintf("SELECT COUNT(*) as count FROM `%s` x LEFT JOIN meta y ON y.doc_id = x.id", tableName)
-
-	// Add where conditions if provided
-	var conditions []string
-
-	if param.ResolveParams != nil {
-		if where, ok := param.ResolveParams.Args["where"].(map[string]interface{}); ok && len(where) > 0 {
-			// Add simple where conditions (this is a simplified implementation)
-			for k := range where {
-				conditions = append(conditions, fmt.Sprintf("x.%s = ?", k))
-			}
-		}
-	}
-
-	if len(conditions) > 0 {
-		query += " WHERE " + strings.Join(conditions, " AND ")
-	}
-
-	var result map[string]interface{}
-	err := s.ORM.NewRaw(query).Scan(ctx, &result)
+	query, args, err := RootResolverQueryBuilder(s.Conf, param, true)
 	if err != nil {
 		return nil, err
 	}
-
-	return result, nil
+	var n int64
+	if len(args) > 0 {
+		if err := s.ORM.NewRaw(query, args...).Scan(ctx, &n); err != nil {
+			return nil, err
+		}
+	} else {
+		if err := s.ORM.NewRaw(query).Scan(ctx, &n); err != nil {
+			return nil, err
+		}
+	}
+	return map[string]interface{}{"count": n}, nil
 }
 
 // AggregateDocOfProjectBytes aggregates the documents in the project and returns it as bytes.
@@ -256,7 +245,7 @@ func (s *SQLDriver) CreateRelation(ctx context.Context, projectId string, relati
 	tableName := fmt.Sprintf("%s_%s", utility.SingularResourceName(relation.From), utility.SingularResourceName(relation.To))
 
 	data := map[string]interface{}{
-		"id": uuid.New().String(),
+		"id": utility.NewID(),
 		utility.SingularResourceName(relation.From) + "_id": relation.FromID,
 		utility.SingularResourceName(relation.To) + "_id":   relation.ToID,
 		"created_at": relation.CreatedAt,
@@ -389,10 +378,30 @@ func (s *SQLDriver) DropModel(ctx context.Context, project *models.Project, mode
 func (s *SQLDriver) CreateIndex(ctx context.Context, param *models.CommonSystemParams, fieldName string, parent_field string) error {
 	tableName := utility.SingularResourceName(param.Model.Name)
 	indexName := fmt.Sprintf("idx_%s_%s", tableName, fieldName)
-
-	query := fmt.Sprintf("CREATE INDEX `%s` ON `%s` (`%s`)", indexName, tableName, fieldName)
-	_, err := s.ORM.NewRaw(query).Exec(ctx)
-	return err
+	if s.DriverCredential == nil {
+		return errors.New("CreateIndex: nil driver credentials")
+	}
+	var err error
+	switch s.DriverCredential.Engine {
+	case _const.PostgreSQLDriver:
+		q := fmt.Sprintf("CREATE INDEX IF NOT EXISTS %s ON %s (%s)",
+			QuotePGIdent(indexName), QuotePGIdent(tableName), QuotePGIdent(fieldName))
+		_, err = s.ORM.NewRaw(q).Exec(ctx)
+	case _const.MySQLDriver, _const.MariaDBDriver:
+		q := fmt.Sprintf("CREATE INDEX IF NOT EXISTS `%s` ON `%s` (`%s`)",
+			strings.ReplaceAll(indexName, "`", "``"),
+			strings.ReplaceAll(tableName, "`", "``"),
+			strings.ReplaceAll(fieldName, "`", "``"))
+		_, err = s.ORM.NewRaw(q).Exec(ctx)
+	default:
+		q := fmt.Sprintf("CREATE INDEX IF NOT EXISTS `%s` ON `%s` (`%s`)", indexName, tableName, fieldName)
+		_, err = s.ORM.NewRaw(q).Exec(ctx)
+	}
+	if err != nil {
+		return err
+	}
+	RunAnalyzeAfterIndexDDL(ctx, s)
+	return nil
 }
 
 // DropIndex drops an index from a model in the project.

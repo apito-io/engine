@@ -7,13 +7,12 @@ import (
 	q "github.com/apito-io/apitoBolt/q"
 	"github.com/apito-io/engine/models"
 	"github.com/apito-io/engine/utility"
-	"github.com/google/uuid"
 )
 
 // User-related functions
 
 func (d *ProBBoltSystemDriver) CreateSystemUser(ctx context.Context, user *models.SystemUser) (*models.SystemUser, error) {
-	user.XKey = uuid.New().String()
+	user.XKey = utility.NewID()
 	user.ID = user.XKey
 	user.CreatedAt = utility.GetCurrentTime()
 	user.UpdatedAt = utility.GetCurrentTime()
@@ -210,7 +209,7 @@ func (d *ProBBoltSystemDriver) AddATeamMemberToProject(ctx context.Context, req 
 
 	// Create a team membership record
 	membership := &TeamMembership{
-		ID:          uuid.New().String(),
+		ID:          utility.NewID(),
 		ProjectID:   req.ProjectID,
 		UserID:      req.UserID,
 		Role:        req.Role,
@@ -310,7 +309,7 @@ func (d *ProBBoltSystemDriver) FindUserOrganizations(ctx context.Context, userId
 }
 
 func (d *ProBBoltSystemDriver) CreateOrganization(ctx context.Context, org *models.Organization) (*models.Organization, error) {
-	org.ID = uuid.New().String()
+	org.ID = utility.NewID()
 	org.XKey = org.ID
 	// Note: Organization model doesn't have CreatedAt/UpdatedAt in the current definition
 
@@ -356,7 +355,7 @@ func (d *ProBBoltSystemDriver) GetProjectTeams(ctx context.Context, projectId st
 }
 
 func (d *ProBBoltSystemDriver) CreateTeam(ctx context.Context, team *models.Team) (*models.Team, error) {
-	team.ID = uuid.New().String()
+	team.ID = utility.NewID()
 	team.XKey = team.ID
 	// Note: Team model doesn't have CreatedAt/UpdatedAt in the current definition
 

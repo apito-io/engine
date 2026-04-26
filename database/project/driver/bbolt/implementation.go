@@ -12,7 +12,6 @@ import (
 	"github.com/apito-io/engine/models"
 	"github.com/apito-io/engine/utility"
 	"github.com/apito-io/types"
-	"github.com/google/uuid"
 )
 
 // ============================================================================
@@ -327,8 +326,7 @@ func (b *BBoltDriver) CreateTableOrCollection(ctx context.Context, param *models
 // AddModel adds a new model to the project
 func (b *BBoltDriver) AddModel(ctx context.Context, project *models.Project, model *models.ModelType) (*models.ProjectSchema, error) {
 	if model.SinglePage {
-		uid := uuid.New()
-		model.SinglePageUUID = uid.String()
+		model.SinglePageUUID = utility.NewID()
 	}
 
 	if project.Schema == nil {
@@ -699,7 +697,7 @@ func (b *BBoltDriver) ConnectBuilder(ctx context.Context, param *models.CommonSy
 			}
 
 			relation := &models.EdgeRelation{
-				Key:       uuid.New().String(),
+				Key:       utility.NewID(),
 				To:        connParam.ForwardConnectionType.Model,
 				From:      connParam.BackwardConnectionType.Model,
 				Relation:  connParam.ForwardConnectionType.Relation,
@@ -966,7 +964,7 @@ func (b *BBoltDriver) AddDocumentToProject(ctx context.Context, param *models.Co
 	collectionName := fmt.Sprintf("p_%s", param.ProjectID)
 
 	// Generate new ObjectId and set it as the Key
-	objectID := uuid.New().String()
+	objectID := utility.NewID()
 	doc.Key = objectID
 	doc.ID = objectID
 
@@ -1030,7 +1028,7 @@ func (b *BBoltDriver) UpdateDocumentOfProject(ctx context.Context, param *models
 
 		if keepRevision {
 			// Generate new UUID for the document
-			newUUID := uuid.New().String()
+			newUUID := utility.NewID()
 			doc.ID = newUUID
 			doc.Key = newUUID
 

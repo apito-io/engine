@@ -544,6 +544,19 @@ func (s *GraphQLServer) UpdateApplicationCache(ctx context.Context, projectID st
 	s.Unlock()
 }
 
+// refreshProjectCacheFromSystem reloads the project from the system DB and upserts ProjectCache.
+// Use after SystemDriver.UpdateProject when schema/models changed so queries like projectModelsInfo see fresh data.
+func (s *GraphQLServer) refreshProjectCacheFromSystem(ctx context.Context, projectID string) (*models.Project, error) {
+	fresh, err := s.SystemDriver.GetProject(ctx, projectID)
+	if err != nil {
+		return nil, err
+	}
+	if _, err := s.ProjectCache.SaveProject(ctx, fresh); err != nil {
+		return nil, err
+	}
+	return fresh, nil
+}
+
 func (s *GraphQLServer) GetFunctionProvider() ([]string, error) {
 	var providers []string
 	// Only return HashiCorp plugins
@@ -644,6 +657,32 @@ func (s *GraphQLServer) GetStorageProvider() ([]string, error) {
 }
 */
 
+// ensureExecutorProjectDriver registers the project's driver with the in-memory ConnectionManager
+// via GraphQLExecutor.Init. Project metadata may be served from Redis (or similar) while the
+// executor's connection table is process-local, so this must run on cache hits as well as
+// after a system-DB load (e.g. after deploy or eviction).
+func (s *GraphQLServer) ensureExecutorProjectDriver(ctx context.Context, project *models.Project) error {
+	if project == nil || project.Driver == nil {
+		return nil
+	}
+	if s.Cfg != nil && s.Cfg.LoadProjectCacheHook != nil {
+		s.Cfg.LoadProjectCacheHook(ctx, project)
+	}
+	project.Driver.ProjectID = project.ID
+	return s.GraphQLExecutor.Init(ctx, &models.InitParams{
+		ProjectID: project.ID,
+		ProjectDB: project.Driver,
+		SharedDB: &models.DriverCredentials{
+			ProjectID: project.ID,
+			Engine:    _const.RedisDriver,
+			Host:      s.Cfg.KVStorageEngineHost,
+			Port:      s.Cfg.KVStorageEnginePort,
+			Password:  s.Cfg.KVStorageEnginePassword,
+			Database:  s.Cfg.KVStorageEngineDatabase,
+		},
+	})
+}
+
 func (s *GraphQLServer) LoadProjectCache(ctx context.Context, projectID string) (*models.Project, error) {
 
 	// get the project details
@@ -651,6 +690,7 @@ func (s *GraphQLServer) LoadProjectCache(ctx context.Context, projectID string) 
 	if val, err := s.ProjectCache.GetProject(ctx, projectID); err == nil && val != nil && val.ID != "" {
 		_project = val
 	} else {
+		var err error
 		_project, err = s.SystemDriver.GetProject(ctx, projectID)
 		if err != nil {
 			return nil, err
@@ -661,45 +701,10 @@ func (s *GraphQLServer) LoadProjectCache(ctx context.Context, projectID string) 
 		if err != nil {
 			return nil, err
 		}
+	}
 
-		if s.Cfg.LoadProjectCacheHook != nil {
-			s.Cfg.LoadProjectCacheHook(ctx, _project)
-		}
-
-		// set the project driver and build param
-		_project.Driver.ProjectID = _project.ID
-		err = s.GraphQLExecutor.Init(ctx, &models.InitParams{
-			ProjectID: _project.ID,
-			ProjectDB: _project.Driver,
-			SharedDB: &models.DriverCredentials{
-				ProjectID: _project.ID,
-				Engine:    _const.RedisDriver,
-				Host:      s.Cfg.KVStorageEngineHost,
-				Port:      s.Cfg.KVStorageEnginePort,
-				Password:  s.Cfg.KVStorageEnginePassword,
-				Database:  s.Cfg.KVStorageEngineDatabase,
-			},
-		})
-		if err != nil {
-			return nil, err
-		}
-
-		// load the default storage plugin in any
-		/* for _, plugin := range _project.Plugins {
-			if plugin.Type == protobuff.PluginType_Storage && plugin.Enable {
-				//if plugin.Enable {
-				// load the storage plugin
-				err = s.RegisterMediaStorageRoutes(ctx, plugin)
-				if err != nil {
-					return nil, err
-				}
-			}
-		} */
-
-		/*err = s.GenerateGraphQLSchema(_project)
-		if err != nil {
-			return nil, err
-		}*/
+	if err := s.ensureExecutorProjectDriver(ctx, _project); err != nil {
+		return nil, err
 	}
 
 	if _project != nil {
@@ -891,8 +896,21 @@ func (s *GraphQLServer) BuildSystemParam(i echo.Context, project *models.Project
 		} else if param.Role.ID == "team" {
 			param.Role.SystemGenerated = true
 			param.Role.IsAdmin = false
+		} else if param.Role.ID == "owner" {
+			// SQL CreateProject historically wrote user_projects.role = "owner" while project.roles only
+			// defines "admin" (Arango/Mongo use "admin"). Treat owner like admin when that template exists.
+			if val, ok := project.Roles["admin"]; ok && val != nil {
+				merged := *val
+				if merged.ID == "" {
+					merged.ID = "owner"
+				}
+				param.Role = &merged
+			} else {
+				param.Role.IsAdmin = false
+				param.Role.SystemGenerated = false
+			}
 		} else {
-			return nil, errors.New("this Role does not exits")
+			return nil, errors.New("this Role does not exist")
 		}
 	}
 	return param, nil

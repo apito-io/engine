@@ -15,7 +15,7 @@ type KeyValue struct {
 
 type ModelType struct {
 	ProjectID       string            `bun:"type:uuid,pk" json:"project_id,omitempty" firestore:"project_id,omitempty" bson:"project_id,omitempty"`
-	Name            string            `json:"name,omitempty" firestore:"name,omitempty" bson:"name,omitempty"`
+	Name            string            `bun:"type:text,pk" json:"name,omitempty" firestore:"name,omitempty" bson:"name,omitempty"`
 	Description     string            `json:"description,omitempty" bson:"description,omitempty"`
 	Fields          []*FieldInfo      `json:"fields,omitempty" firestore:"fields,omitempty" bson:"fields,omitempty"`
 	Connections     []*ConnectionType `json:"connections,omitempty" firestore:"connections,omitempty" bson:"connections,omitempty"`

@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"sync"
 
-	"github.com/google/uuid"
+	"github.com/apito-io/engine/utility"
 	amqp "github.com/rabbitmq/amqp091-go"
 )
 
@@ -22,13 +22,13 @@ type subscription struct {
 }
 
 type subscriber struct {
-	id       uuid.UUID
+	id       string
 	topic    string
 	callback func(data interface{})
 }
 
 type unsubMessage struct {
-	id    uuid.UUID
+	id    string
 	topic string
 }
 
@@ -89,7 +89,7 @@ func (rb *rabbitBus) Notify(topic string, data interface{}) error {
 }
 
 func (rb *rabbitBus) Subscribe(topic string, cb func(data interface{}), options *QueueOptions) (func(), error) {
-	id := uuid.New()
+	id := utility.NewID()
 
 	ch, err := rb.connection.Channel()
 	if err != nil {

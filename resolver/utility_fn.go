@@ -14,7 +14,6 @@ import (
 	"github.com/apito-io/engine/models"
 	"github.com/apito-io/engine/utility"
 	"github.com/getsentry/sentry-go"
-	"github.com/google/uuid"
 	"golang.org/x/crypto/bcrypt"
 )
 
@@ -106,7 +105,7 @@ func (s *GraphQLServer) HandlePayloadFormattingOld(ctx context.Context, param *m
 					}
 				}
 			} else {
-				id := uuid.New().String()
+				id := utility.NewID()
 				p["_id"] = id
 				modifiedPayloads[f.Identifier] = append(modifiedPayloads[f.Identifier].([]interface{}), p)
 			}
@@ -129,7 +128,7 @@ func (s *GraphQLServer) HandlePayloadFormattingOld(ctx context.Context, param *m
 }
 
 func (s *GraphQLServer) runWebHook(event string, hook *models.Webhook, payload interface{}) error {
-	id := uuid.New().String()
+	id := utility.NewID()
 	hookPost := models.WebhookPost{
 		Id:      id,
 		Event:   event,
@@ -196,7 +195,7 @@ func (s *GraphQLServer) triggerFunctionOLD(f *models.ApitoFunction, event string
 			fmt.Println(errors.New("AWS Credentials are not Set"))
 		}
 
-		id := uuid.New().String()
+		id := utility.NewID()
 		hookPost := models.WebhookPost{
 			Id:      id,
 			Event:   event,

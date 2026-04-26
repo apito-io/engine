@@ -1,6 +1,9 @@
 package models
 
-import "github.com/apito-io/types/protobuff"
+import (
+	"github.com/apito-io/types/protobuff"
+	"github.com/uptrace/bun"
+)
 
 type MetaField struct {
 	SourceID string `json:"source_id,omitempty" firestore:"source_id,omitempty" bson:"source_id,omitempty"`
@@ -54,31 +57,37 @@ type SystemUser struct {
 
 	IsPaymentDue bool `json:"is_payment_due,omitempty" firestore:"is_payment_due,omitempty" bson:"is_payment_due,omitempty"`
 
-	SyncTokens []*SyncToken `bun:"rel:has-many" json:"sync_tokens,omitempty" firestore:"sync_tokens,omitempty" bson:"sync_tokens,omitempty"`
+	// Stored as JSON in SQL (nested document); not a separate sync_token table (avoids invalid has-many FK).
+	SyncTokens []*SyncToken `bun:"type:jsonb,nullzero" json:"sync_tokens,omitempty" firestore:"sync_tokens,omitempty" bson:"sync_tokens,omitempty"`
 
-	DefaultTeam         *Team         `bun:"rel:belongs-to,join:default_team_id=team_id" json:"default_team,omitempty" firestore:"default_team,omitempty" bson:"default_team,omitempty"`
-	DefaultOrganization *Organization `bun:"rel:belongs-to,join:default_org_id=org_id" json:"default_organization,omitempty" firestore:"default_organization,omitempty" bson:"default_organization,omitempty"`
+	DefaultTeamID         string        `bun:"default_team_id,type:uuid" json:"default_team_id,omitempty" firestore:"default_team_id,omitempty" bson:"default_team_id,omitempty"`
+	DefaultOrganizationID string        `bun:"default_org_id,type:uuid" json:"default_org_id,omitempty" firestore:"default_org_id,omitempty" bson:"default_org_id,omitempty"`
+	DefaultTeam           *Team         `bun:"rel:belongs-to,join:default_team_id=id" json:"default_team,omitempty" firestore:"default_team,omitempty" bson:"default_team,omitempty"`
+	DefaultOrganization   *Organization `bun:"rel:belongs-to,join:default_org_id=id" json:"default_organization,omitempty" firestore:"default_organization,omitempty" bson:"default_organization,omitempty"`
 
 	Projects     []*Project      `bun:"m2m:user_projects,join:User=Project" json:"projects,omitempty" firestore:"projects,omitempty" bson:"projects,omitempty"`
-	Teams        []*Team         `bun:"m2m:user_to_teams,join:SystemUser=Team" json:"teams,omitempty" firestore:"teams,omitempty" bson:"teams,omitempty"`
+	Teams        []*Team         `bun:"m2m:user_teams,join:User=Team" json:"teams,omitempty" firestore:"teams,omitempty" bson:"teams,omitempty"`
 	Organization []*Organization `bun:"rel:has-many,join:id=user_id" json:"organization,omitempty" firestore:"organization,omitempty" bson:"organization,omitempty"`
 
 	IsActive bool `json:"is_active,omitempty" firestore:"is_active,omitempty" bson:"is_active,omitempty"`
 }
 
 type ProjectSettings struct {
+	bun.BaseModel `bun:"table:project_settings"`
+
 	ProjectID             string   `bun:"type:uuid,pk" json:"project_id,omitempty" firestore:"project_id,omitempty" bson:"_id,omitempty"`
-	Locals                []string `json:"locals,omitempty" firestore:"locals,omitempty" bson:"locals,omitempty"`
-	SystemGraphqlHooks    bool     `json:"system_graphql_hooks,omitempty" firestore:"system_graphql_hooks,omitempty" bson:"system_graphql_hooks,omitempty"`
-	EnableRevisionHistory bool     `json:"enable_revision_history,omitempty" firestore:"revision_history,omitempty" bson:"enable_revision_history,omitempty"`
+	Locals                []string `bun:"type:json,nullzero" json:"locals,omitempty" firestore:"locals,omitempty" bson:"locals,omitempty"`
+	SystemGraphqlHooks    bool     `bun:",notnull" json:"system_graphql_hooks,omitempty" firestore:"system_graphql_hooks,omitempty" bson:"system_graphql_hooks,omitempty"`
+	EnableRevisionHistory bool     `bun:",notnull" json:"enable_revision_history,omitempty" firestore:"revision_history,omitempty" bson:"enable_revision_history,omitempty"`
 
-	DefaultStoragePlugin  string `json:"default_storage_plugin,omitempty" firestore:"default_storage_plugin,omitempty" bson:"default_storage_plugin,omitempty"`
-	DefaultFunctionPlugin string `json:"default_function_plugin,omitempty" firestore:"default_function_plugin,omitempty" bson:"default_function_plugin,omitempty"`
+	DefaultStoragePlugin  string `bun:",nullzero" json:"default_storage_plugin,omitempty" firestore:"default_storage_plugin,omitempty" bson:"default_storage_plugin,omitempty"`
+	DefaultFunctionPlugin string `bun:",nullzero" json:"default_function_plugin,omitempty" firestore:"default_function_plugin,omitempty" bson:"default_function_plugin,omitempty"`
 
-	DefaultLocale string `json:"default_locale,omitempty" firestore:"default_locale,omitempty" bson:"default_locale,omitempty"`
+	DefaultLocale string `bun:",nullzero" json:"default_locale,omitempty" firestore:"default_locale,omitempty" bson:"default_locale,omitempty"`
 }
 
 type SavedPluginDetails struct {
+	ProjectID      string                         `bun:"type:uuid,notnull" json:"project_id,omitempty" firestore:"project_id,omitempty" bson:"project_id,omitempty"`
 	ID             string                         `json:"id,omitempty" firestore:"id,omitempty" bson:"id,omitempty"`
 	EnvVars        []*protobuff.EnvVariable       `json:"env_vars,omitempty" firestore:"env_vars,omitempty" bson:"env_vars,omitempty"`
 	ActivateStatus protobuff.PluginActivateStatus `json:"activate_status,omitempty" firestore:"activate_status,omitempty" bson:"activate_status,omitempty"`

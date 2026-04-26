@@ -9,9 +9,28 @@ import (
 	"github.com/apito-io/engine/models"
 	"github.com/apito-io/engine/utility"
 	"github.com/apito-io/types"
-	"github.com/google/uuid"
 	"github.com/tailor-platform/graphql"
 )
+
+// roleBypassesMutationACL is true for project admin role id or any role with IsAdmin (e.g. owner merged from admin template in BuildSystemParam).
+func roleBypassesMutationACL(r *models.Role) bool {
+	return r != nil && (r.ID == "admin" || r.IsAdmin)
+}
+
+// mutationPermissionForRole returns non-nil API CRUD scopes for the model. LookupAPIPermission alone can miss
+// (nil api_permissions on role); BuildCRUDPermissions supplies the same defaults as the rest of the stack.
+func mutationPermissionForRole(role *models.Role, modelName string) (*models.APIPermission, error) {
+	if role == nil {
+		return nil, errors.New("role is required")
+	}
+	if roleBypassesMutationACL(role) {
+		return &models.APIPermission{Read: "all", Create: "all", Update: "all", Delete: "all"}, nil
+	}
+	if val, ok := utility.LookupAPIPermission(role, modelName); ok && val != nil {
+		return val, nil
+	}
+	return utility.BuildCRUDPermissions(modelName, role)
+}
 
 func (s *GraphQLServer) updateAndConnectDocument(ctx context.Context, cache *models.ApplicationCache, param *models.CommonSystemParams, hooks []*models.Webhook, userInputPayload map[string]interface{}, permission *models.APIPermission, connections, disconnects map[string]interface{}, deltaUpdate bool) (*types.DefaultDocumentStructure, error) {
 
@@ -30,7 +49,10 @@ func (s *GraphQLServer) updateAndConnectDocument(ctx context.Context, cache *mod
 	}
 	doc := raw.(*types.DefaultDocumentStructure)
 
-	if param.Role.ID != "admin" {
+	if !roleBypassesMutationACL(param.Role) {
+		if permission == nil {
+			return nil, errors.New("internal error: mutation permission is not resolved")
+		}
 		switch permission.Update {
 		case "none":
 			return nil, errors.New("Update is not permitted")
@@ -154,8 +176,7 @@ func (s *GraphQLServer) createAndConnectDocument(ctx context.Context, cache *mod
 		return nil, errors.New("payload is required")
 	}
 
-	uid := uuid.New()
-	_id := uid.String()
+	_id := utility.NewID()
 	doc := &types.DefaultDocumentStructure{
 		Key:      _id,
 		ID:       _id,
@@ -252,7 +273,7 @@ func (s *GraphQLServer) MutationResolverFn(p graphql.ResolveParams) (interface{}
 
 	param := s.NewParam(cache.Param)
 
-	if param.Role.ID == "" {
+	if param.Role == nil || param.Role.ID == "" {
 		return "", errors.New("bad request. Reload the Page again")
 	}
 
@@ -273,13 +294,9 @@ func (s *GraphQLServer) MutationResolverFn(p graphql.ResolveParams) (interface{}
 	param.ResolveParams = &p
 
 	// p == "none" || p == "all" || p == "own" || p == "auth"
-	var permission *models.APIPermission
-
-	// filter based on roles
-	if param.Role.ID != "admin" {
-		if val, ok := utility.LookupAPIPermission(param.Role, modelType.Name); ok {
-			permission = val
-		}
+	permission, err := mutationPermissionForRole(param.Role, modelType.Name)
+	if err != nil {
+		return nil, err
 	}
 
 	var hooks []*models.Webhook
@@ -346,7 +363,7 @@ func (s *GraphQLServer) MutationResolverFn(p graphql.ResolveParams) (interface{}
 		return responses, nil
 	case "create":
 
-		if param.Role.ID != "admin" {
+		if !roleBypassesMutationACL(param.Role) {
 			switch permission.Create {
 			case "none":
 				return nil, errors.New("creation is not permitted")
@@ -442,7 +459,10 @@ func (s *GraphQLServer) MutationResolverFn(p graphql.ResolveParams) (interface{}
 				return nil, err
 			}
 
-			if param.Role.ID != "admin" {
+			if !roleBypassesMutationACL(param.Role) {
+				if permission == nil {
+					return nil, errors.New("internal error: mutation permission is not resolved")
+				}
 				switch permission.Delete {
 				case "none":
 					return nil, errors.New("Update is not permitted")

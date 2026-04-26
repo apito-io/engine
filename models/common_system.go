@@ -147,6 +147,10 @@ type CommonSystemParams struct {
 	// RuntimeConfig is the engine Config pointer for optional hooks (QueryFilterHook, DocumentPreInsertHook)
 	// used by drivers and AQL builders. Set on each request from GraphQLServer (see NewParam / GetApplicationCache).
 	RuntimeConfig *Config `json:"-"`
+
+	// ProjectSchemaModels is the full project model list (from cache) for SQL drivers that need to reconcile
+	// has_many pivot tables against schema (e.g. connection filters). Not serialized.
+	ProjectSchemaModels []*ModelType `json:"-"`
 }
 
 type DocumentRevisionHistory struct {

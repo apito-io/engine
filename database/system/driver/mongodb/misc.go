@@ -6,7 +6,7 @@ import (
 	"time"
 
 	"github.com/apito-io/engine/models"
-	"github.com/google/uuid"
+	"github.com/apito-io/engine/utility"
 	"go.mongodb.org/mongo-driver/v2/bson"
 )
 
@@ -127,7 +127,7 @@ func (m *SystemMongoDriver) FindUserOrganizations(ctx context.Context, userId st
 // CreateOrganization creates a new organization using MongoDB
 func (m *SystemMongoDriver) CreateOrganization(ctx context.Context, org *models.Organization) (*models.Organization, error) {
 	if org.ID == "" {
-		org.ID = uuid.New().String()
+		org.ID = utility.NewID()
 	}
 
 	collection := m.Database.Collection("organizations")
@@ -258,7 +258,7 @@ func (m *SystemMongoDriver) FindUserTeams(ctx context.Context, userId string) ([
 // CreateTeam creates a new team using MongoDB
 func (m *SystemMongoDriver) CreateTeam(ctx context.Context, team *models.Team) (*models.Team, error) {
 	if team.ID == "" {
-		team.ID = uuid.New().String()
+		team.ID = utility.NewID()
 	}
 
 	teamsCollection := m.Database.Collection("teams")

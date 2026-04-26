@@ -21,7 +21,7 @@ func TestMergeQueryFilterHookSQL(t *testing.T) {
 	}
 	param := &models.CommonSystemParams{}
 	filters := map[string][]string{"AND": {}}
-	err := mergeQueryFilterHookSQL(cfg, param, filters, "x")
+	err := mergeQueryFilterHookSQL(cfg, param, filters, "x", nil)
 	require.NoError(t, err)
 	require.Len(t, filters["AND"], 1)
 	require.Contains(t, filters["AND"][0], "status")

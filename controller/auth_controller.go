@@ -352,15 +352,6 @@ func (a *AuthController) ProjectSwitchV2(c echo.Context) error {
 		})
 	}
 
-	if _project.Driver != nil && _project.Driver.Host == "" {
-		// inject the default config
-		_project.Driver.Host = a.Cfg.DefaultProjectDBHost
-		_project.Driver.Port = a.Cfg.DefaultProjectDBPort
-		_project.Driver.User = a.Cfg.DefaultProjectDBUser
-		_project.Driver.Password = a.Cfg.DefaultProjectDBPassword
-		_project.Driver.Database = a.Cfg.DefaultProjectDBName
-	}
-
 	// Register enriched credentials on the process-wide connection manager (same as project create).
 	if _project.Driver != nil && a.graphQLServer != nil && a.graphQLServer.GraphQLExecutor != nil {
 		d := *_project.Driver
@@ -637,7 +628,7 @@ func (a *AuthController) LoginV2(c echo.Context) error {
 		})
 	}
 
-	//state := uuid.New().String()
+	//state := utility.NewID()
 	//http.SetCookie(c.Writer, utility.SetTokenCookie(a.Cfg, "state", state, true))
 
 	http.SetCookie(c.Response(), utility.SetTokenCookie(a.Cfg, "userToken", tokens.IDToken, false, false))

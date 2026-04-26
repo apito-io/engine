@@ -1,5 +1,8 @@
 package models
 
+// LegacySQLiteTemplateFilename is the historical single-file SQLite template name used before
+// GENERAL_SQLITE_FILE_PER_PROJECT (sentinel when deciding to assign a per-project file).
+const LegacySQLiteTemplateFilename = "apito_project.db"
 
 type ValidIdentifier struct {
 	Label string
@@ -9,9 +12,9 @@ type ValidIdentifier struct {
 
 type AuditLogs struct {
 	XKey      string `json:"_key,omitempty" firestore:"_key,omitempty" bson:"_key,omitempty"`
-	ID        string `json:"id,omitempty" firestore:"id,omitempty" bson:"_id,omitempty"`
-	UserID    string `json:"user_id,omitempty" firestore:"user_id,omitempty" bson:"user_id,omitempty"`
-	ProjectID string `json:"project_id,omitempty" firestore:"project_id,omitempty" bson:"project_id,omitempty"`
+	ID        string `bun:"type:uuid,pk" json:"id,omitempty" firestore:"id,omitempty" bson:"_id,omitempty"`
+	UserID    string `bun:"user_id,type:uuid,nullzero" json:"user_id,omitempty" firestore:"user_id,omitempty" bson:"user_id,omitempty"`
+	ProjectID string `bun:"project_id,type:uuid,nullzero" json:"project_id,omitempty" firestore:"project_id,omitempty" bson:"project_id,omitempty"`
 
 	RequestPayload  string `json:"request_payload,omitempty" firestore:"request_payload,omitempty" bson:"request_payload,omitempty"`
 	RequestPath     string `json:"request_path,omitempty" firestore:"request_path,omitempty" bson:"request_path,omitempty"`
@@ -43,6 +46,9 @@ type DriverCredentials struct {
 	DatabaseDir string `json:"database_dir,omitempty" bson:"database_dir,omitempty"`
 	// for sqlite and other file based databases
 	File string `json:"file,omitempty" bson:"file,omitempty"`
+	// Schema is the PostgreSQL schema name for per-project isolation when GENERAL_POSTGRES_ISOLATION=schema
+	// (shared database from Database field, separate schema per project). Ignored for non-Postgres engines.
+	Schema string `json:"schema,omitempty" bson:"schema,omitempty"`
 	// SSLMode for PostgreSQL when the server requires TLS. Empty defaults to disable in DSN builder.
 	SSLMode string `json:"ssl_mode,omitempty" bson:"ssl_mode,omitempty"`
 }
@@ -93,11 +99,11 @@ type SystemMessage struct {
 }
 
 type Webhook struct {
-	ID              string   `json:"id,omitempty" firestore:"id,omitempty" bson:"_id,omitempty"`
+	ID              string   `bun:"id,type:uuid,pk" json:"id,omitempty" firestore:"id,omitempty" bson:"_id,omitempty"`
 	XKey            string   `json:"_key,omitempty" firestore:"_key,omitempty" bson:"_key,omitempty"`
 	Type            string   `json:"type,omitempty" firestore:"type,omitempty" bson:"type,omitempty"`
 	Model           string   `json:"model,omitempty" firestore:"model,omitempty" bson:"model,omitempty"`
-	ProjectID       string   `json:"project_id,omitempty" firestore:"project_id,omitempty" bson:"project_id,omitempty"` //
+	ProjectID       string   `bun:"project_id,type:uuid,pk" json:"project_id,omitempty" firestore:"project_id,omitempty" bson:"project_id,omitempty"` //
 	Name            string   `json:"name,omitempty" firestore:"name,omitempty" bson:"name,omitempty"`
 	Events          []string `json:"events,omitempty" firestore:"events,omitempty" bson:"events,omitempty"`
 	URL             string   `json:"url,omitempty" firestore:"url,omitempty" bson:"url,omitempty"`

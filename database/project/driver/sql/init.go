@@ -14,7 +14,6 @@ import (
 	"github.com/apito-io/engine/models"
 	"github.com/apito-io/engine/utility"
 	_ "github.com/go-sql-driver/mysql"
-	_ "github.com/tursodatabase/libsql-client-go/libsql"
 	"github.com/uptrace/bun"
 	"github.com/uptrace/bun/dialect/mysqldialect"
 	"github.com/uptrace/bun/dialect/pgdialect"
@@ -46,11 +45,16 @@ func GetSQLDriver(cfg *models.Config, driverCredentials *models.DriverCredential
 			return nil, fmt.Errorf("failed to expand database path %s: %v", dbPath, err)
 		}
 
-		sqldb, err := sql.Open(sqliteshim.ShimName, fmt.Sprintf("file:%s?cache=shared&mode=rwc", dbPath))
+		dsn := fmt.Sprintf("file:%s?cache=shared&mode=rwc", dbPath)
+		sqldb, err := sql.Open(sqliteshim.ShimName, dsn)
 		if err != nil {
 			return nil, err
 		}
 		bunDB = bun.NewDB(sqldb, sqlitedialect.New())
+		if err := ApplySQLiteConnectionPragmas(context.Background(), bunDB, driverCredentials.Engine, dsn); err != nil {
+			_ = bunDB.Close()
+			return nil, err
+		}
 
 	case _const.MySQLDriver, _const.MariaDBDriver:
 		dsn := fmt.Sprintf("%s:%s@tcp(%s:%s)/%s?charset=utf8mb4&parseTime=True&loc=Local",
@@ -67,17 +71,6 @@ func GetSQLDriver(cfg *models.Config, driverCredentials *models.DriverCredential
 		}
 		sqlDB = sql.OpenDB(pgdriver.NewConnector(pgdriver.WithDSN(dsn)))
 		bunDB = bun.NewDB(sqlDB, pgdialect.New())
-
-	case "libsql":
-		dsn, err := buildLibSQLDSN(driverCredentials)
-		if err != nil {
-			return nil, err
-		}
-		sqldb, err := sql.Open("libsql", dsn)
-		if err != nil {
-			return nil, err
-		}
-		bunDB = bun.NewDB(sqldb, sqlitedialect.New())
 
 	default:
 		return nil, fmt.Errorf("unsupported database engine: %s", driverCredentials.Engine)
@@ -112,41 +105,10 @@ func BuildPostgresDSN(c *models.DriverCredentials) (string, error) {
 	}
 	q := u.Query()
 	q.Set("sslmode", ssl)
-	u.RawQuery = q.Encode()
-	return u.String(), nil
-}
-
-// buildLibSQLDSN supports full URLs in Database (libsql://, https://, file:) or Turso host form:
-// Database = db name, Host = organization slug, Password = database auth token.
-func buildLibSQLDSN(c *models.DriverCredentials) (string, error) {
-	if c.Database != "" && (strings.HasPrefix(c.Database, "libsql://") ||
-		strings.HasPrefix(c.Database, "http://") ||
-		strings.HasPrefix(c.Database, "https://") ||
-		strings.HasPrefix(c.Database, "file:")) {
-		if strings.TrimSpace(c.Password) == "" {
-			return c.Database, nil
-		}
-		u, err := url.Parse(c.Database)
-		if err != nil {
-			return c.Database, nil
-		}
-		q := u.Query()
-		if q.Get("authToken") == "" {
-			q.Set("authToken", c.Password)
-			u.RawQuery = q.Encode()
-		}
-		return u.String(), nil
+	if sch := strings.TrimSpace(c.Schema); sch != "" {
+		// Per-project schema isolation (GENERAL_POSTGRES_ISOLATION=schema): pin search_path for pooled connections.
+		q.Set("options", "-csearch_path="+sch+",public")
 	}
-	token := c.Password
-	if c.Host == "" || c.Database == "" {
-		return "", fmt.Errorf("libsql: Host (organization) and Database (db name) are required when not using a full URL")
-	}
-	u := url.URL{
-		Scheme: "libsql",
-		Host:   fmt.Sprintf("%s-%s.turso.io", c.Database, c.Host),
-	}
-	q := u.Query()
-	q.Set("authToken", token)
 	u.RawQuery = q.Encode()
 	return u.String(), nil
 }

@@ -8,7 +8,6 @@ import (
 	"github.com/apito-io/engine/database/system/bootstrapmeta"
 	"github.com/apito-io/engine/models"
 	"github.com/apito-io/engine/utility"
-	"github.com/google/uuid"
 )
 
 // EnsureSystemBootstrap creates default admin, then default team/org/project via junction collections.
@@ -33,13 +32,13 @@ func (d *ProBBoltSystemDriver) ensureBootstrapAdmin(ctx context.Context) error {
 		return fmt.Errorf("bootstrap: hash password: %w", err)
 	}
 
-	id := uuid.New().String()
+	id := utility.NewID()
 	now := utility.GetCurrentTime()
 	user := &models.SystemUser{
 		XKey:                      id,
 		ID:                        id,
 		Email:                     bootstrapmeta.AdminEmail,
-		Username:                  uuid.New().String(),
+		Username:                  utility.NewID(),
 		FirstName:                 bootstrapmeta.AdminFirstName,
 		LastName:                  bootstrapmeta.AdminLastName,
 		Secret:                    string(hash),

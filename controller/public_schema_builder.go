@@ -20,14 +20,6 @@ func remove(s []*models.ModelType, i int) []*models.ModelType {
 	return s[:len(s)-1]
 }
 
-type ModelWithFilter struct {
-	Model             *models.ModelType
-	Filter            *models.FilteredModel
-	HasMetaQuery      bool
-	IsDataloaderModel bool
-	KnownAs           string
-}
-
 func (g *GraphCtrl) publicSchemaBuilder(ctx context.Context, cache *models.ApplicationCache) (*models.ApplicationCache, error) {
 	if err := checkCtxDone(ctx); err != nil {
 		return nil, err
@@ -70,6 +62,14 @@ func (g *GraphCtrl) publicSchemaBuilder(ctx context.Context, cache *models.Appli
 		return nil, err
 	}
 
+	if g.cfg != nil && g.cfg.AdjustPublicSchemaForRequestHook != nil {
+		if err := g.cfg.AdjustPublicSchemaForRequestHook(ctx, cache, project, permissions, filteredModels); err != nil {
+			buildErr = err
+			recordSchemaBuildOutcome(ctx, g.cfg, "error")
+			return nil, err
+		}
+	}
+
 	if len(filteredFunctions) == 0 && len(filteredModels) == 0 {
 		buildErr = errors.New("query not found in schema. please re-check")
 		recordSchemaBuildOutcome(ctx, g.cfg, "error")
@@ -88,9 +88,17 @@ func (g *GraphCtrl) publicSchemaBuilder(ctx context.Context, cache *models.Appli
 	allLoaders := make(map[string]*dataloader.Loader)
 	allLoaders["system_user_loader"] = dataloader.NewBatchedLoader(g.gqlServer.SystemUserMetaLoader)
 
-	preConnKey := fingerprintPreConnection(project, fingerprintRoleForPreConnectionCache(role, roleAgnostic), cache.IncomingRequest)
+	requestShapeFP := ""
+	if g.cfg != nil && g.cfg.AdjustPublicSchemaForRequestHook != nil {
+		requestShapeFP = fingerprintPublicSchemaRequestShape(permissions, filteredModels)
+	}
+	preConnKey := fingerprintPreConnection(project, fingerprintRoleForPreConnectionCache(role, roleAgnostic), cache.IncomingRequest, requestShapeFP)
 
-	localEnum := enums.BuildLocalEnum(project.Settings.Locals)
+	var localeList []string
+	if project.Settings != nil {
+		localeList = project.Settings.Locals
+	}
+	localEnum := enums.BuildLocalEnum(localeList)
 	metaObject := objects.BuildMetaObject(ctx, project.ID)
 
 	st := &publicSchemaBuildState{

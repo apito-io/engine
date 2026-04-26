@@ -59,6 +59,7 @@ func (s *GraphQLServer) MultiResourceResolverFn(p graphql.ResolveParams) (interf
 
 	param.Model = modelType
 	param.ResolveParams = &p
+	param.ProjectSchemaModels = cache.Project.Schema.Models
 
 	param.QuerySelectionSets = selectionSet
 

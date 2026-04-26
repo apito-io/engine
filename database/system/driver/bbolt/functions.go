@@ -10,7 +10,6 @@ import (
 	"github.com/apito-io/engine/models"
 	"github.com/apito-io/engine/utility"
 	"github.com/apito-io/types"
-	"github.com/google/uuid"
 )
 
 // Project-related functions
@@ -23,7 +22,7 @@ func (d *ProBBoltSystemDriver) CreateProject(ctx context.Context, userId string,
 
 	// Generate ID if not set
 	if project.ID == "" {
-		project.ID = uuid.New().String()
+		project.ID = utility.NewID()
 	}
 	project.XKey = project.ID
 

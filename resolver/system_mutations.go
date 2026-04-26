@@ -19,7 +19,6 @@ import (
 	"github.com/apito-io/engine/utility"
 	"github.com/apito-io/types"
 	"github.com/apito-io/types/protobuff"
-	"github.com/google/uuid"
 	"github.com/iancoleman/strcase"
 	"github.com/labstack/echo/v4"
 	"github.com/tailor-platform/graphql"
@@ -234,8 +233,7 @@ func (s *GraphQLServer) CreateWebHookResolverFn(p graphql.ResolveParams) (interf
 
 	cache.Param.Model = modelType
 
-	id := uuid.New()
-	uid := id.String()
+	uid := utility.NewID()
 	hook := &models.Webhook{
 		ID:        uid,
 		XKey:      uid,
@@ -935,6 +933,7 @@ func (s *GraphQLServer) UpsertPluginResolverFn(p graphql.ResolveParams) (interfa
 		}
 		if plugin, exists := _hashiCorpPlugins[id]; exists {
 			_pluginDetails = &models.SavedPluginDetails{
+				ProjectID:      project.ID,
 				ID:             id,
 				EnvVars:        plugin.EnvVars,
 				ActivateStatus: plugin.ActivateStatus,
@@ -1107,8 +1106,11 @@ func (s *GraphQLServer) AddModelToProjectResolverFn(p graphql.ResolveParams) (in
 	}
 
 	// temporary fix for sql driver
-	if cache.Project.Driver.Database == "sqlite" || cache.Project.Driver.Database == "mysql" || cache.Project.Driver.Database == "postgres" {
-		param.ProjectID = cache.Project.Driver.Database
+	if cache.Project.Driver != nil {
+		dbKind := strings.ToLower(strings.TrimSpace(cache.Project.Driver.Database))
+		if dbKind == "sqlite" || dbKind == "mysql" || dbKind == "postgres" {
+			param.ProjectID = cache.Project.Driver.Database
+		}
 	}
 
 	driver, err := s.GraphQLExecutor.GetProjectDriver(cache.Ctx)
@@ -1148,7 +1150,14 @@ func (s *GraphQLServer) AddModelToProjectResolverFn(p graphql.ResolveParams) (in
 		return nil, err
 	}
 
-	return project.Schema.Models, nil
+	fresh, err := s.refreshProjectCacheFromSystem(cache.Ctx, project.ID)
+	if err != nil {
+		return nil, err
+	}
+	if fresh.Schema == nil {
+		return []*models.ModelType{}, nil
+	}
+	return fresh.Schema.Models, nil
 }
 
 func (s *GraphQLServer) RunModelMigrationsResolverFn(p graphql.ResolveParams) (interface{}, error) {
@@ -1331,6 +1340,10 @@ func (s *GraphQLServer) updateModel(ctx context.Context, project *models.Project
 		return nil, err
 	}
 
+	if _, err := s.refreshProjectCacheFromSystem(ctx, project.ID); err != nil {
+		return nil, err
+	}
+
 	return updatedModel, nil
 }
 
@@ -1385,9 +1398,8 @@ func (s *GraphQLServer) duplicateModel(ctx context.Context, project *models.Proj
 				HasConnections:  modelToDuplicate.HasConnections,
 			}
 			if modelToDuplicate.SinglePageUUID != "" { // assign new id
-				uid := uuid.New()
 				duplicatedModel.SinglePage = true
-				duplicatedModel.SinglePageUUID = uid.String()
+				duplicatedModel.SinglePageUUID = utility.NewID()
 			}
 			project.Schema.Models = append(project.Schema.Models, duplicatedModel)
 		} else {
@@ -1397,6 +1409,10 @@ func (s *GraphQLServer) duplicateModel(ctx context.Context, project *models.Proj
 
 	err = s.SystemDriver.UpdateProject(ctx, project, false)
 	if err != nil {
+		return nil, err
+	}
+
+	if _, err := s.refreshProjectCacheFromSystem(ctx, project.ID); err != nil {
 		return nil, err
 	}
 
@@ -1451,6 +1467,10 @@ func (s *GraphQLServer) renameModel(ctx context.Context, project *models.Project
 		return nil, err
 	}
 
+	if _, err := s.refreshProjectCacheFromSystem(ctx, project.ID); err != nil {
+		return nil, err
+	}
+
 	return modelToRename, nil
 }
 
@@ -1487,14 +1507,17 @@ func (s *GraphQLServer) convertModel(ctx context.Context, project *models.Projec
 			modelToConvert.SinglePageUUID = ""
 		} else {
 			// assign new id
-			uid := uuid.New()
 			modelToConvert.SinglePage = true
-			modelToConvert.SinglePageUUID = uid.String()
+			modelToConvert.SinglePageUUID = utility.NewID()
 		}
 	}
 
 	err := s.SystemDriver.UpdateProject(ctx, project, false)
 	if err != nil {
+		return nil, err
+	}
+
+	if _, err := s.refreshProjectCacheFromSystem(ctx, project.ID); err != nil {
 		return nil, err
 	}
 
@@ -1554,6 +1577,10 @@ func (s *GraphQLServer) deleteModel(ctx context.Context, project *models.Project
 
 	err = s.SystemDriver.UpdateProject(ctx, project, true)
 	if err != nil {
+		return nil, err
+	}
+
+	if _, err := s.refreshProjectCacheFromSystem(ctx, project.ID); err != nil {
 		return nil, err
 	}
 
@@ -3254,6 +3281,12 @@ func (s *GraphQLServer) CreateConnectionTypeResolverFn(p graphql.ResolveParams) 
 			return nil, err
 		}
 
+		// Keep ProjectCache in sync with model_types (connections live in SQL); otherwise
+		// projectModelsInfo keeps serving stale Schema from Redis/memory (see refreshProjectCacheFromSystem).
+		if _, err := s.refreshProjectCacheFromSystem(cache.Ctx, project.ID); err != nil {
+			return nil, err
+		}
+
 		connections = append(connections, toConnectionInfo)
 	}
 
@@ -3425,8 +3458,7 @@ func (s *GraphQLServer) UpsertModelDataFnFn(p graphql.ResolveParams) (interface{
 
 		//#todo replace these operation with transaction
 
-		id := uuid.New()
-		uid := id.String()
+		uid := utility.NewID()
 
 		doc = &types.DefaultDocumentStructure{
 			ID:   uid,
@@ -3580,8 +3612,7 @@ func (s *GraphQLServer) DuplicateModelDataFnFn(p graphql.ResolveParams) (interfa
 	}
 
 	if exists != nil {
-		id := uuid.New()
-		exists.Key = id.String()
+		exists.Key = utility.NewID()
 		exists.ID = exists.Key
 		exists.Meta.CreatedAt = utility.GetCurrentTime()
 		exists.Meta.UpdatedAt = utility.GetCurrentTime()

@@ -26,7 +26,6 @@ require (
 	github.com/gin-gonic/gin v1.10.1
 	github.com/go-sql-driver/mysql v1.9.3
 	github.com/golang-jwt/jwt v3.2.2+incompatible
-	github.com/google/uuid v1.6.0
 	github.com/gorilla/websocket v1.5.3
 	github.com/graph-gophers/dataloader v5.0.0+incompatible
 	github.com/graph-gophers/dataloader/v7 v7.1.0
@@ -45,6 +44,7 @@ require (
 	github.com/machinebox/graphql v0.2.2
 	github.com/microcosm-cc/bluemonday v1.0.27
 	github.com/nitishm/go-rejson/v4 v4.2.0
+	github.com/oklog/ulid/v2 v2.1.0
 	github.com/patrickmn/go-cache v2.1.0+incompatible
 	github.com/pkg/errors v0.9.1
 	github.com/puzpuzpuz/xsync/v3 v3.5.1
@@ -56,7 +56,6 @@ require (
 	github.com/teivah/onecontext v1.3.0
 	github.com/tomogoma/go-api-guard v0.0.0-20180312041446-a2bad766ec64
 	github.com/tomogoma/go-typed-errors v0.0.0-20181222204503-0532faf740be
-	github.com/tursodatabase/libsql-client-go v0.0.0-20251219100830-236aa1ff8acc
 	github.com/uptrace/bun v1.2.15
 	github.com/uptrace/bun/dialect/mysqldialect v1.2.15
 	github.com/uptrace/bun/dialect/pgdialect v1.2.15
@@ -87,7 +86,6 @@ require (
 	github.com/PuerkitoBio/goquery v1.10.3 // indirect
 	github.com/Rican7/retry v0.3.1 // indirect
 	github.com/andybalholm/cascadia v1.3.3 // indirect
-	github.com/antlr4-go/antlr/v4 v4.13.0 // indirect
 	github.com/aws/aws-sdk-go-v2/feature/ec2/imds v1.16.32 // indirect
 	github.com/aws/aws-sdk-go-v2/internal/configsources v1.3.36 // indirect
 	github.com/aws/aws-sdk-go-v2/internal/endpoints/v2 v2.6.36 // indirect
@@ -105,7 +103,6 @@ require (
 	github.com/cespare/xxhash/v2 v2.3.0 // indirect
 	github.com/cloudwego/base64x v0.1.4 // indirect
 	github.com/cloudwego/iasm v0.2.0 // indirect
-	github.com/coder/websocket v1.8.12 // indirect
 	github.com/davecgh/go-spew v1.1.1 // indirect
 	github.com/dgryski/go-rendezvous v0.0.0-20200823014737-9f7001d12a5f // indirect
 	github.com/dustin/go-humanize v1.0.1 // indirect
@@ -123,6 +120,7 @@ require (
 	github.com/golang/protobuf v1.5.4 // indirect
 	github.com/golang/snappy v1.0.0 // indirect
 	github.com/gomodule/redigo v2.0.0+incompatible // indirect
+	github.com/google/uuid v1.6.0 // indirect
 	github.com/gorilla/css v1.0.1 // indirect
 	github.com/hashicorp/yamux v0.1.2 // indirect
 	github.com/joho/godotenv v1.5.1 // indirect

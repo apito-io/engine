@@ -14,7 +14,6 @@ import (
 	ae "github.com/apito-io/engine/err"
 	"github.com/apito-io/engine/models"
 	"github.com/apito-io/engine/utility"
-	"github.com/google/uuid"
 	"github.com/labstack/echo/v4"
 )
 
@@ -197,15 +196,10 @@ func (a *AuthController) ProjectCreation(c echo.Context) error {
 	}
 
 	if project.Driver == nil {
-		project.Driver = &models.DriverCredentials{
-			ProjectID: projectID, // this is must be passed from here
-			Engine:    a.Cfg.DefaultProjectDatabaseEngine,
-			Host:      a.Cfg.DefaultProjectDBHost,
-			Port:      a.Cfg.DefaultProjectDBPort,
-			User:      a.Cfg.DefaultProjectDBUser,
-			Database:  a.Cfg.DefaultProjectDBName,
-			Password:  a.Cfg.DefaultProjectDBPassword,
-		}
+		return c.JSON(http.StatusBadRequest, &models.HttpResponse{
+			Message: "Database driver could not be built from database_type and db_config",
+			Code:    http.StatusBadRequest,
+		})
 	}
 
 	// inject driver credential to connection manager
@@ -252,7 +246,7 @@ func (a *AuthController) ProjectCreation(c echo.Context) error {
 	var _teamID string
 	// inject default team and organization
 	if user.DefaultTeam == nil {
-		_teamID = uuid.New().String()
+		_teamID = utility.NewID()
 		_team := &models.Team{
 			XKey:        _teamID,
 			ID:          _teamID,
@@ -280,7 +274,7 @@ func (a *AuthController) ProjectCreation(c echo.Context) error {
 		}
 	}
 	if user.DefaultOrganization == nil {
-		_id := uuid.New().String()
+		_id := utility.NewID()
 		_org := &models.Organization{
 			XKey:        _id,
 			ID:          _id,

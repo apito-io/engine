@@ -13,7 +13,7 @@ func collectFilteredModelsForPublicSchema(
 	role *models.Role,
 ) (
 	permissions map[string]*models.APIPermission,
-	filteredModels []*ModelWithFilter,
+	filteredModels []*models.PublicSchemaModelFilter,
 	filteredFunctions []*models.ApitoFunction,
 	operationType string,
 	err error,
@@ -29,7 +29,7 @@ func collectFilteredModelsForPublicSchema(
 			}
 			if givenPermissions != nil {
 				permissions[modelName] = givenPermissions
-				filteredModels = append(filteredModels, &ModelWithFilter{Model: model, Filter: nil})
+				filteredModels = append(filteredModels, &models.PublicSchemaModelFilter{Model: model, Filter: nil})
 			}
 		}
 		filteredFunctions = append(filteredFunctions, project.Schema.Functions...)
@@ -46,7 +46,7 @@ func collectFilteredModelsForPublicSchema(
 						}
 						if givenPermissions != nil {
 							permissions[modelName] = givenPermissions
-							filteredModels = append(filteredModels, &ModelWithFilter{
+							filteredModels = append(filteredModels, &models.PublicSchemaModelFilter{
 								Model:             model,
 								Filter:            _fm,
 								HasMetaQuery:      _fm.HasMetaQuery,

@@ -38,10 +38,59 @@ var compiledSchemaLRU = struct {
 	entries: make(map[string]*preConnectionShape),
 }
 
+// fingerprintPublicSchemaRequestShape hashes post-adjustment permissions and per-model flags
+// (e.g. SinglePage) so compiled public schema cache keys stay correct when the hook changes shape.
+func fingerprintPublicSchemaRequestShape(
+	permissions map[string]*models.APIPermission,
+	filteredModels []*models.PublicSchemaModelFilter,
+) string {
+	type permRow struct {
+		Model string                 `json:"m"`
+		Perm  *models.APIPermission `json:"p"`
+	}
+	var permRows []permRow
+	if len(permissions) > 0 {
+		keys := make([]string, 0, len(permissions))
+		for k := range permissions {
+			keys = append(keys, k)
+		}
+		sort.Strings(keys)
+		for _, k := range keys {
+			permRows = append(permRows, permRow{Model: k, Perm: permissions[k]})
+		}
+	}
+	type modelRow struct {
+		Name       string `json:"n"`
+		SinglePage bool   `json:"s"`
+	}
+	var modelRows []modelRow
+	for _, mwf := range filteredModels {
+		if mwf == nil || mwf.Model == nil {
+			continue
+		}
+		modelRows = append(modelRows, modelRow{
+			Name:       mwf.Model.Name,
+			SinglePage: mwf.Model.SinglePage,
+		})
+	}
+	sort.Slice(modelRows, func(i, j int) bool { return modelRows[i].Name < modelRows[j].Name })
+	payload := struct {
+		Perms  []permRow  `json:"perms"`
+		Models []modelRow `json:"models"`
+	}{Perms: permRows, Models: modelRows}
+	b, err := json.Marshal(payload)
+	if err != nil {
+		return ""
+	}
+	sum := sha256.Sum256(b)
+	return hex.EncodeToString(sum[:])
+}
+
 func fingerprintPreConnection(
 	project *models.Project,
 	role *models.Role,
 	incomingRequest []*models.IncomingRequest,
+	effectivePermissionsFingerprint string,
 ) string {
 	h := sha256.New()
 	_, _ = h.Write([]byte(project.ID))
@@ -101,6 +150,10 @@ func fingerprintPreConnection(
 	if len(incomingRequest) > 0 {
 		ir, _ := json.Marshal(incomingRequest)
 		_, _ = h.Write(ir)
+	}
+	if effectivePermissionsFingerprint != "" {
+		_, _ = h.Write([]byte("|perm|"))
+		_, _ = h.Write([]byte(effectivePermissionsFingerprint))
 	}
 	return hex.EncodeToString(h.Sum(nil))
 }

@@ -6,9 +6,10 @@ import (
 	"time"
 
 	ae "github.com/apito-io/engine/err"
+	"github.com/apito-io/engine/database/system/driverdefaults"
 	"github.com/apito-io/engine/models"
+	"github.com/apito-io/engine/utility"
 	"github.com/apito-io/types"
-	"github.com/google/uuid"
 	"go.mongodb.org/mongo-driver/v2/bson"
 	"go.mongodb.org/mongo-driver/v2/mongo/options"
 )
@@ -277,7 +278,17 @@ func (m *SystemMongoDriver) CheckTeamMemberExists(ctx context.Context, projectId
 // CreateProject creates a new project using MongoDB
 func (m *SystemMongoDriver) CreateProject(ctx context.Context, userId string, project *models.Project) (*models.Project, error) {
 	if project.ID == "" {
-		project.ID = uuid.New().String()
+		project.ID = utility.NewID()
+	}
+
+	if project.Driver == nil {
+		project.Driver = driverdefaults.OSSBootstrapProjectDriver(m.Conf, project.ID)
+		if project.Driver == nil {
+			return nil, fmt.Errorf("CreateProject: driver credentials are required for project %s", project.ID)
+		}
+	}
+	if project.Driver != nil && project.Driver.ProjectID == "" {
+		project.Driver.ProjectID = project.ID
 	}
 
 	project.CreatedAt = time.Now().Format(time.RFC3339)
@@ -304,7 +315,7 @@ func (m *SystemMongoDriver) CreateProject(ctx context.Context, userId string, pr
 // CreateSystemUser creates a new system user using MongoDB
 func (m *SystemMongoDriver) CreateSystemUser(ctx context.Context, user *models.SystemUser) (*models.SystemUser, error) {
 	if user.ID == "" {
-		user.ID = uuid.New().String()
+		user.ID = utility.NewID()
 	}
 
 	user.CreatedAt = time.Now().Format(time.RFC3339)
@@ -427,7 +438,7 @@ func (m *SystemMongoDriver) DeleteProjectFromSystem(ctx context.Context, project
 // AddWebhookToProject adds a webhook to a project using MongoDB
 func (m *SystemMongoDriver) AddWebhookToProject(ctx context.Context, doc *models.Webhook) (*models.Webhook, error) {
 	if doc.ID == "" {
-		doc.ID = uuid.New().String()
+		doc.ID = utility.NewID()
 	}
 
 	collection := m.Database.Collection("webhooks")
@@ -438,7 +449,7 @@ func (m *SystemMongoDriver) AddWebhookToProject(ctx context.Context, doc *models
 
 // SaveRawData saves raw data using MongoDB for payment-related operations
 func (m *SystemMongoDriver) SaveRawData(ctx context.Context, collection string, data map[string]interface{}) error {
-	id := uuid.New().String()
+	id := utility.NewID()
 
 	coll := m.Database.Collection("raw_data")
 	_, err := coll.InsertOne(ctx, map[string]interface{}{

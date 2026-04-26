@@ -193,11 +193,11 @@ func TestFingerprintPreConnection_roleAgnostic_excludesRole(t *testing.T) {
 	}
 	roleA := &models.Role{IsAdmin: true}
 	roleB := &models.Role{IsAdmin: false, ID: "r2"}
-	a := fingerprintPreConnection(p, roleA, nil)
-	b := fingerprintPreConnection(p, roleB, nil)
+	a := fingerprintPreConnection(p, roleA, nil, "")
+	b := fingerprintPreConnection(p, roleB, nil, "")
 	require.NotEqual(t, a, b)
 
-	ag := fingerprintPreConnection(p, nil, nil)
-	bg := fingerprintPreConnection(p, nil, nil)
+	ag := fingerprintPreConnection(p, nil, nil, "")
+	bg := fingerprintPreConnection(p, nil, nil, "")
 	require.Equal(t, ag, bg)
 }

@@ -11,7 +11,6 @@ import (
 	"github.com/apito-io/engine/models"
 	"github.com/apito-io/engine/utility"
 	"github.com/apito-io/types"
-	"github.com/google/uuid"
 	"go.mongodb.org/mongo-driver/bson/primitive"
 	"go.mongodb.org/mongo-driver/v2/bson"
 	"go.mongodb.org/mongo-driver/v2/mongo"
@@ -579,8 +578,7 @@ func (m *MongoDriver) CountMultiDocumentOfProject(ctx context.Context, param *mo
 
 func (m *MongoDriver) AddModel(ctx context.Context, project *models.Project, model *models.ModelType) (*models.ProjectSchema, error) {
 	if model.SinglePage {
-		uid := uuid.New()
-		model.SinglePageUUID = uid.String()
+		model.SinglePageUUID = utility.NewID()
 	}
 
 	if project.Schema == nil {
@@ -1643,7 +1641,7 @@ func (m *MongoDriver) UpdateDocumentOfProject(ctx context.Context, param *models
 
 	if keepRevision {
 		// Generate new UUID for the document
-		newUUID := uuid.New().String()
+		newUUID := utility.NewID()
 		doc.ID = newUUID
 		doc.Key = newUUID
 

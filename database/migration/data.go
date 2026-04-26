@@ -4,7 +4,7 @@ import (
 	"fmt"
 
 	"github.com/apito-io/engine/models"
-	"github.com/google/uuid"
+	"github.com/apito-io/engine/utility"
 	"golang.org/x/crypto/bcrypt"
 )
 
@@ -31,7 +31,7 @@ func GetMigrationUserData() []*models.SystemUser {
 
 	return []*models.SystemUser{
 		{
-			ID:               uuid.New().String(),
+			ID:               utility.NewID(),
 			FirstName:        "System Admin",
 			Email:            "admin@apito.io",
 			Username:         "admin",

@@ -158,7 +158,7 @@ func (cm *ConnectionManager) AddProDriverExtras(projectID string, pro interface{
 }
 
 // AddScopedDriverCredentials registers explicit credentials for a composite project:scope cache key
-// (e.g. after Turso API returns a dedicated URL). Normally DeriveScopedCredentials + EnsureScopedCredentials is enough.
+// (e.g. after a hosted driver API returns a dedicated URL). Normally DeriveScopedCredentials + EnsureScopedCredentials is enough.
 func (cm *ConnectionManager) AddScopedDriverCredentials(projectID, scopeKey string, config *models.DriverCredentials) {
 	cm.mu.Lock()
 	defer cm.mu.Unlock()

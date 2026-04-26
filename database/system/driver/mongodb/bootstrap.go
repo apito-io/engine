@@ -5,12 +5,13 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"strings"
 	"time"
 
 	"github.com/apito-io/engine/database/system/bootstrapmeta"
+	"github.com/apito-io/engine/database/system/driverdefaults"
 	"github.com/apito-io/engine/models"
 	"github.com/apito-io/engine/utility"
-	"github.com/google/uuid"
 	"go.mongodb.org/mongo-driver/v2/bson"
 	"go.mongodb.org/mongo-driver/v2/mongo"
 )
@@ -28,7 +29,43 @@ func (m *SystemMongoDriver) EnsureSystemBootstrap(ctx context.Context) error {
 	if err := m.ensureBootstrapAdmin(ctx); err != nil {
 		return err
 	}
-	return m.ensureBootstrapOrgTeamProject(ctx)
+	if err := m.ensureBootstrapOrgTeamProject(ctx); err != nil {
+		return err
+	}
+	return m.ensureStarterProjectDriver(ctx)
+}
+
+func mongoProjectNeedsDefaultDriver(p *models.Project) bool {
+	if p == nil {
+		return false
+	}
+	if p.Driver == nil {
+		return true
+	}
+	d := p.Driver
+	if strings.TrimSpace(d.Engine) != "" {
+		return false
+	}
+	return strings.TrimSpace(d.Database) == "" && strings.TrimSpace(d.Host) == "" && strings.TrimSpace(d.File) == ""
+}
+
+// ensureStarterProjectDriver sets OSS starter driver defaults when driver is missing (idempotent).
+func (m *SystemMongoDriver) ensureStarterProjectDriver(ctx context.Context) error {
+	if m.Conf == nil {
+		return nil
+	}
+	proj, err := m.GetProject(ctx, bootstrapmeta.StarterProjectID)
+	if err != nil {
+		return nil
+	}
+	if !mongoProjectNeedsDefaultDriver(proj) {
+		return nil
+	}
+	proj.Driver = driverdefaults.OSSBootstrapProjectDriver(m.Conf, proj.ID)
+	if proj.Driver == nil {
+		return nil
+	}
+	return m.UpdateProject(ctx, proj, true)
 }
 
 func (m *SystemMongoDriver) ensureBootstrapAdmin(ctx context.Context) error {
@@ -45,13 +82,13 @@ func (m *SystemMongoDriver) ensureBootstrapAdmin(ctx context.Context) error {
 		return fmt.Errorf("bootstrap: hash password: %w", err)
 	}
 
-	id := uuid.New().String()
+	id := utility.NewID()
 	now := utility.GetCurrentTime()
 	user := &models.SystemUser{
 		XKey:                      id,
 		ID:                        id,
 		Email:                     bootstrapmeta.AdminEmail,
-		Username:                  uuid.New().String(),
+		Username:                  utility.NewID(),
 		FirstName:                 bootstrapmeta.AdminFirstName,
 		LastName:                  bootstrapmeta.AdminLastName,
 		Secret:                    string(hash),

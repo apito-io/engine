@@ -41,12 +41,12 @@ type Config struct {
 	SystemDBPort         string `env:"SYSTEM_DB_PORT" env-default:""`
 	SystemDBName         string `env:"SYSTEM_DB_NAME" env-default:"apito_system.db"`
 
-	DefaultProjectDatabaseEngine string `env:"PROJECT_DB_ENGINE" env-default:"coredb"`
-	DefaultProjectDBUser         string `env:"PROJECT_DB_USER" env-default:""`
-	DefaultProjectDBPassword     string `env:"PROJECT_DB_PASSWORD" env-default:""`
-	DefaultProjectDBHost         string `env:"PROJECT_DB_HOST" env-default:""`
-	DefaultProjectDBPort         string `env:"PROJECT_DB_PORT" env-default:""`
-	DefaultProjectDBName         string `env:"PROJECT_DB_NAME" env-default:"apito_project.db"`
+	// GeneralPostgresIsolation: "database" (default, CREATE DATABASE per project) or "schema" (CREATE SCHEMA + search_path on shared database name stored on the project driver).
+	GeneralPostgresIsolation string `env:"GENERAL_POSTGRES_ISOLATION" env-default:"database"`
+	// GeneralSQLiteFilePerProject uses utility.SQLiteProjectFileName(project_id) under DefaultDatabaseDir for new SQLite general projects using default template credentials.
+	GeneralSQLiteFilePerProject bool `env:"GENERAL_SQLITE_FILE_PER_PROJECT" env-default:"false"`
+	// GeneralMySQLIsolation is only "database" supported: MySQL/MariaDB use CREATE DATABASE per project (no PG-style shared-schema mode in this engine).
+	GeneralMySQLIsolation string `env:"GENERAL_MYSQL_ISOLATION" env-default:"database"`
 
 	KVStorageEngine         string `env:"KV_ENGINE" env-default:"coredb"`
 	KVStorageEngineHost     string `env:"KV_HOST" env-default:""`
@@ -176,6 +176,11 @@ type Config struct {
 
 	// RoleAgnosticSchemaCache builds one superset schema per project (pre-connection cache key omits role); resolvers enforce real role.
 	RoleAgnosticSchemaCache bool `env:"ROLE_AGNOSTIC_SCHEMA_CACHE" env-default:"false"`
+
+	// AdjustPublicSchemaForRequestHook runs after collectFilteredModelsForPublicSchema and may
+	// mutate permissions and filteredModels (e.g. tenant-scoped public API shape). When set,
+	// the compiled public schema cache fingerprint includes the effective API permission map.
+	AdjustPublicSchemaForRequestHook func(ctx context.Context, cache *ApplicationCache, project *Project, permissions map[string]*APIPermission, filteredModels []*PublicSchemaModelFilter) error `env:"-"`
 
 	// SchemaBuildTelemetry emits OTel spans around publicSchemaBuilder when true.
 	SchemaBuildTelemetry bool `env:"SCHEMA_BUILD_TELEMETRY" env-default:"true"`

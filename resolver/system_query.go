@@ -618,6 +618,7 @@ func (s *GraphQLServer) ListDetailedModelsDataInfoResolverFn(p graphql.ResolvePa
 	param := s.NewParam(cache.Param)
 	param.Model = modelType
 	param.ResolveParams = &p
+	param.ProjectSchemaModels = cache.Project.Schema.Models
 
 	param.IsSystemRequest = true
 
@@ -658,6 +659,7 @@ func (s *GraphQLServer) ListDetailedModelsDataCountResolverFn(p graphql.ResolveP
 	param := s.NewParam(cache.Param)
 	param.Model = modelType
 	param.ResolveParams = &p
+	param.ProjectSchemaModels = cache.Project.Schema.Models
 
 	param.IsSystemRequest = true
 

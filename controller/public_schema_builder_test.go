@@ -19,6 +19,21 @@ func TestSchemaRoleForPublicSchemaBuild_roleAgnosticElevates(t *testing.T) {
 	require.False(t, same.IsAdmin)
 }
 
+func TestFingerprintPublicSchemaRequestShape_singlePageChangesHash(t *testing.T) {
+	perms := map[string]*models.APIPermission{
+		"restaurant": {Read: "all", Create: "all", Update: "all", Delete: "all"},
+	}
+	m1 := []*models.PublicSchemaModelFilter{
+		{Model: &models.ModelType{Name: "restaurant", SinglePage: false}},
+	}
+	m2 := []*models.PublicSchemaModelFilter{
+		{Model: &models.ModelType{Name: "restaurant", SinglePage: true}},
+	}
+	h1 := fingerprintPublicSchemaRequestShape(perms, m1)
+	h2 := fingerprintPublicSchemaRequestShape(perms, m2)
+	require.NotEqual(t, h1, h2)
+}
+
 func TestFingerprintPreConnection_stable(t *testing.T) {
 	p := &models.Project{
 		ID: "p1",
@@ -34,8 +49,8 @@ func TestFingerprintPreConnection_stable(t *testing.T) {
 		},
 	}
 	role := &models.Role{IsAdmin: true}
-	a := fingerprintPreConnection(p, role, nil)
-	b := fingerprintPreConnection(p, role, nil)
+	a := fingerprintPreConnection(p, role, nil, "")
+	b := fingerprintPreConnection(p, role, nil, "")
 	require.Equal(t, a, b)
 }
 

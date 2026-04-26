@@ -13,9 +13,32 @@ import (
 	"github.com/apito-io/engine/models"
 	"github.com/apito-io/engine/utility"
 	"github.com/apito-io/types"
-	"github.com/google/uuid"
 	"github.com/uptrace/bun"
 )
+
+// ensureEnableIndexingForModel creates secondary indexes for fields with EnableIndexing=true.
+func (S *SQLDriver) ensureEnableIndexingForModel(ctx context.Context, project *models.Project, model *models.ModelType) error {
+	if model == nil {
+		return nil
+	}
+	idxParam := &models.CommonSystemParams{Model: model}
+	if project != nil {
+		idxParam.ProjectID = project.ID
+	}
+	for _, f := range model.Fields {
+		if f == nil || !f.EnableIndexing {
+			continue
+		}
+		id := PhysicalSQLColumnForSystemRelationField(strings.TrimSpace(f.Identifier))
+		if id == "" {
+			continue
+		}
+		if err := S.CreateIndex(ctx, idxParam, id, ""); err != nil {
+			return err
+		}
+	}
+	return nil
+}
 
 func (S *SQLDriver) DropField(ctx context.Context, param *models.CommonSystemParams) error {
 
@@ -69,7 +92,7 @@ func (a *SQLDriver) CheckTableOrCollectionExists(ctx context.Context, param *mod
 		query = fmt.Sprintf("SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = 'public' AND table_name = '%s'", table)
 	case _const.MySQLDriver, _const.MariaDBDriver:
 		query = fmt.Sprintf("SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = DATABASE() AND table_name = '%s'", table)
-	case _const.SQLiteDriver, "libsql":
+	case _const.SQLiteDriver:
 		query = fmt.Sprintf("SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='%s'", table)
 	default:
 		return false, fmt.Errorf("unsupported database engine: %s", a.DriverCredential.Engine)
@@ -112,6 +135,15 @@ func (S *SQLDriver) AddModel(ctx context.Context, project *models.Project, model
 	}
 
 	if err := S.CreateModelTable(ctx, model, false); err != nil {
+		return nil, err
+	}
+	if err := S.ensureEnableIndexingForModel(ctx, project, model); err != nil {
+		return nil, err
+	}
+	if err := S.installRowCountTriggersForModel(ctx, model); err != nil {
+		return nil, err
+	}
+	if err := RunSQLiteLikePostDDL(ctx, S); err != nil {
 		return nil, err
 	}
 
@@ -192,7 +224,7 @@ func (S *SQLDriver) AddRelationFields(ctx context.Context, from *models.Connecti
 		switch to.Relation {
 		case "has_many":
 			//same for one to one & one to many
-			query := fmt.Sprintf(`CREATE TABLE `+"`%s_%s`"+`(
+			query := fmt.Sprintf(`CREATE TABLE IF NOT EXISTS `+"`%s_%s`"+`(
 				%s_id VARCHAR(36) REFERENCES `+"`%s`"+` (id) ON DELETE CASCADE,
 				%s_id VARCHAR(36) REFERENCES `+"`%s`"+` (id) ON DELETE CASCADE,
 				PRIMARY KEY (%s_id, %s_id)
@@ -202,6 +234,16 @@ func (S *SQLDriver) AddRelationFields(ctx context.Context, from *models.Connecti
 				toFieldName, fromFieldName)
 			_, err := S.ORM.NewRaw(query).Exec(ctx)
 			if err != nil {
+				return err
+			}
+			pivotName := fmt.Sprintf("%s_%s", fromTableName, toTableName)
+			escPivot := strings.ReplaceAll(pivotName, "`", "``")
+			idxTo := fmt.Sprintf("CREATE INDEX IF NOT EXISTS `idx_%s_%s_id` ON `%s` (`%s_id`)", escPivot, toFieldName, escPivot, toFieldName)
+			idxFrom := fmt.Sprintf("CREATE INDEX IF NOT EXISTS `idx_%s_%s_id` ON `%s` (`%s_id`)", escPivot, fromFieldName, escPivot, fromFieldName)
+			if _, err := S.ORM.NewRaw(idxTo).Exec(ctx); err != nil {
+				return err
+			}
+			if _, err := S.ORM.NewRaw(idxFrom).Exec(ctx); err != nil {
 				return err
 			}
 		case "has_one":
@@ -322,82 +364,26 @@ func (S *SQLDriver) AddFieldToModel(ctx context.Context, param *models.CommonSys
 		// todo transform this to one to many relation
 	}
 
-	var datatype string
-	var validations []string
-	switch param.FieldInfo.FieldType {
-	case _const.TextField:
-		datatype = "TEXT"
-	case _const.MultilineField:
-		datatype = "TEXT"
-	case _const.DateField:
-		datatype = "DATE"
-	case _const.BooleanField:
-		datatype = "BOOLEAN"
-	case _const.MediaField:
-		if param.FieldInfo.Validation.IsGallery {
-			datatype = "JSON"
-		} else {
-			datatype = "JSON"
-		}
-	case _const.NumberField:
-		switch param.FieldInfo.InputType {
-		case "int":
-			datatype = "INTEGER"
-		case "double":
-			datatype = "NUMERIC"
-		}
-	case _const.ListField:
-		if param.FieldInfo.Validation != nil && len(param.FieldInfo.Validation.FixedListElements) > 0 && !param.FieldInfo.Validation.IsMultiChoice {
-			datatype = "TEXT"
-		} else {
-			datatype = "JSON"
-		}
-	case _const.RepeatedField, _const.ObjectField:
-		datatype = "JSON"
-	}
-
-	if param.FieldInfo.Validation != nil && param.FieldInfo.Validation.Required {
-		var defaultValue interface{}
-		switch param.FieldInfo.InputType {
-		case _const.StringInput:
-			defaultValue = "''"
-		case _const.IntInput:
-			defaultValue = 0
-		case _const.BoolInput:
-			defaultValue = false
-		case _const.DoubleInput:
-			defaultValue = 0.0
-		}
-		validations = append(validations, fmt.Sprintf("NOT NULL DEFAULT %v", defaultValue))
-	} else if param.FieldInfo.Validation != nil && param.FieldInfo.Validation.Unique {
-		validations = append(validations, "UNIQUE")
-	}
-
 	tableName := utility.SingularResourceName(param.Model.Name)
-
-	// local support
-	if param.FieldInfo.Validation != nil && len(param.FieldInfo.Validation.Locals) > 0 {
-		for _, local := range param.FieldInfo.Validation.Locals {
-			var column string
-			if local != "en" {
-				column = fmt.Sprintf(`%s_%s`, param.FieldInfo.Identifier, local)
-			} else {
-				column = param.FieldInfo.Identifier
-			}
-			//Then execute your query for creating table
-			query := fmt.Sprintf("ALTER TABLE `%s` ADD COLUMN IF NOT EXISTS %s %s %s;", tableName, column, datatype, strings.Join(validations, " "))
-			_, err := S.ORM.NewRaw(query).Exec(ctx)
-			if err != nil {
-				return nil, err
-			}
-		}
-	} else {
-		//Then execute your query for creating table
-		query := fmt.Sprintf("ALTER TABLE `%s` ADD %s %s %s;", tableName, param.FieldInfo.Identifier, datatype, strings.Join(validations, " "))
-		_, err := S.ORM.NewRaw(query).Exec(ctx)
-		if err != nil {
+	stmts, err := AlterTableAddFieldSQL(S.DriverCredential.Engine, tableName, param.FieldInfo)
+	if err != nil {
+		return nil, err
+	}
+	for _, query := range stmts {
+		if _, err := S.ORM.NewRaw(query).Exec(ctx); err != nil {
 			return nil, err
 		}
+	}
+
+	if parent_field == "" && !isUpdate && param.FieldInfo.EnableIndexing {
+		idxParam := &models.CommonSystemParams{Model: param.Model, ProjectID: param.ProjectID}
+		if err := S.CreateIndex(ctx, idxParam, param.FieldInfo.Identifier, ""); err != nil {
+			return nil, err
+		}
+	}
+
+	if err := RunSQLiteLikePostDDL(ctx, S); err != nil {
+		return nil, err
 	}
 
 	return param.Model, nil
@@ -476,6 +462,8 @@ func (S *SQLDriver) AddDocumentToProject(ctx context.Context, param *models.Comm
 			return err
 		}
 		mergeDocumentTaggedFieldsIntoData(doc, data)
+		StripArangoEnvelopeKeysForSQLInsert(data, param)
+		remapSyntheticSystemRelationRowKeys(data, param.Model)
 		_, err := tx.NewInsert().Table(tableName).Model(&data).Exec(ctx)
 		if err != nil {
 			return err
@@ -483,7 +471,7 @@ func (S *SQLDriver) AddDocumentToProject(ctx context.Context, param *models.Comm
 
 		// now insert a meta data
 		metaData := map[string]interface{}{
-			"id":         uuid.New().String(),
+			"id":         utility.NewID(),
 			"created_by": doc.Meta.CreatedBy.ID,
 			"updated_by": doc.Meta.LastModifiedBy.ID,
 			"status":     doc.Meta.Status,
@@ -563,6 +551,7 @@ func (S *SQLDriver) UpdateDocumentOfProject(ctx context.Context, param *models.C
 		}
 
 	}
+	remapSyntheticSystemRelationRowKeys(data, param.Model)
 	q := S.ORM.NewUpdate().Table(tableName).Where("id = ?", doc.ID)
 	q = applyBunHookWheresUpdate(S.Conf, ctx, param, q)
 	_, err := q.Model(&data).Exec(ctx)

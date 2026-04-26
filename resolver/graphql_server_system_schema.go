@@ -866,7 +866,7 @@ func (s *GraphQLServer) BuildServerQueriesAndMutations() {
 				"project_secret_key": &graphql.ArgumentConfig{
 					Type: graphql.String,
 				},
-			"settings": &graphql.ArgumentConfig{
+				"settings": &graphql.ArgumentConfig{
 					Type: graphql.NewInputObject(graphql.InputObjectConfig{
 						Name: "UpdateSettingsPayload",
 						Fields: graphql.InputObjectConfigFieldMap{
@@ -1016,9 +1016,9 @@ func (s *GraphQLServer) BuildServerQueriesAndMutations() {
 					Type:        graphql.String,
 					Description: "used in duplicate type",
 				},
-			"single_page_model": &graphql.ArgumentConfig{
-				Type: graphql.Boolean,
-			},
+				"single_page_model": &graphql.ArgumentConfig{
+					Type: graphql.Boolean,
+				},
 			},
 			Resolve: s.UpdateModelResolverFn,
 		},
