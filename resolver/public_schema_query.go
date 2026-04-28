@@ -20,7 +20,7 @@ func (s *GraphQLServer) MultiResourceResolverFn(p graphql.ResolveParams) (interf
 	if !ok {
 		return nil, errors.New("selection set missing in context")
 	}
-	ctx := p.Context
+	dbCtx := publicProjectDBContext(cache, p.Context)
 
 	model := utility.SingularResourceName(p.Info.FieldName)
 
@@ -63,12 +63,12 @@ func (s *GraphQLServer) MultiResourceResolverFn(p graphql.ResolveParams) (interf
 
 	param.QuerySelectionSets = selectionSet
 
-	driver, err := s.GraphQLExecutor.GetProjectDriver(ctx)
+	driver, err := s.GraphQLExecutor.GetProjectDriver(dbCtx)
 	if err != nil {
 		return nil, err
 	}
 
-	return driver.QueryMultiDocumentOfProject(p.Context, param)
+	return driver.QueryMultiDocumentOfProject(dbCtx, param)
 }
 
 func (s *GraphQLServer) SingleResourceResolverFn(p graphql.ResolveParams) (interface{}, error) {
@@ -81,7 +81,7 @@ func (s *GraphQLServer) SingleResourceResolverFn(p graphql.ResolveParams) (inter
 	if !ok {
 		return nil, errors.New("selection set missing in context")
 	}
-	ctx := p.Context
+	dbCtx := publicProjectDBContext(cache, p.Context)
 
 	model := utility.SingularResourceName(p.Info.FieldName)
 
@@ -133,12 +133,12 @@ func (s *GraphQLServer) SingleResourceResolverFn(p graphql.ResolveParams) (inter
 		return nil, errors.New("ID is required")
 	}
 
-	driver, err := s.GraphQLExecutor.GetProjectDriver(ctx)
+	driver, err := s.GraphQLExecutor.GetProjectDriver(dbCtx)
 	if err != nil {
 		return nil, err
 	}
 
-	doc, err := driver.GetSingleProjectDocument(p.Context, param)
+	doc, err := driver.GetSingleProjectDocument(dbCtx, param)
 	if err != nil {
 		return nil, err
 	}
@@ -151,7 +151,7 @@ func (s *GraphQLServer) CountResolverFn(p graphql.ResolveParams) (interface{}, e
 	if !ok {
 		return nil, errors.New("application cache missing in context")
 	}
-	ctx := p.Context
+	dbCtx := publicProjectDBContext(cache, p.Context)
 
 	/*cache, err := s.GetApplicationCache(router)
 	if err != nil {
@@ -183,12 +183,12 @@ func (s *GraphQLServer) CountResolverFn(p graphql.ResolveParams) (interface{}, e
 	param.ResolveParams = &pp
 	param.OnlyReturnCount = true
 
-	driver, err := s.GraphQLExecutor.GetProjectDriver(ctx)
+	driver, err := s.GraphQLExecutor.GetProjectDriver(dbCtx)
 	if err != nil {
 		return nil, err
 	}
 
-	result, err := driver.CountDocOfProject(p.Context, param)
+	result, err := driver.CountDocOfProject(dbCtx, param)
 	if err != nil {
 		return nil, err
 	}
@@ -206,7 +206,7 @@ func (s *GraphQLServer) AggregateResolverFn(p graphql.ResolveParams) (interface{
 	if !ok {
 		return nil, errors.New("selection set missing in context")
 	}
-	ctx := p.Context
+	dbCtx := publicProjectDBContext(cache, p.Context)
 
 	/*cache, err := s.GetApplicationCache(router)
 	if err != nil {
@@ -249,12 +249,12 @@ func (s *GraphQLServer) AggregateResolverFn(p graphql.ResolveParams) (interface{
 	// this is must be here for aggregate query
 	param.QuerySelectionSets = selectionSet
 
-	driver, err := s.GraphQLExecutor.GetProjectDriver(ctx)
+	driver, err := s.GraphQLExecutor.GetProjectDriver(dbCtx)
 	if err != nil {
 		return nil, err
 	}
 
-	result, err := driver.AggregateDocOfProject(p.Context, param)
+	result, err := driver.AggregateDocOfProject(dbCtx, param)
 	if err != nil {
 		return nil, err
 	}

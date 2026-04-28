@@ -56,22 +56,22 @@ func BuildCRUDPermissions(modelName string, role *models.Role) (*models.APIPermi
 
 func ValidatePermissions(vv map[string]interface{}) (*models.APIPermission, error) {
 	var p = &models.APIPermission{}
-	if val, ok := ValidateScope(vv["read"].(string)); ok {
+	if val, ok := ValidateScope(vv["read"]); ok && val != nil {
 		p.Read = *val
 	} else {
 		return nil, errors.New("invalid Read Permissions")
 	}
-	if val, ok := ValidateScope(vv["create"].(string)); ok {
+	if val, ok := ValidateScope(vv["create"]); ok && val != nil {
 		p.Create = *val
 	} else {
 		return nil, errors.New("invalid Create Permissions")
 	}
-	if val, ok := ValidateScope(vv["update"].(string)); ok {
+	if val, ok := ValidateScope(vv["update"]); ok && val != nil {
 		p.Update = *val
 	} else {
 		return nil, errors.New("invalid Update Permissions")
 	}
-	if val, ok := ValidateScope(vv["delete"].(string)); ok {
+	if val, ok := ValidateScope(vv["delete"]); ok && val != nil {
 		p.Delete = *val
 	} else {
 		return nil, errors.New("invalid Delete Permissions")
@@ -79,9 +79,22 @@ func ValidatePermissions(vv map[string]interface{}) (*models.APIPermission, erro
 	return p, nil
 }
 
-func ValidateScope(p string) (*string, bool) {
-	if p == "none" || p == "all" || p == "custom_logic" {
-		return &p, true
+// ValidateScope accepts permission scope strings stored in roles (see public mutations / schema builder).
+// nil or non-string values are invalid; do not type-assert map values to string at the call site.
+func ValidateScope(p interface{}) (*string, bool) {
+	if p == nil {
+		none := "none"
+		return &none, true
 	}
-	return nil, false
+	s, ok := p.(string)
+	if !ok || s == "" {
+		return nil, false
+	}
+	switch s {
+	case "none", "all", "custom_logic", "own", "auth":
+		out := s
+		return &out, true
+	default:
+		return nil, false
+	}
 }

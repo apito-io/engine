@@ -38,12 +38,14 @@ func (s *GraphQLServer) updateAndConnectDocument(ctx context.Context, cache *mod
 		return nil, errors.New("payload is required")
 	}
 
-	driver, err := s.GraphQLExecutor.GetProjectDriver(ctx)
+	dbCtx := publicProjectDBContext(cache, ctx)
+
+	driver, err := s.GraphQLExecutor.GetProjectDriver(dbCtx)
 	if err != nil {
 		return nil, err
 	}
 
-	raw, err := driver.GetSingleRawDocumentFromProject(ctx, param)
+	raw, err := driver.GetSingleRawDocumentFromProject(dbCtx, param)
 	if err != nil {
 		return nil, err
 	}
@@ -104,12 +106,12 @@ func (s *GraphQLServer) updateAndConnectDocument(ctx context.Context, cache *mod
 	doc.Meta.LastModifiedBy.ID = param.UserID
 	doc.Meta.LastModifiedBy.IsProjectUser = param.Role.IsProjectUser
 
-	projectDriver, err := s.GraphQLExecutor.GetProjectDriver(ctx)
+	projectDriver, err := s.GraphQLExecutor.GetProjectDriver(dbCtx)
 	if err != nil {
 		return nil, err
 	}
 
-	err = projectDriver.UpdateDocumentOfProject(ctx, param, doc, false)
+	err = projectDriver.UpdateDocumentOfProject(dbCtx, param, doc, false)
 	if err != nil {
 		return nil, err
 	}
@@ -121,7 +123,7 @@ func (s *GraphQLServer) updateAndConnectDocument(ctx context.Context, cache *mod
 				return nil, err
 			}
 			param.ConDisParam = v
-			err = projectDriver.DisconnectBuilder(ctx, param)
+			err = projectDriver.DisconnectBuilder(dbCtx, param)
 			if err != nil {
 				return nil, err
 			}
@@ -133,7 +135,7 @@ func (s *GraphQLServer) updateAndConnectDocument(ctx context.Context, cache *mod
 				return nil, err
 			}
 			param.ConDisParam = v
-			err = projectDriver.ConnectBuilder(ctx, param)
+			err = projectDriver.ConnectBuilder(dbCtx, param)
 			if err != nil {
 				return nil, err
 			}
@@ -176,6 +178,8 @@ func (s *GraphQLServer) createAndConnectDocument(ctx context.Context, cache *mod
 		return nil, errors.New("payload is required")
 	}
 
+	dbCtx := publicProjectDBContext(cache, ctx)
+
 	_id := utility.NewID()
 	doc := &types.DefaultDocumentStructure{
 		Key:      _id,
@@ -211,11 +215,11 @@ func (s *GraphQLServer) createAndConnectDocument(ctx context.Context, cache *mod
 	doc.Data = newPayload
 
 	// create a new doc
-	projectDriver, err := s.GraphQLExecutor.GetProjectDriver(ctx)
+	projectDriver, err := s.GraphQLExecutor.GetProjectDriver(dbCtx)
 	if err != nil {
 		return nil, err
 	}
-	newDoc, err := projectDriver.AddDocumentToProject(ctx, param, doc)
+	newDoc, err := projectDriver.AddDocumentToProject(dbCtx, param, doc)
 	if err != nil {
 		return nil, err
 	}
@@ -230,7 +234,7 @@ func (s *GraphQLServer) createAndConnectDocument(ctx context.Context, cache *mod
 			return nil, err
 		}
 		_param.ConDisParam = v
-		err = projectDriver.ConnectBuilder(ctx, _param)
+		err = projectDriver.ConnectBuilder(dbCtx, _param)
 		if err != nil {
 			return nil, err
 		}
@@ -270,6 +274,7 @@ func (s *GraphQLServer) MutationResolverFn(p graphql.ResolveParams) (interface{}
 	}
 
 	ctx := p.Context
+	dbCtx := publicProjectDBContext(cache, ctx)
 
 	param := s.NewParam(cache.Param)
 
@@ -310,7 +315,7 @@ func (s *GraphQLServer) MutationResolverFn(p graphql.ResolveParams) (interface{}
 	}
 
 	// fetch the doc again with query
-	projectDriver, err := s.GraphQLExecutor.GetProjectDriver(ctx)
+	projectDriver, err := s.GraphQLExecutor.GetProjectDriver(dbCtx)
 	if err != nil {
 		return nil, err
 	}
@@ -403,7 +408,7 @@ func (s *GraphQLServer) MutationResolverFn(p graphql.ResolveParams) (interface{}
 
 		// fetch the doc again with query
 		param.DocumentID = _doc.ID
-		createdDoc, err := projectDriver.GetSingleProjectDocument(ctx, param)
+		createdDoc, err := projectDriver.GetSingleProjectDocument(dbCtx, param)
 		if err != nil {
 			return nil, err
 		}
@@ -442,7 +447,7 @@ func (s *GraphQLServer) MutationResolverFn(p graphql.ResolveParams) (interface{}
 			return nil, err
 		}
 
-		doc, err := projectDriver.GetSingleProjectDocument(ctx, param)
+		doc, err := projectDriver.GetSingleProjectDocument(dbCtx, param)
 		if err != nil {
 			return nil, err
 		}
@@ -454,7 +459,7 @@ func (s *GraphQLServer) MutationResolverFn(p graphql.ResolveParams) (interface{}
 		var documentToDelete uint32
 		for _, id := range uids {
 			param.DocumentID = id.(string)
-			doc, err := projectDriver.GetSingleProjectDocument(ctx, param)
+			doc, err := projectDriver.GetSingleProjectDocument(dbCtx, param)
 			if err != nil {
 				return nil, err
 			}
@@ -480,7 +485,7 @@ func (s *GraphQLServer) MutationResolverFn(p graphql.ResolveParams) (interface{}
 				}
 			}
 
-			err = projectDriver.DeleteDocumentFromProject(ctx, param)
+			err = projectDriver.DeleteDocumentFromProject(dbCtx, param)
 			if err != nil {
 				return nil, err
 			}

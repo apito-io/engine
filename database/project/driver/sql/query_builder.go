@@ -829,7 +829,8 @@ func BuildCombinedRelationQuery(cfg *models.Config, relationType string, parentM
 			case "from":
 				pivotTable = fmt.Sprintf(`%s_%s`, utility.SingularResourceName(relationTo), utility.SingularResourceName(relationInput["from_model"].(string)))
 			}
-			query = fmt.Sprintf(`SELECT %s as key, %s FROM `+"`%s`"+` AS y 
+			// Alias must match RelationshipDataLoader* (reads sys_key to bucket rows per parent id).
+			query = fmt.Sprintf(`SELECT %s AS sys_key, %s FROM `+"`%s`"+` AS y 
 				LEFT JOIN `+"`%s`"+` AS x ON x.id = y.%s_id 
 				LEFT JOIN meta AS z ON z.doc_id = x.id
 				WHERE %s`, keyField, selectList, pivotTable, tableName, relationTo, whereCondition)
@@ -869,13 +870,13 @@ func BuildCombinedRelationQuery(cfg *models.Config, relationType string, parentM
 			query = fmt.Sprintf(`SELECT %s AS sys_key, %s FROM `+"`%s`"+` AS y 
 				LEFT JOIN `+"`%s`"+` AS x ON x.%s_id = y.id 
 				LEFT JOIN meta AS z ON z.doc_id = x.id
-				WHERE %s LIMIT 1`, keyField, selectList, pivotTable, tableName, relationInput["from_model"].(string), whereCondition)
+				WHERE %s`, keyField, selectList, pivotTable, tableName, relationInput["from_model"].(string), whereCondition)
 		case "from":
 			pivotTable = utility.SingularResourceName(relationInput["from_model"].(string))
 			query = fmt.Sprintf(`SELECT %s AS sys_key, %s FROM  `+"`%s`"+` AS y 
 				LEFT JOIN `+"`%s`"+` AS x ON x.id = y.%s_id 
 				LEFT JOIN meta AS z ON z.doc_id = x.id
-				WHERE %s LIMIT 1`, keyField, selectList, pivotTable, tableName, relationTo, whereCondition)
+				WHERE %s`, keyField, selectList, pivotTable, tableName, relationTo, whereCondition)
 		}
 	default:
 		return "", nil, nil, fmt.Errorf("unsupported relation_type %v", relationInput["relation_type"])

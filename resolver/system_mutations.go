@@ -660,7 +660,7 @@ func (s *GraphQLServer) UpdateProjectResolverFn(p graphql.ResolveParams) (interf
 		}
 	}
 
-/* 	if plugins, ok := p.Args["plugins"].(map[string]interface{}); ok {
+	/* 	if plugins, ok := p.Args["plugins"].(map[string]interface{}); ok {
 		if project.Plugins == nil {
 			project.Plugins = []*models.SavedPluginDetails{}
 		}
@@ -1981,7 +1981,11 @@ func (s *GraphQLServer) UpsertRoleToProjectResolverFn(p graphql.ResolveParams) (
 		return nil, err
 	}
 
-	time.Sleep(time.Millisecond * 500)
+	// expire the project cache
+	err = s.ExpireGraphQLProjectCache(cache.Ctx, project.ID)
+	if err != nil {
+		return nil, err
+	}
 
 	return role, nil
 }

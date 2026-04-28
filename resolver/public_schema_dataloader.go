@@ -90,7 +90,7 @@ func (s *GraphQLServer) DataLoaderFn(ctx context.Context, keys dataloader.Keys) 
 
 	// do not use old passed ctx, instead use the new one, because dataloader is a concurrent process
 	// the old ctx might be already cancelled
-	driver, err := s.GraphQLExecutor.GetProjectDriver(ctx)
+	driver, err := s.GraphQLExecutor.GetProjectDriver(publicProjectDBContext(cache, ctx))
 	if err != nil {
 		return handleError(err)
 	}
