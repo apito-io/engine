@@ -83,6 +83,7 @@ func main() {
 	//defer ln.Close()
 
 	_route.Listener = ln
+	fmt.Println(cfg.StorageEnginesSummary())
 	fmt.Println("starting the router")
 	go _route.Start("")
 
