@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"errors"
 	"testing"
+	"time"
 
 	"github.com/apito-io/engine/database/system/bootstrapmeta"
 	"github.com/apito-io/engine/models"
@@ -150,6 +151,149 @@ func TestUpdateProject_persistsModelTypes(t *testing.T) {
 	require.Len(t, reloaded.Schema.Models, 1)
 	require.Equal(t, "author", reloaded.Schema.Models[0].Name)
 	require.Equal(t, pid, reloaded.Schema.Models[0].ProjectID)
+}
+
+func TestUpdateProject_removesOrphanModelTypes(t *testing.T) {
+	sqldb, err := sql.Open(sqliteshim.ShimName, "file::memory:?cache=shared")
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = sqldb.Close() })
+	db := bun.NewDB(sqldb, sqlitedialect.New())
+	drv := &SystemSQLDriver{
+		ORM: db,
+		Conf: &models.Config{
+			SystemDatabaseEngine: "coredb",
+		},
+		DriverCredential: nil,
+	}
+	ctx := context.Background()
+	require.NoError(t, drv.RunMigration(ctx))
+	require.NoError(t, drv.EnsureSystemBootstrap(ctx))
+
+	pid := bootstrapmeta.StarterProjectID
+	proj, err := drv.GetProject(ctx, pid)
+	require.NoError(t, err)
+	require.NotNil(t, proj)
+
+	proj.Schema = &models.ProjectSchema{
+		Models: []*models.ModelType{
+			{Name: "author", SinglePage: true},
+			{Name: "to_be_removed", SinglePage: false},
+		},
+	}
+	require.NoError(t, drv.UpdateProject(ctx, proj, false))
+
+	var nRemoved int
+	err = db.NewSelect().ColumnExpr("count(*)").Table("model_types").
+		Where("project_id = ? AND name = ?", pid, "to_be_removed").
+		Scan(ctx, &nRemoved)
+	require.NoError(t, err)
+	require.Equal(t, 1, nRemoved)
+
+	proj.Schema = &models.ProjectSchema{
+		Models: []*models.ModelType{
+			{Name: "author", SinglePage: true},
+		},
+	}
+	require.NoError(t, drv.UpdateProject(ctx, proj, false))
+
+	err = db.NewSelect().ColumnExpr("count(*)").Table("model_types").
+		Where("project_id = ? AND name = ?", pid, "to_be_removed").
+		Scan(ctx, &nRemoved)
+	require.NoError(t, err)
+	require.Equal(t, 0, nRemoved)
+
+	var total int
+	err = db.NewSelect().ColumnExpr("count(*)").Table("model_types").
+		Where("project_id = ?", pid).
+		Scan(ctx, &total)
+	require.NoError(t, err)
+	require.Equal(t, 1, total)
+
+	reloaded, err := drv.GetProject(ctx, pid)
+	require.NoError(t, err)
+	require.NotNil(t, reloaded.Schema)
+	require.Len(t, reloaded.Schema.Models, 1)
+	require.Equal(t, "author", reloaded.Schema.Models[0].Name)
+}
+
+func TestUpsertModelType_updatesOneRowLeavesOtherUnchanged(t *testing.T) {
+	sqldb, err := sql.Open(sqliteshim.ShimName, "file::memory:?cache=shared")
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = sqldb.Close() })
+	db := bun.NewDB(sqldb, sqlitedialect.New())
+	drv := &SystemSQLDriver{
+		ORM: db,
+		Conf: &models.Config{
+			SystemDatabaseEngine: "coredb",
+		},
+		DriverCredential: nil,
+	}
+	ctx := context.Background()
+	require.NoError(t, drv.RunMigration(ctx))
+	require.NoError(t, drv.EnsureSystemBootstrap(ctx))
+
+	pid := bootstrapmeta.StarterProjectID
+	proj, err := drv.GetProject(ctx, pid)
+	require.NoError(t, err)
+	proj.Schema = &models.ProjectSchema{
+		Models: []*models.ModelType{
+			{Name: "alpha", Description: "da"},
+			{Name: "beta", Description: "db"},
+		},
+	}
+	require.NoError(t, drv.UpdateProject(ctx, proj, false))
+
+	reloaded, err := drv.GetProject(ctx, pid)
+	require.NoError(t, err)
+	var betaFull *models.ModelType
+	for _, m := range reloaded.Schema.Models {
+		if m != nil && m.Name == "beta" {
+			betaFull = m
+			break
+		}
+	}
+	require.NotNil(t, betaFull)
+	betaFull.Description = "db-new"
+	require.NoError(t, drv.UpsertModelType(ctx, pid, betaFull))
+
+	var da, descBeta string
+	err = db.NewSelect().Column("description").Table("model_types").
+		Where("project_id = ? AND name = ?", pid, "alpha").
+		Scan(ctx, &da)
+	require.NoError(t, err)
+	require.Equal(t, "da", da)
+	err = db.NewSelect().Column("description").Table("model_types").
+		Where("project_id = ? AND name = ?", pid, "beta").
+		Scan(ctx, &descBeta)
+	require.NoError(t, err)
+	require.Equal(t, "db-new", descBeta)
+}
+
+func TestTouchProjectUpdatedAt_changesProjectsTimestamp(t *testing.T) {
+	sqldb, err := sql.Open(sqliteshim.ShimName, "file::memory:?cache=shared")
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = sqldb.Close() })
+	db := bun.NewDB(sqldb, sqlitedialect.New())
+	drv := &SystemSQLDriver{
+		ORM: db,
+		Conf: &models.Config{
+			SystemDatabaseEngine: "coredb",
+		},
+		DriverCredential: nil,
+	}
+	ctx := context.Background()
+	require.NoError(t, drv.RunMigration(ctx))
+	require.NoError(t, drv.EnsureSystemBootstrap(ctx))
+
+	pid := bootstrapmeta.StarterProjectID
+	proj, err := drv.GetProject(ctx, pid)
+	require.NoError(t, err)
+	before := proj.UpdatedAt
+	time.Sleep(2 * time.Millisecond)
+	require.NoError(t, drv.TouchProjectUpdatedAt(ctx, pid))
+	proj2, err := drv.GetProject(ctx, pid)
+	require.NoError(t, err)
+	require.NotEqual(t, before, proj2.UpdatedAt)
 }
 
 func TestCreateProject_persistsSchemaModelsOnInsert(t *testing.T) {

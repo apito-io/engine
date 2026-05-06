@@ -1297,9 +1297,6 @@ func (s *GraphQLServer) BuildServerQueriesAndMutations() {
 				"single_page_model": &graphql.ArgumentConfig{
 					Type: graphql.Boolean,
 				},
-				"is_relation": &graphql.ArgumentConfig{
-					Type: graphql.Boolean,
-				},
 				"known_as": &graphql.ArgumentConfig{
 					Type: graphql.String,
 				},
@@ -1367,6 +1364,22 @@ func (s *GraphQLServer) BuildServerQueriesAndMutations() {
 				},
 			},
 			Resolve: s.CreateConnectionTypeResolverFn,
+		},
+		"deleteConnectionFromModel": &graphql.Field{
+			Name: "RemoveConnectionFromModel",
+			Type: graphql.NewList(privateSchemaObjects.ConnectionTypeObject),
+			Args: graphql.FieldConfigArgument{
+				"known_as": &graphql.ArgumentConfig{
+					Type: graphql.String,
+				},
+				"from": &graphql.ArgumentConfig{
+					Type: graphql.NewNonNull(graphql.String),
+				},
+				"to": &graphql.ArgumentConfig{
+					Type: graphql.NewNonNull(graphql.String),
+				},
+			},
+			Resolve: s.DeleteConnectionFromModelResolverFn,
 		},
 		"upsertModelData": &graphql.Field{
 			Name: "UpsertModelDataType",

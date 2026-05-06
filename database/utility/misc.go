@@ -12,7 +12,7 @@ func GetUserFieldType(fieldInfo *models.FieldInfo) reflect.Kind {
 	case _const.StringInput:
 		switch fieldInfo.FieldType {
 		case _const.ListField:
-			if fieldInfo.Validation.IsMultiChoice || len(fieldInfo.Validation.FixedListElements) == 0 { // and multi-choice & dynamic list
+			if fieldInfo.Validation != nil && (fieldInfo.Validation.IsMultiChoice || len(fieldInfo.Validation.FixedListElements) == 0) { // and multi-choice & dynamic list
 				return reflect.Slice
 			} else {
 				return reflect.String
@@ -22,7 +22,6 @@ func GetUserFieldType(fieldInfo *models.FieldInfo) reflect.Kind {
 		default:
 			return reflect.String
 		}
-		break
 	case _const.IntInput:
 		return reflect.Int
 	case _const.DoubleInput:

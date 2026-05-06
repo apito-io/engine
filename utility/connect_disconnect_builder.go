@@ -96,12 +96,7 @@ func ConnectDisconnectParamBuilder(project *models.Project, uid string, connecti
 				connParam.BackwardConnectionType = connection
 				if connection.Relation == "has_one" {
 
-					var identifier string
-					if knownAs != "" {
-						identifier = fmt.Sprintf(`system_%s_as_%s_id`, connection.Model, knownAs)
-					} else {
-						identifier = fmt.Sprintf(`system_%s_id`, connection.Model)
-					}
+					identifier := SyntheticSystemRelationFieldIdentifier(connection.Model, knownAs)
 
 					ij := &models.InjectableHasOneConnection{
 						ModelName: modelType.Name,
@@ -132,12 +127,7 @@ func ConnectDisconnectParamBuilder(project *models.Project, uid string, connecti
 						connParam.ForwardConnectionType = _connection
 						if _connection.Relation == "has_one" {
 
-							var identifier string
-							if knownAs != "" {
-								identifier = fmt.Sprintf(`system_%s_as_%s_id`, _connection.Model, knownAs)
-							} else {
-								identifier = fmt.Sprintf(`system_%s_id`, _connection.Model)
-							}
+							identifier := SyntheticSystemRelationFieldIdentifier(_connection.Model, knownAs)
 
 							ij := &models.InjectableHasOneConnection{
 								ModelName: relationTo,
@@ -169,12 +159,7 @@ func ConnectDisconnectParamBuilder(project *models.Project, uid string, connecti
 				connParam.ForwardConnectionType = connection
 				if connection.Relation == "has_one" {
 
-					var identifier string
-					if knownAs != "" {
-						identifier = fmt.Sprintf(`system_%s_as_%s_id`, connection.Model, knownAs)
-					} else {
-						identifier = fmt.Sprintf(`system_%s_id`, connection.Model)
-					}
+					identifier := SyntheticSystemRelationFieldIdentifier(connection.Model, knownAs)
 
 					ij := &models.InjectableHasOneConnection{
 						ModelName: modelType.Name,
@@ -203,12 +188,7 @@ func ConnectDisconnectParamBuilder(project *models.Project, uid string, connecti
 						connParam.BackwardConnectionType = _connection
 						if _connection.Relation == "has_one" {
 
-							var identifier string
-							if knownAs != "" {
-								identifier = fmt.Sprintf(`system_%s_as_%s_id`, _connection.Model, knownAs)
-							} else {
-								identifier = fmt.Sprintf(`system_%s_id`, _connection.Model)
-							}
+							identifier := SyntheticSystemRelationFieldIdentifier(_connection.Model, knownAs)
 
 							ij := &models.InjectableHasOneConnection{
 								ModelName: relationTo,

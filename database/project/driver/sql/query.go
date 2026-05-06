@@ -74,37 +74,99 @@ func (S *SQLDriver) AddAuthAddOns(ctx context.Context, project *models.Project, 
 func pivotManyManyInsertRow(cdp *models.ConnectDisconnectParam, relatedID string) map[string]interface{} {
 	if cdp.ForwardConnectionModelType != nil && cdp.BackwardConnectionModelType != nil {
 		return map[string]interface{}{
-			fmt.Sprintf(`%s_id`, utility.SingularResourceName(cdp.ForwardConnectionModelType.Name)): cdp.ForwardConnectionID,
-			fmt.Sprintf(`%s_id`, utility.SingularResourceName(cdp.BackwardConnectionModelType.Name)):  relatedID,
+			fmt.Sprintf(`%s_id`, utility.PhysicalSQLTableName(cdp.ForwardConnectionModelType.Name)): cdp.ForwardConnectionID,
+			fmt.Sprintf(`%s_id`, utility.PhysicalSQLTableName(cdp.BackwardConnectionModelType.Name)):  relatedID,
 		}
 	}
 	return map[string]interface{}{
-		fmt.Sprintf(`%s_id`, utility.SingularResourceName(cdp.BackwardConnectionType.Model)): cdp.ForwardConnectionID,
-		fmt.Sprintf(`%s_id`, utility.SingularResourceName(cdp.ForwardConnectionType.Model)):  relatedID,
+		fmt.Sprintf(`%s_id`, utility.PhysicalSQLTableName(cdp.BackwardConnectionType.Model)): cdp.ForwardConnectionID,
+		fmt.Sprintf(`%s_id`, utility.PhysicalSQLTableName(cdp.ForwardConnectionType.Model)):  relatedID,
 	}
 }
 
+// connectDisconnectIsOneToOne is true for has_one↔has_one (symmetric FK columns on both model tables).
+func connectDisconnectIsOneToOne(cdp *models.ConnectDisconnectParam) bool {
+	if cdp == nil || cdp.ForwardConnectionType == nil || cdp.BackwardConnectionType == nil {
+		return false
+	}
+	return cdp.ForwardConnectionType.Relation == "has_one" && cdp.BackwardConnectionType.Relation == "has_one"
+}
+
+// runDualHasOneConnect sets both FK columns for 1:1: peer row id gets holder_id; holder row gets peer_id.
+// Invariant: redundant copies; must match AddRelationFields dual-DDL for has_one/has_one.
+func (S *SQLDriver) runDualHasOneConnect(ctx context.Context, root *models.CommonSystemParams, cdp *models.ConnectDisconnectParam, id string) error {
+	peerTbl := utility.PhysicalSQLTableName(cdp.ForwardConnectionType.Model)
+	holderTbl := utility.PhysicalSQLTableName(cdp.BackwardConnectionType.Model)
+	colOnPeerToHolder := fmt.Sprintf("%s_id", utility.PhysicalSQLTableName(cdp.BackwardConnectionType.Model))
+	colOnHolderToPeer := fmt.Sprintf("%s_id", utility.PhysicalSQLTableName(cdp.ForwardConnectionType.Model))
+	return S.ORM.RunInTx(ctx, nil, func(ctx context.Context, tx bun.Tx) error {
+		u1 := map[string]interface{}{colOnPeerToHolder: cdp.ForwardConnectionID}
+		q1 := tx.NewUpdate().Table(peerTbl).Where("id = ?", id)
+		q1 = applyBunHookWheresUpdate(S.Conf, ctx, root, q1)
+		if _, err := q1.Model(&u1).Exec(ctx); err != nil {
+			return err
+		}
+		u2 := map[string]interface{}{colOnHolderToPeer: id}
+		q2 := tx.NewUpdate().Table(holderTbl).Where("id = ?", cdp.ForwardConnectionID)
+		q2 = applyBunHookWheresUpdate(S.Conf, ctx, root, q2)
+		_, err := q2.Model(&u2).Exec(ctx)
+		return err
+	})
+}
+
+// runDualHasOneDisconnect clears both FK columns for 1:1 (mirrors runDualHasOneConnect).
+func (S *SQLDriver) runDualHasOneDisconnect(ctx context.Context, param *models.CommonSystemParams, cdp *models.ConnectDisconnectParam, id string) error {
+	peerTbl := utility.PhysicalSQLTableName(cdp.ForwardConnectionType.Model)
+	holderTbl := utility.PhysicalSQLTableName(cdp.BackwardConnectionType.Model)
+	fkOnPeer := fmt.Sprintf("%s_id", utility.PhysicalSQLTableName(cdp.BackwardConnectionType.Model))
+	fkOnHolder := fmt.Sprintf("%s_id", utility.PhysicalSQLTableName(cdp.ForwardConnectionType.Model))
+	return S.ORM.RunInTx(ctx, nil, func(ctx context.Context, tx bun.Tx) error {
+		qu1 := tx.NewUpdate().Table(peerTbl).
+			Set("? = NULL", bun.Ident(fkOnPeer)).
+			Where("id = ?", id).
+			Where("? = ?", bun.Ident(fkOnPeer), cdp.ForwardConnectionID)
+		qu1 = applyBunHookWheresUpdate(S.Conf, ctx, param, qu1)
+		if _, err := qu1.Exec(ctx); err != nil {
+			return err
+		}
+		qu2 := tx.NewUpdate().Table(holderTbl).
+			Set("? = NULL", bun.Ident(fkOnHolder)).
+			Where("id = ?", cdp.ForwardConnectionID).
+			Where("? = ?", bun.Ident(fkOnHolder), id)
+		qu2 = applyBunHookWheresUpdate(S.Conf, ctx, param, qu2)
+		_, err := qu2.Exec(ctx)
+		return err
+	})
+}
+
 func (S *SQLDriver) ConnectBuilder(ctx context.Context, root *models.CommonSystemParams) error {
+	if root == nil || len(root.ConDisParam) == 0 {
+		return nil
+	}
 	var err error
 	for _, cdp := range root.ConDisParam {
 		for _, id := range cdp.ActionIDs {
 			switch cdp.ConnectionType {
 			case "forward":
-				tableName := utility.SingularResourceName(cdp.ForwardConnectionType.Model)
+				tableName := utility.PhysicalSQLTableName(cdp.ForwardConnectionType.Model)
 				switch cdp.BackwardConnectionType.Relation {
 				case "has_one":
-					u := map[string]interface{}{
-						fmt.Sprintf(`%s_id`, utility.SingularResourceName(cdp.BackwardConnectionType.Model)): cdp.ForwardConnectionID,
+					if connectDisconnectIsOneToOne(cdp) {
+						err = S.runDualHasOneConnect(ctx, root, cdp, id)
+					} else {
+						u := map[string]interface{}{
+							fmt.Sprintf(`%s_id`, utility.PhysicalSQLTableName(cdp.BackwardConnectionType.Model)): cdp.ForwardConnectionID,
+						}
+						qu := S.ORM.NewUpdate().Table(tableName).Where("id = ?", id)
+						qu = applyBunHookWheresUpdate(S.Conf, ctx, root, qu)
+						_, err = qu.Model(&u).Exec(ctx)
 					}
-					qu := S.ORM.NewUpdate().Table(tableName).Where("id = ?", id)
-					qu = applyBunHookWheresUpdate(S.Conf, ctx, root, qu)
-					_, err = qu.Model(&u).Exec(ctx)
 					if err != nil {
 						return err
 					}
 					break
 				case "has_many":
-					tableName = fmt.Sprintf(`%s_%s`, utility.SingularResourceName(cdp.BackwardConnectionType.Model), tableName)
+					tableName = fmt.Sprintf(`%s_%s`, utility.PhysicalSQLTableName(cdp.BackwardConnectionType.Model), tableName)
 					row := pivotManyManyInsertRow(cdp, id)
 					_, err = S.ORM.NewInsert().Table(tableName).Model(&row).Exec(ctx)
 					if err != nil {
@@ -114,21 +176,25 @@ func (S *SQLDriver) ConnectBuilder(ctx context.Context, root *models.CommonSyste
 				}
 				break
 			case "backward":
-				tableName := utility.SingularResourceName(cdp.ForwardConnectionType.Model)
+				tableName := utility.PhysicalSQLTableName(cdp.ForwardConnectionType.Model)
 				switch cdp.ForwardConnectionType.Relation {
 				case "has_one":
-					u := map[string]interface{}{
-						fmt.Sprintf(`%s_id`, utility.SingularResourceName(cdp.BackwardConnectionType.Model)): cdp.ForwardConnectionID,
+					if connectDisconnectIsOneToOne(cdp) {
+						err = S.runDualHasOneConnect(ctx, root, cdp, id)
+					} else {
+						u := map[string]interface{}{
+							fmt.Sprintf(`%s_id`, utility.PhysicalSQLTableName(cdp.BackwardConnectionType.Model)): cdp.ForwardConnectionID,
+						}
+						qu := S.ORM.NewUpdate().Table(tableName).Where("id = ?", id)
+						qu = applyBunHookWheresUpdate(S.Conf, ctx, root, qu)
+						_, err = qu.Model(&u).Exec(ctx)
 					}
-					qu := S.ORM.NewUpdate().Table(tableName).Where("id = ?", id)
-					qu = applyBunHookWheresUpdate(S.Conf, ctx, root, qu)
-					_, err = qu.Model(&u).Exec(ctx)
 					if err != nil {
 						return err
 					}
 					break
 				case "has_many":
-					tableName = fmt.Sprintf(`%s_%s`, utility.SingularResourceName(cdp.BackwardConnectionType.Model), tableName)
+					tableName = fmt.Sprintf(`%s_%s`, utility.PhysicalSQLTableName(cdp.BackwardConnectionType.Model), tableName)
 					row := pivotManyManyInsertRow(cdp, id)
 					_, err = S.ORM.NewInsert().Table(tableName).Model(&row).Exec(ctx)
 					if err != nil {
@@ -156,21 +222,25 @@ func (S *SQLDriver) DisconnectBuilder(ctx context.Context, param *models.CommonS
 		for _, id := range cdp.ActionIDs {
 			switch cdp.ConnectionType {
 			case "forward":
-				tableName := utility.SingularResourceName(cdp.ForwardConnectionType.Model)
+				tableName := utility.PhysicalSQLTableName(cdp.ForwardConnectionType.Model)
 				switch cdp.BackwardConnectionType.Relation {
 				case "has_one":
-					fkCol := fmt.Sprintf("%s_id", utility.SingularResourceName(cdp.BackwardConnectionType.Model))
-					qu := S.ORM.NewUpdate().Table(tableName).
-						Set("? = NULL", bun.Ident(fkCol)).
-						Where("id = ?", id).
-						Where("? = ?", bun.Ident(fkCol), cdp.ForwardConnectionID)
-					qu = applyBunHookWheresUpdate(S.Conf, ctx, param, qu)
-					_, err = qu.Exec(ctx)
+					if connectDisconnectIsOneToOne(cdp) {
+						err = S.runDualHasOneDisconnect(ctx, param, cdp, id)
+					} else {
+						fkCol := fmt.Sprintf("%s_id", utility.PhysicalSQLTableName(cdp.BackwardConnectionType.Model))
+						qu := S.ORM.NewUpdate().Table(tableName).
+							Set("? = NULL", bun.Ident(fkCol)).
+							Where("id = ?", id).
+							Where("? = ?", bun.Ident(fkCol), cdp.ForwardConnectionID)
+						qu = applyBunHookWheresUpdate(S.Conf, ctx, param, qu)
+						_, err = qu.Exec(ctx)
+					}
 					if err != nil {
 						return err
 					}
 				case "has_many":
-					pivotTable := fmt.Sprintf(`%s_%s`, utility.SingularResourceName(cdp.BackwardConnectionType.Model), tableName)
+					pivotTable := fmt.Sprintf(`%s_%s`, utility.PhysicalSQLTableName(cdp.BackwardConnectionType.Model), tableName)
 					row := pivotManyManyInsertRow(cdp, id)
 					qd := S.ORM.NewDelete().Table(pivotTable)
 					for k, v := range row {
@@ -182,21 +252,25 @@ func (S *SQLDriver) DisconnectBuilder(ctx context.Context, param *models.CommonS
 					}
 				}
 			case "backward":
-				tableName := utility.SingularResourceName(cdp.ForwardConnectionType.Model)
+				tableName := utility.PhysicalSQLTableName(cdp.ForwardConnectionType.Model)
 				switch cdp.ForwardConnectionType.Relation {
 				case "has_one":
-					fkCol := fmt.Sprintf("%s_id", utility.SingularResourceName(cdp.BackwardConnectionType.Model))
-					qu := S.ORM.NewUpdate().Table(tableName).
-						Set("? = NULL", bun.Ident(fkCol)).
-						Where("id = ?", id).
-						Where("? = ?", bun.Ident(fkCol), cdp.ForwardConnectionID)
-					qu = applyBunHookWheresUpdate(S.Conf, ctx, param, qu)
-					_, err = qu.Exec(ctx)
+					if connectDisconnectIsOneToOne(cdp) {
+						err = S.runDualHasOneDisconnect(ctx, param, cdp, id)
+					} else {
+						fkCol := fmt.Sprintf("%s_id", utility.PhysicalSQLTableName(cdp.BackwardConnectionType.Model))
+						qu := S.ORM.NewUpdate().Table(tableName).
+							Set("? = NULL", bun.Ident(fkCol)).
+							Where("id = ?", id).
+							Where("? = ?", bun.Ident(fkCol), cdp.ForwardConnectionID)
+						qu = applyBunHookWheresUpdate(S.Conf, ctx, param, qu)
+						_, err = qu.Exec(ctx)
+					}
 					if err != nil {
 						return err
 					}
 				case "has_many":
-					pivotTable := fmt.Sprintf(`%s_%s`, utility.SingularResourceName(cdp.BackwardConnectionType.Model), tableName)
+					pivotTable := fmt.Sprintf(`%s_%s`, utility.PhysicalSQLTableName(cdp.BackwardConnectionType.Model), tableName)
 					row := pivotManyManyInsertRow(cdp, id)
 					qd := S.ORM.NewDelete().Table(pivotTable)
 					for k, v := range row {
@@ -306,7 +380,7 @@ func (S *SQLDriver) GetSingleProjectDocument(ctx context.Context, param *models.
 
 	returnType := SelectBuilder("y", local, param.Model, false)
 
-	tableName := utility.SingularResourceName(param.Model.Name)
+	tableName := utility.PhysicalSQLTableName(param.Model.Name)
 	result := map[string]interface{}{}
 	hookWhere, hookArgs, err := singleDocHookWhereSQLAndArgs(S.Conf, ctx, param)
 	if err != nil {
@@ -380,7 +454,7 @@ func (S *SQLDriver) GetSingleRawDocumentFromProject(ctx context.Context, param *
 		y.status as sys_status
 	`
 
-	tableName := utility.SingularResourceName(param.Model.Name)
+	tableName := utility.PhysicalSQLTableName(param.Model.Name)
 	result := map[string]interface{}{}
 	hookWhere, hookArgs, err := singleDocHookWhereSQLAndArgs(S.Conf, ctx, param)
 	if err != nil {

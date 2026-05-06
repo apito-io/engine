@@ -20,7 +20,8 @@ var MapActionName = map[string]string{
 	"UpsertFieldToModelResolverFn":   "added or modified a field to a model", // need to be separated
 	"DeleteFieldTypeResolverFn":      "deleted a field",
 	"ModelFieldOperationResolverFn":  "modified a field of a model",
-	"CreateConnectionTypeResolverFn": "created a connection between models",
+	"CreateConnectionTypeResolverFn":       "created a connection between models",
+	"DeleteConnectionFromModelResolverFn":  "removed a connection between models",
 	"UpsertModelDataFnFn":            "added or modified data of a model",
 	"DeleteModelDataFnFn":            "deleted data of a model",
 }

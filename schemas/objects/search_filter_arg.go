@@ -168,12 +168,21 @@ func BuildWhereConditionArgument(name string, fieldInfo *models.FieldInfo) *grap
 
 	fields := graphql.InputObjectConfigFieldMap{}
 
+	if fieldInfo == nil {
+		return graphql.NewInputObject(graphql.InputObjectConfig{
+			Name:   strings.ToUpper(name + "_Common_Filter_Condition"),
+			Fields: fields,
+		})
+	}
+
 	// input type special filter
 	switch fieldInfo.InputType {
 	case "string":
 		switch fieldInfo.FieldType {
 		case "list":
-			if !fieldInfo.Validation.IsMultiChoice && len(fieldInfo.Validation.FixedListElements) > 0 { // for dropdown
+			v := fieldInfo.Validation
+			isDropdown := v != nil && !v.IsMultiChoice && len(v.FixedListElements) > 0
+			if isDropdown { // for dropdown
 				fields["eq"] = &graphql.InputObjectFieldConfig{
 					Type: graphql.String,
 				}

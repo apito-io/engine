@@ -69,7 +69,8 @@ func fieldSQLValidations(f *models.FieldInfo) []string {
 			defaultValue = 0.0
 		}
 		validations = append(validations, fmt.Sprintf("NOT NULL DEFAULT %v", defaultValue))
-	} else if f.Validation.Unique {
+	}
+	if f.Validation.Unique {
 		validations = append(validations, "UNIQUE")
 	}
 	return validations
@@ -123,10 +124,32 @@ func AlterTableAddFieldSQL(engine, tableName string, f *models.FieldInfo) ([]str
 		tq := QuotePGIdent(tableName)
 		fq := QuotePGIdent(f.Identifier)
 		return []string{fmt.Sprintf(`ALTER TABLE %s ADD COLUMN IF NOT EXISTS %s %s%s`, tq, fq, datatype, valSuffix)}, nil
-	default:
+	case _const.MySQLDriver, _const.MariaDBDriver:
 		t := strings.ReplaceAll(tableName, "`", "``")
-		// Match legacy AddFieldToModel: ADD without COLUMN keyword (SQLite accepts both).
-		return []string{fmt.Sprintf("ALTER TABLE `%s` ADD %s %s%s", t, f.Identifier, datatype, valSuffix)}, nil
+		cq := QuotePGIdent(f.Identifier) // reuse for MySQL/MariaDB
+		return []string{fmt.Sprintf("ALTER TABLE `%s` ADD COLUMN IF NOT EXISTS %s %s%s", t, cq, datatype, valSuffix)}, nil
+	default:
+		// SQLite / libsql / unknown: SQLite does NOT support UNIQUE in ALTER TABLE ADD COLUMN.
+		// Strategy: add column without UNIQUE, then create a UNIQUE INDEX separately.
+		t := strings.ReplaceAll(tableName, "`", "``")
+		cleanSuffix := strings.ReplaceAll(valSuffix, "UNIQUE", "")
+		cleanSuffix = strings.TrimSpace(cleanSuffix)
+		
+		var stmts []string
+		// Add column without UNIQUE constraint
+		stmt := fmt.Sprintf("ALTER TABLE `%s` ADD %s %s%s", t, f.Identifier, datatype, cleanSuffix)
+		stmts = append(stmts, stmt)
+		// If original valSuffix contained UNIQUE, add a separate UNIQUE index
+		if strings.Contains(valSuffix, "UNIQUE") {
+			idxName := fmt.Sprintf("idx_%s_%s", utility.PhysicalSQLTableName(tableName), f.Identifier)
+			// SQLite identifier quoting: variables already contain quotes
+			idxQ := QuotePGIdent(idxName)           // returns double-quoted identifier: "idx_name"
+			tableQ := strings.ReplaceAll(tableName, "`", "``") // backtick-quoted: `table_name`
+			colQ := strings.ReplaceAll(f.Identifier, "`", "``") // backtick-quoted: `col_name`
+			// Note: tableQ and colQ already include backticks, so don't add extra in format string
+			stmts = append(stmts, fmt.Sprintf("CREATE UNIQUE INDEX IF NOT EXISTS %s ON %s(%s)", idxQ, tableQ, colQ))
+		}
+		return stmts, nil
 	}
 }
 
@@ -155,12 +178,12 @@ func (S *SQLDriver) EnsureModelUserFieldColumns(ctx context.Context, model *mode
 	if model == nil || len(model.Fields) == 0 {
 		return nil
 	}
-	tableName := utility.SingularResourceName(model.Name)
+	tableName := utility.PhysicalSQLTableName(model.Name)
 	for _, f := range model.Fields {
 		if f == nil || strings.TrimSpace(f.Identifier) == "" {
 			continue
 		}
-		if skipDDLSyntheticSystemRelationField(f) {
+		if skipDDLSyntheticSystemRelationField(f, model) {
 			continue
 		}
 		if f.InputType == "geo" {

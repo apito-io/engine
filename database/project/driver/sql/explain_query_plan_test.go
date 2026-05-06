@@ -141,7 +141,7 @@ CREATE INDEX IF NOT EXISTS idx_tag_post_tag_id ON tag_post (tag_id);
 			},
 		},
 	}
-	qRel, relArgs, _, err := BuildCombinedRelationQuery(cfg, "", utility.SingularResourceName("post"), relParam)
+	qRel, relArgs, _, err := BuildCombinedRelationQuery(cfg, "", utility.PhysicalSQLTableName("post"), relParam)
 	require.NoError(t, err)
 	explainDetailContainsUsingIndex(t, ctx, db, qRel, relArgs...)
 

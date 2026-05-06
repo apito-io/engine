@@ -359,6 +359,67 @@ func (m *SystemMongoDriver) UpdateProject(ctx context.Context, project *models.P
 	}
 }
 
+// PersistProjectModelTypes is a no-op for MongoDB; schema is stored on the project document via UpdateProject.
+func (m *SystemMongoDriver) PersistProjectModelTypes(ctx context.Context, projectID string, schemaModels []*models.ModelType) error {
+	return nil
+}
+
+// TouchProjectUpdatedAt updates only the project document timestamp.
+func (m *SystemMongoDriver) TouchProjectUpdatedAt(ctx context.Context, projectID string) error {
+	if projectID == "" {
+		return nil
+	}
+	collection := m.Database.Collection("projects")
+	_, err := collection.UpdateOne(ctx, bson.M{"_id": projectID}, bson.M{
+		"$set": bson.M{"updated_at": time.Now().Format(time.RFC3339)},
+	})
+	return err
+}
+
+// UpsertModelType merges one model into the project document and saves.
+func (m *SystemMongoDriver) UpsertModelType(ctx context.Context, projectID string, mt *models.ModelType) error {
+	if projectID == "" || mt == nil || mt.Name == "" {
+		return nil
+	}
+	proj, err := m.GetProject(ctx, projectID)
+	if err != nil {
+		return err
+	}
+	if proj.Schema == nil {
+		proj.Schema = &models.ProjectSchema{}
+	}
+	for i, mod := range proj.Schema.Models {
+		if mod != nil && mod.Name == mt.Name {
+			proj.Schema.Models[i] = mt
+			return m.UpdateProject(ctx, proj, true)
+		}
+	}
+	proj.Schema.Models = append(proj.Schema.Models, mt)
+	return m.UpdateProject(ctx, proj, true)
+}
+
+// DeleteModelType removes one model from the embedded schema.
+func (m *SystemMongoDriver) DeleteModelType(ctx context.Context, projectID, modelName string) error {
+	if projectID == "" || modelName == "" {
+		return nil
+	}
+	proj, err := m.GetProject(ctx, projectID)
+	if err != nil {
+		return err
+	}
+	if proj.Schema == nil {
+		return nil
+	}
+	out := proj.Schema.Models[:0]
+	for _, mod := range proj.Schema.Models {
+		if mod == nil || mod.Name != modelName {
+			out = append(out, mod)
+		}
+	}
+	proj.Schema.Models = out
+	return m.UpdateProject(ctx, proj, true)
+}
+
 // CheckTokenBlacklisted checks if a token is blacklisted using MongoDB
 func (m *SystemMongoDriver) CheckTokenBlacklisted(ctx context.Context, tokenId string) error {
 	collection := m.Database.Collection("token_blacklist")

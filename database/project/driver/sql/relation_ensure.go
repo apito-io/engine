@@ -20,7 +20,7 @@ func (S *SQLDriver) EnsureRelationArtifactsFromSchema(ctx context.Context, model
 		if m == nil {
 			continue
 		}
-		k := strings.TrimSpace(utility.SingularResourceName(m.Name))
+		k := strings.TrimSpace(utility.PhysicalSQLTableName(m.Name))
 		if k != "" {
 			byName[k] = m
 		}
@@ -30,12 +30,12 @@ func (S *SQLDriver) EnsureRelationArtifactsFromSchema(ctx context.Context, model
 		if fromModel == nil {
 			continue
 		}
-		fromName := strings.TrimSpace(utility.SingularResourceName(fromModel.Name))
+		fromName := strings.TrimSpace(utility.PhysicalSQLTableName(fromModel.Name))
 		for _, conn := range fromModel.Connections {
 			if conn == nil || conn.Relation != "has_many" {
 				continue
 			}
-			toKey := strings.TrimSpace(utility.SingularResourceName(conn.Model))
+			toKey := strings.TrimSpace(utility.PhysicalSQLTableName(conn.Model))
 			if toKey == "" {
 				continue
 			}
@@ -54,7 +54,7 @@ func (S *SQLDriver) EnsureRelationArtifactsFromSchema(ctx context.Context, model
 				if back.KnownAs != conn.KnownAs {
 					continue
 				}
-				backKey := strings.TrimSpace(utility.SingularResourceName(back.Model))
+				backKey := strings.TrimSpace(utility.PhysicalSQLTableName(back.Model))
 				if backKey == fromName {
 					rev = back
 					break
@@ -173,7 +173,7 @@ func fkPhysicalColumnOnModelToTarget(holder *models.ModelType, targetModelName s
 	if holder == nil {
 		return "", false
 	}
-	want := utility.SingularResourceName(targetModelName) + "_id"
+	want := utility.PhysicalSQLTableName(targetModelName) + "_id"
 	for _, f := range holder.Fields {
 		if f == nil || !f.SystemGenerated {
 			continue
@@ -182,7 +182,7 @@ func fkPhysicalColumnOnModelToTarget(holder *models.ModelType, targetModelName s
 		if gql == "" {
 			continue
 		}
-		phys := PhysicalSQLColumnForSystemRelationField(gql)
+		phys := PhysicalSQLColumnForSystemRelationField(gql, holder)
 		if phys == want {
 			return phys, true
 		}

@@ -45,7 +45,7 @@ func relationParentModel(connection map[string]interface{}) (string, error) {
 	if !ok || v == "" {
 		return "", fmt.Errorf("RelationshipDataLoader: connection missing to_model (parent model)")
 	}
-	return utility.SingularResourceName(v), nil
+	return utility.PhysicalSQLTableName(v), nil
 }
 
 // withMergedConnectionArgs copies ResolveParams.Args and overwrites relation geometry keys from
@@ -62,10 +62,10 @@ func withMergedConnectionArgs(param *models.CommonSystemParams, connection map[s
 	}
 	if connection != nil {
 		if v, ok := connection["to_model"].(string); ok && v != "" {
-			merged["from_model"] = utility.SingularResourceName(v)
+			merged["from_model"] = utility.PhysicalSQLTableName(v)
 		}
 		if v, ok := connection["model"].(string); ok && v != "" {
-			merged["to_model"] = utility.SingularResourceName(v)
+			merged["to_model"] = utility.PhysicalSQLTableName(v)
 		}
 		for _, k := range []string{"relation_type", "connection_type", "known_as"} {
 			if v, ok := connection[k]; ok {

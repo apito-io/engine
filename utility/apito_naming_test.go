@@ -71,6 +71,42 @@ func TestPascalFromAnyModelID(t *testing.T) {
 	}
 }
 
+func TestSyntheticSystemRelationFieldIdentifier(t *testing.T) {
+	if got := SyntheticSystemRelationFieldIdentifier("food_category", ""); got != "system_food_category_id" {
+		t.Errorf("SyntheticSystemRelationFieldIdentifier(food_category) = %q", got)
+	}
+	if got := SyntheticSystemRelationFieldIdentifier("foodCategory", ""); got != "system_food_category_id" {
+		t.Errorf("SyntheticSystemRelationFieldIdentifier(foodCategory) = %q", got)
+	}
+	if got := SyntheticSystemRelationFieldIdentifier("chef", "primary_role"); got != "system_chef_as_primary_role_id" {
+		t.Errorf("got %q", got)
+	}
+}
+
+func TestPhysicalSQLTableName(t *testing.T) {
+	cases := []struct{ in, want string }{
+		{"food_order", "food_order"},
+		{"foodOrder", "food_order"},
+		{"tenant", "tenant"},
+		{"document_revisions", "document_revisions"},
+	}
+	for _, tc := range cases {
+		if got := PhysicalSQLTableName(tc.in); got != tc.want {
+			t.Errorf("PhysicalSQLTableName(%q) = %q, want %q", tc.in, got, tc.want)
+		}
+	}
+	// Non-canonical input should match CanonicalizeModelName (same path as create-model).
+	for _, raw := range []string{"foodOrder", "Food Orders", "bankAccounts"} {
+		want, err := CanonicalizeModelName(raw)
+		if err != nil {
+			continue
+		}
+		if got := PhysicalSQLTableName(raw); got != want {
+			t.Errorf("PhysicalSQLTableName(%q) = %q, want CanonicalizeModelName=%q", raw, got, want)
+		}
+	}
+}
+
 func TestNamingVectorsJSON(t *testing.T) {
 	dir := filepath.Join("testdata", "naming_vectors.json")
 	b, err := os.ReadFile(dir)

@@ -57,6 +57,30 @@ func SingularResourceName(name string) string {
 	return CamelFromAny(name)
 }
 
+// PhysicalSQLTableName returns the snake_case model id used for SQL tables, pivot tables, and
+// {model}_id column prefixes. It is aligned with model creation: stored canonical ids (IsCanonicalModelID)
+// are returned unchanged; other input is passed through CanonicalizeModelName, same as admin
+// when creating a model. Do not use for GraphQL field names — use SingularResourceName.
+func PhysicalSQLTableName(name string) string {
+	name = strings.TrimSpace(name)
+	if strings.HasSuffix(name, "ListCount") {
+		name = strings.TrimSuffix(name, "ListCount")
+	} else if strings.HasSuffix(name, "List") {
+		name = strings.TrimSuffix(name, "List")
+	}
+	name = strings.TrimSpace(name)
+	if name == "" {
+		return ""
+	}
+	if IsCanonicalModelID(name) {
+		return name
+	}
+	if c, err := CanonicalizeModelName(name); err == nil {
+		return c
+	}
+	return strings.ToLower(strcase.ToSnake(name))
+}
+
 // ResolveStoredModelID maps a GraphQL singular base name (e.g. foodCategory from foodCategoryList, or
 // food_category) to the project schema's stored model id (e.g. food_category). knownIDs keys are
 // Model.Name values. Matches exact id or the same CamelFromAny identity.

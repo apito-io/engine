@@ -54,11 +54,11 @@ type DriverCredentials struct {
 }
 
 type ProjectToken struct {
-	ProjectID string `json:"project_id,omitempty" firestore:"project_id,omitempty" bson:"project_id,omitempty"`
-	Name      string `json:"name,omitempty" firestore:"name,omitempty" bson:"name,omitempty"`
-	Token     string `json:"token,omitempty" firestore:"token,omitempty" bson:"token,omitempty"`
-	Role      string `json:"role,omitempty" firestore:"role,omitempty" bson:"role,omitempty"`
-	Expire    string `json:"expire,omitempty" firestore:"expire,omitempty" bson:"expire,omitempty"`
+	ProjectID string `bun:"project_id,type:uuid" json:"project_id,omitempty" firestore:"project_id,omitempty" bson:"project_id,omitempty"`
+	Name      string `bun:",nullzero" json:"name,omitempty" firestore:"name,omitempty" bson:"name,omitempty"`
+	Token     string `bun:",nullzero" json:"token,omitempty" firestore:"token,omitempty" bson:"token,omitempty"`
+	Role      string `bun:",nullzero" json:"role,omitempty" firestore:"role,omitempty" bson:"role,omitempty"`
+	Expire    string `bun:",nullzero" json:"expire,omitempty" firestore:"expire,omitempty" bson:"expire,omitempty"`
 }
 
 type SyncToken struct {

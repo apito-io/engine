@@ -144,13 +144,13 @@ func (s *SQLDriver) AggregateDocOfProjectBytes(ctx context.Context, param *model
 // NewInsertableRelations retrieves new insertable relations in the project.
 func (s *SQLDriver) NewInsertableRelations(ctx context.Context, param *models.ConnectDisconnectParam) ([]string, error) {
 	// Find existing relations
-	tableName := fmt.Sprintf("%s_%s", utility.SingularResourceName(param.ForwardConnectionType.Model), utility.SingularResourceName(param.BackwardConnectionType.Model))
+	tableName := fmt.Sprintf("%s_%s", utility.PhysicalSQLTableName(param.ForwardConnectionType.Model), utility.PhysicalSQLTableName(param.BackwardConnectionType.Model))
 
 	var existingIds []string
 	query := fmt.Sprintf("SELECT %s_id FROM `%s` WHERE %s_id = ?",
-		utility.SingularResourceName(param.BackwardConnectionType.Model),
+		utility.PhysicalSQLTableName(param.BackwardConnectionType.Model),
 		tableName,
-		utility.SingularResourceName(param.ForwardConnectionType.Model))
+		utility.PhysicalSQLTableName(param.ForwardConnectionType.Model))
 
 	err := s.ORM.NewRaw(query, param.ForwardConnectionID).Scan(ctx, &existingIds)
 	if err != nil {
@@ -175,12 +175,12 @@ func (s *SQLDriver) NewInsertableRelations(ctx context.Context, param *models.Co
 
 // CheckOneToOneRelationExists checks if a one-to-one relation exists in the project.
 func (s *SQLDriver) CheckOneToOneRelationExists(ctx context.Context, param *models.ConnectDisconnectParam) (bool, error) {
-	tableName := fmt.Sprintf("%s_%s", utility.SingularResourceName(param.ForwardConnectionType.Model), utility.SingularResourceName(param.BackwardConnectionType.Model))
+	tableName := fmt.Sprintf("%s_%s", utility.PhysicalSQLTableName(param.ForwardConnectionType.Model), utility.PhysicalSQLTableName(param.BackwardConnectionType.Model))
 
 	var count int64
 	query := fmt.Sprintf("SELECT COUNT(*) FROM `%s` WHERE %s_id = ?",
 		tableName,
-		utility.SingularResourceName(param.ForwardConnectionType.Model))
+		utility.PhysicalSQLTableName(param.ForwardConnectionType.Model))
 
 	err := s.ORM.NewRaw(query, param.ForwardConnectionID).Scan(ctx, &count)
 	if err != nil {
@@ -192,13 +192,13 @@ func (s *SQLDriver) CheckOneToOneRelationExists(ctx context.Context, param *mode
 
 // GetRelationIds retrieves the IDs of every document related to a document.
 func (s *SQLDriver) GetRelationIds(ctx context.Context, param *models.ConnectDisconnectParam) ([]string, error) {
-	tableName := fmt.Sprintf("%s_%s", utility.SingularResourceName(param.ForwardConnectionType.Model), utility.SingularResourceName(param.BackwardConnectionType.Model))
+	tableName := fmt.Sprintf("%s_%s", utility.PhysicalSQLTableName(param.ForwardConnectionType.Model), utility.PhysicalSQLTableName(param.BackwardConnectionType.Model))
 
 	var relationIds []string
 	query := fmt.Sprintf("SELECT %s_id FROM `%s` WHERE %s_id = ?",
-		utility.SingularResourceName(param.BackwardConnectionType.Model),
+		utility.PhysicalSQLTableName(param.BackwardConnectionType.Model),
 		tableName,
-		utility.SingularResourceName(param.ForwardConnectionType.Model))
+		utility.PhysicalSQLTableName(param.ForwardConnectionType.Model))
 
 	err := s.ORM.NewRaw(query, param.ForwardConnectionID).Scan(ctx, &relationIds)
 	if err != nil {
@@ -210,13 +210,13 @@ func (s *SQLDriver) GetRelationIds(ctx context.Context, param *models.ConnectDis
 
 // GetRelationDocument retrieves a relation document by ID.
 func (s *SQLDriver) GetRelationDocument(ctx context.Context, param *models.ConnectDisconnectParam) (*models.EdgeRelation, error) {
-	tableName := fmt.Sprintf("%s_%s", utility.SingularResourceName(param.ForwardConnectionType.Model), utility.SingularResourceName(param.BackwardConnectionType.Model))
+	tableName := fmt.Sprintf("%s_%s", utility.PhysicalSQLTableName(param.ForwardConnectionType.Model), utility.PhysicalSQLTableName(param.BackwardConnectionType.Model))
 
 	var result map[string]interface{}
 	query := fmt.Sprintf("SELECT * FROM `%s` WHERE %s_id = ? AND %s_id = ?",
 		tableName,
-		utility.SingularResourceName(param.ForwardConnectionType.Model),
-		utility.SingularResourceName(param.BackwardConnectionType.Model))
+		utility.PhysicalSQLTableName(param.ForwardConnectionType.Model),
+		utility.PhysicalSQLTableName(param.BackwardConnectionType.Model))
 
 	err := s.ORM.NewRaw(query, param.ForwardConnectionID, param.ActionIDs[0]).Scan(ctx, &result)
 	if err != nil {
@@ -242,12 +242,12 @@ func (s *SQLDriver) GetRelationDocument(ctx context.Context, param *models.Conne
 
 // CreateRelation creates a relation in the project.
 func (s *SQLDriver) CreateRelation(ctx context.Context, projectId string, relation *models.EdgeRelation) error {
-	tableName := fmt.Sprintf("%s_%s", utility.SingularResourceName(relation.From), utility.SingularResourceName(relation.To))
+	tableName := fmt.Sprintf("%s_%s", utility.PhysicalSQLTableName(relation.From), utility.PhysicalSQLTableName(relation.To))
 
 	data := map[string]interface{}{
 		"id": utility.NewID(),
-		utility.SingularResourceName(relation.From) + "_id": relation.FromID,
-		utility.SingularResourceName(relation.To) + "_id":   relation.ToID,
+		utility.PhysicalSQLTableName(relation.From) + "_id": relation.FromID,
+		utility.PhysicalSQLTableName(relation.To) + "_id":   relation.ToID,
 		"created_at": relation.CreatedAt,
 	}
 
@@ -257,7 +257,7 @@ func (s *SQLDriver) CreateRelation(ctx context.Context, projectId string, relati
 
 // DeleteRelation deletes a relation in the project.
 func (s *SQLDriver) DeleteRelation(ctx context.Context, param *models.ConnectDisconnectParam, id string) error {
-	tableName := fmt.Sprintf("%s_%s", utility.SingularResourceName(param.ForwardConnectionType.Model), utility.SingularResourceName(param.BackwardConnectionType.Model))
+	tableName := fmt.Sprintf("%s_%s", utility.PhysicalSQLTableName(param.ForwardConnectionType.Model), utility.PhysicalSQLTableName(param.BackwardConnectionType.Model))
 
 	_, err := s.ORM.NewDelete().Table(tableName).Where("id = ?", id).Exec(ctx)
 	return err
@@ -296,7 +296,7 @@ func (s *SQLDriver) DeleteDocumentRelation(ctx context.Context, param *models.Co
 
 // DeleteDocumentsFromProject deletes multiple documents from the project.
 func (s *SQLDriver) DeleteDocumentsFromProject(ctx context.Context, param *models.CommonSystemParams) error {
-	tableName := utility.SingularResourceName(param.Model.Name)
+	tableName := utility.PhysicalSQLTableName(param.Model.Name)
 
 	_, err := s.ORM.NewDelete().Table(tableName).Where("id IN (?)", param.DocumentIDs).Exec(ctx)
 	if err != nil {
@@ -310,8 +310,8 @@ func (s *SQLDriver) DeleteDocumentsFromProject(ctx context.Context, param *model
 
 // RenameModel renames a model in the project.
 func (s *SQLDriver) RenameModel(ctx context.Context, project *models.Project, modelName, newName string) error {
-	oldTableName := utility.SingularResourceName(modelName)
-	newTableName := utility.SingularResourceName(newName)
+	oldTableName := utility.PhysicalSQLTableName(modelName)
+	newTableName := utility.PhysicalSQLTableName(newName)
 
 	query := fmt.Sprintf("RENAME TABLE `%s` TO `%s`", oldTableName, newTableName)
 	_, err := s.ORM.NewRaw(query).Exec(ctx)
@@ -334,7 +334,7 @@ func (s *SQLDriver) RenameModel(ctx context.Context, project *models.Project, mo
 func (s *SQLDriver) ConvertModel(ctx context.Context, project *models.Project, modelName string) error {
 	// This could involve creating a new table with converted structure
 	// For now, we'll create a backup table
-	oldTableName := utility.SingularResourceName(modelName)
+	oldTableName := utility.PhysicalSQLTableName(modelName)
 	newTableName := fmt.Sprintf("converted_%s", oldTableName)
 
 	query := fmt.Sprintf("CREATE TABLE `%s` AS SELECT * FROM `%s`", newTableName, oldTableName)
@@ -344,7 +344,7 @@ func (s *SQLDriver) ConvertModel(ctx context.Context, project *models.Project, m
 
 // RenameField renames a field in a model along with its data key.
 func (s *SQLDriver) RenameField(ctx context.Context, oldFieldName string, repeatedFieldGroup string, param *models.CommonSystemParams) error {
-	tableName := utility.SingularResourceName(param.Model.Name)
+	tableName := utility.PhysicalSQLTableName(param.Model.Name)
 	newFieldName := param.FieldInfo.Identifier
 
 	query := fmt.Sprintf("ALTER TABLE `%s` CHANGE COLUMN `%s` `%s` %s", tableName, oldFieldName, newFieldName, "TEXT")
@@ -354,7 +354,7 @@ func (s *SQLDriver) RenameField(ctx context.Context, oldFieldName string, repeat
 
 // DropModel drops a model from the project.
 func (s *SQLDriver) DropModel(ctx context.Context, project *models.Project, modelName string) error {
-	tableName := utility.SingularResourceName(modelName)
+	tableName := utility.PhysicalSQLTableName(modelName)
 
 	query := fmt.Sprintf("DROP TABLE IF EXISTS `%s`", tableName)
 	_, err := s.ORM.NewRaw(query).Exec(ctx)
@@ -376,7 +376,7 @@ func (s *SQLDriver) DropModel(ctx context.Context, project *models.Project, mode
 
 // CreateIndex creates an index for a model in the project.
 func (s *SQLDriver) CreateIndex(ctx context.Context, param *models.CommonSystemParams, fieldName string, parent_field string) error {
-	tableName := utility.SingularResourceName(param.Model.Name)
+	tableName := utility.PhysicalSQLTableName(param.Model.Name)
 	indexName := fmt.Sprintf("idx_%s_%s", tableName, fieldName)
 	if s.DriverCredential == nil {
 		return errors.New("CreateIndex: nil driver credentials")
@@ -406,7 +406,7 @@ func (s *SQLDriver) CreateIndex(ctx context.Context, param *models.CommonSystemP
 
 // DropIndex drops an index from a model in the project.
 func (s *SQLDriver) DropIndex(ctx context.Context, param *models.CommonSystemParams, indexName string) error {
-	tableName := utility.SingularResourceName(param.Model.Name)
+	tableName := utility.PhysicalSQLTableName(param.Model.Name)
 
 	query := fmt.Sprintf("DROP INDEX `%s` ON `%s`", indexName, tableName)
 	_, err := s.ORM.NewRaw(query).Exec(ctx)
@@ -499,8 +499,8 @@ func (s *SQLDriver) DuplicateModel(ctx context.Context, project *models.Project,
 	project.Schema.Models = append(project.Schema.Models, newModel)
 
 	// Create the database table
-	oldTableName := utility.SingularResourceName(modelName)
-	newTableName := utility.SingularResourceName(newName)
+	oldTableName := utility.PhysicalSQLTableName(modelName)
+	newTableName := utility.PhysicalSQLTableName(newName)
 
 	query := fmt.Sprintf("CREATE TABLE `%s` LIKE `%s`", newTableName, oldTableName)
 	_, err := s.ORM.NewRaw(query).Exec(ctx)

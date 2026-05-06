@@ -13,7 +13,7 @@ import (
 // CreateModelTable creates a model table with only an id primary key column.
 // Use ifNotExists to guard against duplicate table errors during provisioning.
 func (S *SQLDriver) CreateModelTable(ctx context.Context, model *models.ModelType, ifNotExists bool) error {
-	tableName := utility.SingularResourceName(model.Name)
+	tableName := utility.PhysicalSQLTableName(model.Name)
 	ifClause := " "
 	if ifNotExists {
 		ifClause = " IF NOT EXISTS "

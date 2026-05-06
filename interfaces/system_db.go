@@ -20,6 +20,17 @@ type ApitoSystemDB interface {
 	CreateProject(ctx context.Context, userId string, project *models.Project) (*models.Project, error)
 	// UpdateProject updates a project
 	UpdateProject(ctx context.Context, project *models.Project, replace bool) error
+	// PersistProjectModelTypes reconciles normalized model_types rows (SQL): deletes rows not in models,
+	// then upserts each entry. Pass an empty slice to remove all models for the project.
+	// Document stores (MongoDB, BBolt, ArangoDB) no-op; schema is saved with UpdateProject.
+	PersistProjectModelTypes(ctx context.Context, projectID string, schemaModels []*models.ModelType) error
+	// UpsertModelType inserts or updates a single model_types row (SQL). Does not delete orphans or touch other models.
+	// Document stores merge this model into the project document schema.
+	UpsertModelType(ctx context.Context, projectID string, m *models.ModelType) error
+	// DeleteModelType removes one model_types row (SQL) or one model from embedded schema (document stores).
+	DeleteModelType(ctx context.Context, projectID, modelName string) error
+	// TouchProjectUpdatedAt sets projects.updated_at without persisting schema (for granular schema edits).
+	TouchProjectUpdatedAt(ctx context.Context, projectID string) error
 	// GetProjects retrieves multiple projects by their IDs
 	GetProjects(ctx context.Context, keys []string) ([]*models.Project, error)
 	// GetProject retrieves a project by its ID

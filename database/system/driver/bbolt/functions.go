@@ -78,6 +78,68 @@ func (d *ProBBoltSystemDriver) UpdateProject(ctx context.Context, project *model
 	}
 }
 
+// PersistProjectModelTypes is a no-op for BBolt; schema is stored on the project record via UpdateProject.
+func (d *ProBBoltSystemDriver) PersistProjectModelTypes(ctx context.Context, projectID string, schemaModels []*models.ModelType) error {
+	return nil
+}
+
+// TouchProjectUpdatedAt bumps updated_at on the stored project record.
+func (d *ProBBoltSystemDriver) TouchProjectUpdatedAt(ctx context.Context, projectID string) error {
+	if projectID == "" {
+		return nil
+	}
+	proj, err := d.GetProject(ctx, projectID)
+	if err != nil {
+		return err
+	}
+	proj.UpdatedAt = utility.GetCurrentTime()
+	return d.UpdateProject(ctx, proj, true)
+}
+
+// UpsertModelType merges one model into the project record and saves.
+func (d *ProBBoltSystemDriver) UpsertModelType(ctx context.Context, projectID string, mt *models.ModelType) error {
+	if projectID == "" || mt == nil || mt.Name == "" {
+		return nil
+	}
+	proj, err := d.GetProject(ctx, projectID)
+	if err != nil {
+		return err
+	}
+	if proj.Schema == nil {
+		proj.Schema = &models.ProjectSchema{}
+	}
+	for i, mod := range proj.Schema.Models {
+		if mod != nil && mod.Name == mt.Name {
+			proj.Schema.Models[i] = mt
+			return d.UpdateProject(ctx, proj, true)
+		}
+	}
+	proj.Schema.Models = append(proj.Schema.Models, mt)
+	return d.UpdateProject(ctx, proj, true)
+}
+
+// DeleteModelType removes one model from the embedded schema.
+func (d *ProBBoltSystemDriver) DeleteModelType(ctx context.Context, projectID, modelName string) error {
+	if projectID == "" || modelName == "" {
+		return nil
+	}
+	proj, err := d.GetProject(ctx, projectID)
+	if err != nil {
+		return err
+	}
+	if proj.Schema == nil {
+		return nil
+	}
+	out := proj.Schema.Models[:0]
+	for _, mod := range proj.Schema.Models {
+		if mod == nil || mod.Name != modelName {
+			out = append(out, mod)
+		}
+	}
+	proj.Schema.Models = out
+	return d.UpdateProject(ctx, proj, true)
+}
+
 func (d *ProBBoltSystemDriver) GetProject(ctx context.Context, id string) (*models.Project, error) {
 	var project models.Project
 	collection := d.DB.Collection("projects")

@@ -237,7 +237,6 @@ func (m *ProjectKeyManager) ValidateAndSetContext(c echo.Context, token string) 
 	if err != nil {
 		return nil, err
 	}
-
 	// set token in context
 	c.Set("token", token)
 

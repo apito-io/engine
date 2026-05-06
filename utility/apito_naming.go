@@ -341,3 +341,20 @@ func CanonicalSystemRelationFieldIdentifier(identifier string) string {
 	}
 	return pfx + c + sfx
 }
+
+// SyntheticSystemRelationFieldIdentifier builds system_<canonical_model>_id or
+// system_<canonical_model>_as_<known_as>_id for schema-stored synthetic relation fields.
+// Segments use PhysicalSQLTableName so they align with SQL FK columns. Do not use raw
+// Connection.Model in fmt.Sprintf — lowerCamel or collapsed lowercase breaks SQLite column names.
+func SyntheticSystemRelationFieldIdentifier(modelID, knownAs string) string {
+	modelID = strings.TrimSpace(modelID)
+	knownAs = strings.TrimSpace(knownAs)
+	if modelID == "" {
+		return ""
+	}
+	mSeg := PhysicalSQLTableName(modelID)
+	if knownAs != "" {
+		return fmt.Sprintf("system_%s_as_%s_id", mSeg, PhysicalSQLTableName(knownAs))
+	}
+	return fmt.Sprintf("system_%s_id", mSeg)
+}

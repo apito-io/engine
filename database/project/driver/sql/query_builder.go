@@ -109,7 +109,7 @@ func SelectBuilder(mv string, local string, modelType *models.ModelType, returnC
 
 	var dataJson []string
 	for _, f := range modelType.Fields {
-		phys := PhysicalSQLColumnForSystemRelationField(f.Identifier)
+		phys := PhysicalSQLColumnForSystemRelationField(f.Identifier, modelType)
 		if f.Validation != nil && local != "en" && utility.ArrayContains(f.Validation.Locals, local) {
 			dataJson = append(dataJson, fmt.Sprintf(`x.%s_%s AS %s`, phys, local, f.Identifier))
 		} else {
@@ -246,7 +246,7 @@ func FilterBuilder(variable string, where map[string]interface{}, modelType *mod
 		sqlField := field
 		// SQL row filters use table alias `x`; Arango-style paths use `x.data` — keep document keys intact there.
 		if variable == "x" {
-			sqlField = PhysicalSQLColumnForSystemRelationField(field)
+			sqlField = PhysicalSQLColumnForSystemRelationField(field, modelType)
 		}
 		fieldName := fmt.Sprintf("%s.%s", variable, sqlField)
 
@@ -541,9 +541,9 @@ func RootResolverQueryBuilder(cfg *models.Config, param *models.CommonSystemPara
 
 	var modelName string
 	if param.Model == nil {
-		modelName = utility.SingularResourceName(param.ResolveParams.Info.FieldName)
+		modelName = utility.PhysicalSQLTableName(param.ResolveParams.Info.FieldName)
 	} else {
-		modelName = utility.SingularResourceName(param.Model.Name)
+		modelName = utility.PhysicalSQLTableName(param.Model.Name)
 	}
 
 	var leftJoins []string
@@ -604,18 +604,18 @@ func RootResolverQueryBuilder(cfg *models.Config, param *models.CommonSystemPara
 			// pivot (true M:N) or a FK on the child table (e.g. Work has_one Person → person_id on work).
 			usePivot := len(param.ProjectSchemaModels) == 0 || sqlConnectionIsTrueManyToMany(param.ProjectSchemaModels, fromModel, toModel)
 			if usePivot {
-				pivotTable := fmt.Sprintf(`%s_%s`, utility.SingularResourceName(fromModel), utility.SingularResourceName(toModel))
+				pivotTable := fmt.Sprintf(`%s_%s`, utility.PhysicalSQLTableName(fromModel), utility.PhysicalSQLTableName(toModel))
 				// Pivot columns must follow the *listed* model (x) and *anchor* document (connection._id),
 				// not connection fromModel/toModel order (backward vs forward swaps which side is listed).
 				if param.Model == nil {
 					return "", nil, errors.New("model is required for pivot relation filter")
 				}
-				listedPivotCol := utility.SingularResourceName(param.Model.Name) + "_id"
+				listedPivotCol := utility.PhysicalSQLTableName(param.Model.Name) + "_id"
 				anchorModelName := sqlConnectionAnchorModelName(connectionType, fromModel, toModel)
 				if anchorModelName == "" {
 					return "", nil, errors.New("invalid connection type")
 				}
-				anchorPivotCol := utility.SingularResourceName(anchorModelName) + "_id"
+				anchorPivotCol := utility.PhysicalSQLTableName(anchorModelName) + "_id"
 				if intersect {
 					// Same as Arango: listed rows whose id is NOT IN pivot ids linked to the anchor.
 					if !returnCount {
@@ -631,7 +631,7 @@ func RootResolverQueryBuilder(cfg *models.Config, param *models.CommonSystemPara
 					connArgs = append(connArgs, anchorID)
 				}
 			} else {
-				xfk := utility.SingularResourceName(fromModel) + "_id"
+				xfk := utility.PhysicalSQLTableName(fromModel) + "_id"
 				if intersect {
 					connPreds = append(connPreds, fmt.Sprintf("(`x`.`%s` IS NULL OR `x`.`%s` != ?)", xfk, xfk))
 					connArgs = append(connArgs, anchorID)
@@ -660,7 +660,7 @@ func RootResolverQueryBuilder(cfg *models.Config, param *models.CommonSystemPara
 					connArgs = append(connArgs, anchorID)
 				} else if anchorMT != nil {
 					if col, ok := fkPhysicalColumnOnModelToTarget(anchorMT, listedMT.Name); ok {
-						anchTbl := utility.SingularResourceName(anchorM)
+						anchTbl := utility.PhysicalSQLTableName(anchorM)
 						connPreds = append(connPreds, fmt.Sprintf("EXISTS (SELECT 1 FROM `%s` AS anch WHERE anch.id = ? AND anch.`%s` = `x`.`id`)", anchTbl, col))
 						connArgs = append(connArgs, anchorID)
 					} else {
@@ -670,7 +670,7 @@ func RootResolverQueryBuilder(cfg *models.Config, param *models.CommonSystemPara
 					return "", nil, fmt.Errorf("unknown anchor model %q for has_one connection", anchorM)
 				}
 			} else {
-				col := utility.SingularResourceName(anchorM) + "_id"
+				col := utility.PhysicalSQLTableName(anchorM) + "_id"
 				connPreds = append(connPreds, fmt.Sprintf("`x`.`%s` = ?", col))
 				connArgs = append(connArgs, anchorID)
 			}
@@ -679,7 +679,7 @@ func RootResolverQueryBuilder(cfg *models.Config, param *models.CommonSystemPara
 
 	limit, offset := LimitBuilder(param.ResolveParams)
 
-	tableName := utility.SingularResourceName(param.Model.Name)
+	tableName := utility.PhysicalSQLTableName(param.Model.Name)
 
 	if !returnCount {
 		leftJoins = append(leftJoins, `left join meta as y on y.doc_id = x.id`)
@@ -795,7 +795,11 @@ func BuildCombinedRelationQuery(cfg *models.Config, relationType string, parentM
 	selectList := strings.Join(selectThing, ", ")
 
 	relationTo := relationInput["to_model"].(string)
-	tableName := utility.SingularResourceName(relationTo)
+	tableName := utility.PhysicalSQLTableName(relationTo)
+	parentCol := utility.PhysicalSQLTableName(parentModel)
+	fromModelStr := relationInput["from_model"].(string)
+	fromCol := utility.PhysicalSQLTableName(fromModelStr)
+	relationToCol := utility.PhysicalSQLTableName(relationTo)
 
 	var query string
 	var whereCondition string
@@ -804,7 +808,7 @@ func BuildCombinedRelationQuery(cfg *models.Config, relationType string, parentM
 	case "has_many":
 		var manyToManyRelation bool
 		for _, c := range arg.Model.Connections {
-			if c.Model == parentModel {
+			if utility.ModelIDMatchesGraphQLField(c.Model, parentModel) {
 				if c.Relation == "has_many" {
 					manyToManyRelation = true
 					break
@@ -816,24 +820,24 @@ func BuildCombinedRelationQuery(cfg *models.Config, relationType string, parentM
 		if manyToManyRelation {
 
 			if len(mergedFilter) > 0 {
-				whereCondition = fmt.Sprintf(`y.%s_id IN (%s) AND %s`, parentModel, keyPH, strings.Join(mergedFilter, " AND "))
+				whereCondition = fmt.Sprintf(`y.%s_id IN (%s) AND %s`, parentCol, keyPH, strings.Join(mergedFilter, " AND "))
 			} else {
-				whereCondition = fmt.Sprintf(`y.%s_id IN (%s)`, parentModel, keyPH)
+				whereCondition = fmt.Sprintf(`y.%s_id IN (%s)`, parentCol, keyPH)
 			}
 
-			keyField = fmt.Sprintf(`y.%s_id`, parentModel)
+			keyField = fmt.Sprintf(`y.%s_id`, parentCol)
 
 			switch relationshipDirection {
 			case "to":
-				pivotTable = fmt.Sprintf(`%s_%s`, utility.SingularResourceName(relationInput["from_model"].(string)), utility.SingularResourceName(relationTo))
+				pivotTable = fmt.Sprintf(`%s_%s`, fromCol, relationToCol)
 			case "from":
-				pivotTable = fmt.Sprintf(`%s_%s`, utility.SingularResourceName(relationTo), utility.SingularResourceName(relationInput["from_model"].(string)))
+				pivotTable = fmt.Sprintf(`%s_%s`, relationToCol, fromCol)
 			}
 			// Alias must match RelationshipDataLoader* (reads sys_key to bucket rows per parent id).
 			query = fmt.Sprintf(`SELECT %s AS sys_key, %s FROM `+"`%s`"+` AS y 
 				LEFT JOIN `+"`%s`"+` AS x ON x.id = y.%s_id 
 				LEFT JOIN meta AS z ON z.doc_id = x.id
-				WHERE %s`, keyField, selectList, pivotTable, tableName, relationTo, whereCondition)
+				WHERE %s`, keyField, selectList, pivotTable, tableName, relationToCol, whereCondition)
 		} else {
 
 			if len(mergedFilter) > 0 {
@@ -846,14 +850,14 @@ func BuildCombinedRelationQuery(cfg *models.Config, relationType string, parentM
 
 			switch relationshipDirection {
 			case "to":
-				pivotTable = utility.SingularResourceName(relationInput["from_model"].(string))
+				pivotTable = fromCol
 			case "from":
-				pivotTable = utility.SingularResourceName(relationTo)
+				pivotTable = relationToCol
 			}
 			query = fmt.Sprintf(`SELECT %s AS sys_key, %s FROM `+"`%s`"+` AS y 
 				LEFT JOIN `+"`%s`"+` AS x ON x.%s_id = y.id 
 				LEFT JOIN meta AS z ON z.doc_id = x.id
-				WHERE %s`, keyField, selectList, pivotTable, tableName, relationInput["from_model"].(string), whereCondition)
+				WHERE %s`, keyField, selectList, pivotTable, tableName, fromCol, whereCondition)
 		}
 	case "has_one":
 		if len(mergedFilter) > 0 {
@@ -866,17 +870,17 @@ func BuildCombinedRelationQuery(cfg *models.Config, relationType string, parentM
 
 		switch relationshipDirection {
 		case "to":
-			pivotTable = utility.SingularResourceName(relationInput["from_model"].(string))
+			pivotTable = fromCol
 			query = fmt.Sprintf(`SELECT %s AS sys_key, %s FROM `+"`%s`"+` AS y 
 				LEFT JOIN `+"`%s`"+` AS x ON x.%s_id = y.id 
 				LEFT JOIN meta AS z ON z.doc_id = x.id
-				WHERE %s`, keyField, selectList, pivotTable, tableName, relationInput["from_model"].(string), whereCondition)
+				WHERE %s`, keyField, selectList, pivotTable, tableName, fromCol, whereCondition)
 		case "from":
-			pivotTable = utility.SingularResourceName(relationInput["from_model"].(string))
+			pivotTable = fromCol
 			query = fmt.Sprintf(`SELECT %s AS sys_key, %s FROM  `+"`%s`"+` AS y 
 				LEFT JOIN `+"`%s`"+` AS x ON x.id = y.%s_id 
 				LEFT JOIN meta AS z ON z.doc_id = x.id
-				WHERE %s`, keyField, selectList, pivotTable, tableName, relationTo, whereCondition)
+				WHERE %s`, keyField, selectList, pivotTable, tableName, relationToCol, whereCondition)
 		}
 	default:
 		return "", nil, nil, fmt.Errorf("unsupported relation_type %v", relationInput["relation_type"])

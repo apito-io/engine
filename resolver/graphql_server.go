@@ -546,7 +546,7 @@ func (s *GraphQLServer) UpdateApplicationCache(ctx context.Context, projectID st
 
 // refreshProjectCacheFromSystem reloads the project from the system DB and upserts ProjectCache.
 // Use after SystemDriver.UpdateProject when schema/models changed so queries like projectModelsInfo see fresh data.
-func (s *GraphQLServer) refreshProjectCacheFromSystem(ctx context.Context, projectID string) (*models.Project, error) {
+func (s *GraphQLServer) refreshProjectAndReCache(ctx context.Context, projectID string) (*models.Project, error) {
 	fresh, err := s.SystemDriver.GetProject(ctx, projectID)
 	if err != nil {
 		return nil, err

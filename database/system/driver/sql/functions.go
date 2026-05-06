@@ -22,6 +22,7 @@ func (p *SystemSQLDriver) GetProject(ctx context.Context, id string) (*models.Pr
 		Relation("Driver").
 		Relation("Settings").
 		Relation("Schema.Models").
+		Relation("Tokens").
 		Where("project.id = ?", id).
 		Scan(ctx)
 	if err != nil {
@@ -414,6 +415,9 @@ func (p *SystemSQLDriver) CreateProject(ctx context.Context, userId string, proj
 	if err = p.syncProjectSchemaModels(ctx, project); err != nil {
 		return nil, err
 	}
+	if err = p.syncProjectTokens(ctx, project); err != nil {
+		return nil, err
+	}
 	if err = p.syncProjectSettings(ctx, project); err != nil {
 		return nil, err
 	}
@@ -477,8 +481,11 @@ func (p *SystemSQLDriver) UpdateProject(ctx context.Context, project *models.Pro
 	if err != nil {
 		return err
 	}
-	// Bun updates only the projects row; has-many rows (project_schemas, model_types) are not cascaded.
+	// Bun updates only the projects row; has-many rows (project_schemas, model_types, tokens) are not cascaded.
 	if err = p.syncProjectSchemaModels(ctx, project); err != nil {
+		return err
+	}
+	if err = p.syncProjectTokens(ctx, project); err != nil {
 		return err
 	}
 	if project.Settings != nil {
@@ -521,12 +528,51 @@ func (p *SystemSQLDriver) syncProjectSchemaModels(ctx context.Context, project *
 		}
 	}
 
-	for _, m := range schema.Models {
+	if schema.Models != nil {
+		return p.PersistProjectModelTypes(ctx, project.ID, schema.Models)
+	}
+	return nil
+}
+
+// PersistProjectModelTypes implements interfaces.ApitoSystemDB: deletes model_types rows for projectID
+// whose name is not in schemaModels, then inserts or updates each model row. schemaModels nil means no-op (reserved).
+// An empty slice deletes all model_types for the project.
+func (p *SystemSQLDriver) PersistProjectModelTypes(ctx context.Context, projectID string, schemaModels []*models.ModelType) error {
+	if projectID == "" || schemaModels == nil {
+		return nil
+	}
+
+	var keepNames []string
+	for _, m := range schemaModels {
+		if m == nil || m.Name == "" {
+			continue
+		}
+		keepNames = append(keepNames, m.Name)
+	}
+
+	var err error
+	if len(keepNames) == 0 {
+		_, err = p.ORM.NewDelete().
+			Model((*models.ModelType)(nil)).
+			Where("project_id = ?", projectID).
+			Exec(ctx)
+	} else {
+		_, err = p.ORM.NewDelete().
+			Model((*models.ModelType)(nil)).
+			Where("project_id = ?", projectID).
+			Where("name NOT IN (?)", bun.In(keepNames)).
+			Exec(ctx)
+	}
+	if err != nil {
+		return err
+	}
+
+	for _, m := range schemaModels {
 		if m == nil || m.Name == "" {
 			continue
 		}
 		row := *m
-		row.ProjectID = project.ID
+		row.ProjectID = projectID
 		_, err := p.ORM.NewInsert().Model(&row).Exec(ctx)
 		if err != nil {
 			if !isSQLUniqueViolation(err) {
@@ -537,6 +583,93 @@ func (p *SystemSQLDriver) syncProjectSchemaModels(ctx context.Context, project *
 				Where("project_id = ? AND name = ?", row.ProjectID, row.Name).
 				ExcludeColumn("project_id", "name").
 				Exec(ctx); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
+}
+
+// UpsertModelType implements interfaces.ApitoSystemDB — single model_types row, no orphan reconciliation.
+func (p *SystemSQLDriver) UpsertModelType(ctx context.Context, projectID string, m *models.ModelType) error {
+	if projectID == "" || m == nil || m.Name == "" {
+		return nil
+	}
+	row := *m
+	row.ProjectID = projectID
+	_, err := p.ORM.NewInsert().Model(&row).Exec(ctx)
+	if err != nil {
+		if !isSQLUniqueViolation(err) {
+			return err
+		}
+		if _, err = p.ORM.NewUpdate().
+			Model(&row).
+			Where("project_id = ? AND name = ?", row.ProjectID, row.Name).
+			ExcludeColumn("project_id", "name").
+			Exec(ctx); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// DeleteModelType implements interfaces.ApitoSystemDB — delete one model_types row.
+func (p *SystemSQLDriver) DeleteModelType(ctx context.Context, projectID, modelName string) error {
+	if projectID == "" || modelName == "" {
+		return nil
+	}
+	_, err := p.ORM.NewDelete().
+		Model((*models.ModelType)(nil)).
+		Where("project_id = ? AND name = ?", projectID, modelName).
+		Exec(ctx)
+	return err
+}
+
+// TouchProjectUpdatedAt implements interfaces.ApitoSystemDB.
+func (p *SystemSQLDriver) TouchProjectUpdatedAt(ctx context.Context, projectID string) error {
+	if projectID == "" {
+		return nil
+	}
+	// RFC3339Nano so granular touches differ within the same calendar second (RFC3339 truncates seconds).
+	ts := time.Now().Format(time.RFC3339Nano)
+	proj := &models.Project{
+		ID:        projectID,
+		UpdatedAt: ts,
+	}
+	_, err := p.ORM.NewUpdate().
+		Model(proj).
+		Column("updated_at").
+		WherePK().
+		Exec(ctx)
+	return err
+}
+
+// syncProjectTokens persists project_tokens (Bun does not insert has-many on UpdateProject).
+func (p *SystemSQLDriver) syncProjectTokens(ctx context.Context, project *models.Project) error {
+	if project == nil {
+		return nil
+	}
+
+	// Delete existing tokens for this project
+	_, err := p.ORM.NewDelete().
+		Model((*models.ProjectToken)(nil)).
+		Where("project_id = ?", project.ID).
+		Exec(ctx)
+	if err != nil {
+		return err
+	}
+
+	// Insert new tokens
+	for _, token := range project.Tokens {
+		if token == nil {
+			continue
+		}
+		row := *token
+		row.ProjectID = project.ID
+		_, err = p.ORM.NewInsert().Model(&row).Exec(ctx)
+		if err != nil {
+			// Skip duplicate key errors
+			if !isSQLUniqueViolation(err) {
 				return err
 			}
 		}

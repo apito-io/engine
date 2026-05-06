@@ -129,6 +129,10 @@ type Config struct {
 	// TokenClaimsHook allows the pro layer to inject additional claims into JWT/token payloads.
 	TokenClaimsHook func(project *Project, claims map[string]interface{}) `env:"-"`
 
+	// ProjectAPITokenClaimsHook allows optional claim enrichment before project API key issuance.
+	// Open-core stays policy-free and simply invokes this hook when set.
+	ProjectAPITokenClaimsHook func(ctx echo.Context, project *Project, claims *TokenClaims) `env:"-"`
+
 	// EnsureScopedDatabaseHook runs before default scoped DB creation (e.g. Postgres/MySQL per-scope isolation).
 	EnsureScopedDatabaseHook func(ctx context.Context, projectID string, base, derived *DriverCredentials) error `env:"-"`
 

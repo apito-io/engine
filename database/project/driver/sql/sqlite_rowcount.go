@@ -43,7 +43,7 @@ func (S *SQLDriver) installRowCountTriggersForModel(ctx context.Context, model *
 	if err := S.ensureApitoRowCountsTable(ctx); err != nil {
 		return err
 	}
-	tbl := utility.SingularResourceName(model.Name)
+	tbl := utility.PhysicalSQLTableName(model.Name)
 	qtbl := strings.ReplaceAll(tbl, "`", "``")
 	tlit := strings.ReplaceAll(tbl, "'", "''")
 	hasTenant, err := S.modelTableHasTenantIDColumn(ctx, tbl)
@@ -153,7 +153,7 @@ func (S *SQLDriver) tryCountFromRowCountTable(ctx context.Context, param *models
 	if _, ok := param.ResolveParams.Args["connection"].(map[string]interface{}); ok {
 		return 0, false, nil
 	}
-	modelName := utility.SingularResourceName(param.Model.Name)
+	modelName := utility.PhysicalSQLTableName(param.Model.Name)
 	if permission, ok := utility.LookupAPIPermission(param.Role, modelName); ok && permission.Read == "own" {
 		return 0, false, nil
 	}
@@ -190,7 +190,7 @@ func (S *SQLDriver) tryCountFromRowCountTable(ctx context.Context, param *models
 		}
 		tenantID = tenantWhere
 	}
-	hasTenant, err := S.modelTableHasTenantIDColumn(ctx, utility.SingularResourceName(param.Model.Name))
+	hasTenant, err := S.modelTableHasTenantIDColumn(ctx, utility.PhysicalSQLTableName(param.Model.Name))
 	if err != nil {
 		return 0, false, err
 	}
@@ -205,7 +205,7 @@ func (S *SQLDriver) tryCountFromRowCountTable(ctx context.Context, param *models
 	}
 	var n int64
 	q := `SELECT row_count FROM _apito_row_counts WHERE table_name = ? AND tenant_id = ?`
-	if err := S.ORM.NewRaw(q, utility.SingularResourceName(param.Model.Name), tenantID).Scan(ctx, &n); err != nil {
+	if err := S.ORM.NewRaw(q, utility.PhysicalSQLTableName(param.Model.Name), tenantID).Scan(ctx, &n); err != nil {
 		return 0, false, nil
 	}
 	return n, true, nil
