@@ -169,11 +169,14 @@ func sqlConnectionAnchorModelName(connectionType, fromModel, toModel string) str
 
 // fkPhysicalColumnOnModelToTarget returns (column, true) when holder's SQL row has a system-generated
 // FK column referencing targetModelName (e.g. work → person gives person_id on table work).
-func fkPhysicalColumnOnModelToTarget(holder *models.ModelType, targetModelName string) (string, bool) {
+func fkPhysicalColumnOnModelToTarget(holder *models.ModelType, targetModelName, knownAs string) (string, bool) {
 	if holder == nil {
 		return "", false
 	}
-	want := utility.PhysicalSQLTableName(targetModelName) + "_id"
+	want := relationFKColumnNameParts(targetModelName, knownAs)
+	if want == "" {
+		return "", false
+	}
 	for _, f := range holder.Fields {
 		if f == nil || !f.SystemGenerated {
 			continue

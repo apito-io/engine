@@ -70,3 +70,38 @@ CREATE TABLE food (id VARCHAR(36) NOT NULL PRIMARY KEY);
 	require.NoError(t, err)
 	require.Equal(t, 0, n)
 }
+
+func TestAddRelationFieldsHasManyHasOne_knownAsCreatesDistinctFKs(t *testing.T) {
+	ctx := context.Background()
+	sqldb, err := sql.Open(sqliteshim.ShimName, "file::memory:?cache=shared")
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = sqldb.Close() })
+	db := bun.NewDB(sqldb, sqlitedialect.New())
+
+	_, err = db.NewRaw(`
+CREATE TABLE food_order (id VARCHAR(36) NOT NULL PRIMARY KEY);
+CREATE TABLE employee (id VARCHAR(36) NOT NULL PRIMARY KEY);
+`).Exec(ctx)
+	require.NoError(t, err)
+
+	drv := &SQLDriver{
+		ORM:              db,
+		DriverCredential: &models.DriverCredentials{Engine: _const.SQLiteDriver},
+	}
+
+	waiterFrom := &models.ConnectionType{Model: "food_order", Relation: "has_many", Type: "forward", KnownAs: "waiter"}
+	waiterTo := &models.ConnectionType{Model: "employee", Relation: "has_one", Type: "backward"}
+	require.NoError(t, drv.AddRelationFields(ctx, waiterFrom, waiterTo))
+
+	chefFrom := &models.ConnectionType{Model: "food_order", Relation: "has_many", Type: "forward", KnownAs: "chef"}
+	chefTo := &models.ConnectionType{Model: "employee", Relation: "has_one", Type: "backward"}
+	require.NoError(t, drv.AddRelationFields(ctx, chefFrom, chefTo))
+
+	var n int
+	err = db.NewRaw(`SELECT COUNT(*) FROM pragma_table_info('food_order') WHERE name = ?`, "employee_as_waiter_id").Scan(ctx, &n)
+	require.NoError(t, err)
+	require.Equal(t, 1, n)
+	err = db.NewRaw(`SELECT COUNT(*) FROM pragma_table_info('food_order') WHERE name = ?`, "employee_as_chef_id").Scan(ctx, &n)
+	require.NoError(t, err)
+	require.Equal(t, 1, n)
+}

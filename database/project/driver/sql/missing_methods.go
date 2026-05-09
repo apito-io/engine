@@ -12,7 +12,7 @@ import (
 	"github.com/apito-io/engine/models"
 	"github.com/apito-io/engine/utility"
 	"github.com/apito-io/types"
-	_ "github.com/uptrace/bun"
+	"github.com/uptrace/bun"
 )
 
 // GetProjectUsers retrieves metadata for multiple users in the project.
@@ -343,11 +343,32 @@ func (s *SQLDriver) ConvertModel(ctx context.Context, project *models.Project, m
 }
 
 // RenameField renames a field in a model along with its data key.
-func (s *SQLDriver) RenameField(ctx context.Context, oldFieldName string, repeatedFieldGroup string, param *models.CommonSystemParams) error {
+func (s *SQLDriver) RenameField(ctx context.Context, oldFieldName string, parentField string, param *models.CommonSystemParams) error {
+
+	// since for repeated groups and for objects we dont need to rename the field, we only need to rename the data key
+	if parentField != "" {
+		return nil
+	}
+
 	tableName := utility.PhysicalSQLTableName(param.Model.Name)
 	newFieldName := param.FieldInfo.Identifier
 
-	query := fmt.Sprintf("ALTER TABLE `%s` CHANGE COLUMN `%s` `%s` %s", tableName, oldFieldName, newFieldName, "TEXT")
+	var query string
+	switch s.DriverCredential.Engine {
+	case _const.MySQLDriver, _const.MariaDBDriver:
+		// MySQL/MariaDB require full CHANGE COLUMN syntax with type.
+		query = fmt.Sprintf("ALTER TABLE `%s` CHANGE COLUMN `%s` `%s` %s", tableName, oldFieldName, newFieldName, "TEXT")
+	case _const.PostgreSQLDriver:
+		query = fmt.Sprintf(
+			"ALTER TABLE %s RENAME COLUMN %s TO %s",
+			QuotePGIdent(tableName),
+			QuotePGIdent(oldFieldName),
+			QuotePGIdent(newFieldName),
+		)
+	default:
+		// PostgreSQL/SQLite/libsql/Turso support RENAME COLUMN.
+		query = fmt.Sprintf("ALTER TABLE `%s` RENAME COLUMN `%s` TO `%s`", tableName, oldFieldName, newFieldName)
+	}
 	_, err := s.ORM.NewRaw(query).Exec(ctx)
 	return err
 }
@@ -374,30 +395,41 @@ func (s *SQLDriver) DropModel(ctx context.Context, project *models.Project, mode
 	return nil
 }
 
-// CreateIndex creates an index for a model in the project.
-func (s *SQLDriver) CreateIndex(ctx context.Context, param *models.CommonSystemParams, fieldName string, parent_field string) error {
+// buildCreateIndexSQL returns engine-specific CREATE INDEX IF NOT EXISTS DDL (no execution).
+func (s *SQLDriver) buildCreateIndexSQL(param *models.CommonSystemParams, fieldName string, parent_field string) (string, error) {
+	_ = parent_field
 	tableName := utility.PhysicalSQLTableName(param.Model.Name)
 	indexName := fmt.Sprintf("idx_%s_%s", tableName, fieldName)
 	if s.DriverCredential == nil {
-		return errors.New("CreateIndex: nil driver credentials")
+		return "", errors.New("CreateIndex: nil driver credentials")
 	}
-	var err error
 	switch s.DriverCredential.Engine {
 	case _const.PostgreSQLDriver:
-		q := fmt.Sprintf("CREATE INDEX IF NOT EXISTS %s ON %s (%s)",
-			QuotePGIdent(indexName), QuotePGIdent(tableName), QuotePGIdent(fieldName))
-		_, err = s.ORM.NewRaw(q).Exec(ctx)
+		return fmt.Sprintf("CREATE INDEX IF NOT EXISTS %s ON %s (%s)",
+			QuotePGIdent(indexName), QuotePGIdent(tableName), QuotePGIdent(fieldName)), nil
 	case _const.MySQLDriver, _const.MariaDBDriver:
-		q := fmt.Sprintf("CREATE INDEX IF NOT EXISTS `%s` ON `%s` (`%s`)",
+		return fmt.Sprintf("CREATE INDEX IF NOT EXISTS `%s` ON `%s` (`%s`)",
 			strings.ReplaceAll(indexName, "`", "``"),
 			strings.ReplaceAll(tableName, "`", "``"),
-			strings.ReplaceAll(fieldName, "`", "``"))
-		_, err = s.ORM.NewRaw(q).Exec(ctx)
+			strings.ReplaceAll(fieldName, "`", "``")), nil
 	default:
-		q := fmt.Sprintf("CREATE INDEX IF NOT EXISTS `%s` ON `%s` (`%s`)", indexName, tableName, fieldName)
-		_, err = s.ORM.NewRaw(q).Exec(ctx)
+		return fmt.Sprintf("CREATE INDEX IF NOT EXISTS `%s` ON `%s` (`%s`)", indexName, tableName, fieldName), nil
 	}
+}
+
+// execCreateIndexDDL runs CREATE INDEX on a bun.DB or bun.Tx (no ANALYZE).
+func (s *SQLDriver) execCreateIndexDDL(ctx context.Context, db bun.IDB, param *models.CommonSystemParams, fieldName string, parent_field string) error {
+	q, err := s.buildCreateIndexSQL(param, fieldName, parent_field)
 	if err != nil {
+		return err
+	}
+	_, err = db.NewRaw(q).Exec(ctx)
+	return err
+}
+
+// CreateIndex creates an index for a model in the project.
+func (s *SQLDriver) CreateIndex(ctx context.Context, param *models.CommonSystemParams, fieldName string, parent_field string) error {
+	if err := s.execCreateIndexDDL(ctx, s.ORM, param, fieldName, parent_field); err != nil {
 		return err
 	}
 	RunAnalyzeAfterIndexDDL(ctx, s)

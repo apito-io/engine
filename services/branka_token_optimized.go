@@ -494,11 +494,10 @@ func (t *BrankaTokenOptimized) GenerateSyncTokenOptimized(ctx context.Context, u
 // ValidateSyncTokenOptimized validates an optimized sync token
 func (t *BrankaTokenOptimized) ValidateSyncTokenOptimized(ctx context.Context, token string) (*models.TokenClaims, error) {
 
-	if len(token) < 4 || token[:4] != "cli-" {
-		return nil, errors.New("invalid token format - expected cli- prefix")
+	extractedToken := token
+	if strings.HasPrefix(token, "cli-") || strings.HasPrefix(token, "sdk-") {
+		extractedToken = token[4:]
 	}
-
-	extractedToken := token[4:]
 
 	// Decode Custom Token
 	m, err := t.Token.DecodeToString(extractedToken)
@@ -558,6 +557,7 @@ func (t *BrankaTokenOptimized) ValidateSyncTokenOptimized(ctx context.Context, t
 
 	// Create claims
 	claims := &models.TokenClaims{
+		Role:          "admin",
 		UserID:        userID,
 		ProjectIDs:    payload.PIDs,
 		Scopes:        scopes,

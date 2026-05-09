@@ -378,47 +378,44 @@ func (p *SystemSQLDriver) CreateProject(ctx context.Context, userId string, proj
 	driverToPersist := project.Driver
 	project.Driver = nil
 
-	_, err := p.ORM.NewInsert().
-		Model(project).
-		Exec(ctx)
-
-	if err != nil {
-		return nil, err
-	}
-
-	project.Driver = driverToPersist
-	if project.Driver != nil {
-		_, err = p.ORM.NewInsert().Model(project.Driver).Exec(ctx)
-		if err != nil && !isSQLUniqueViolation(err) {
-			return nil, err
+	err := p.ORM.RunInTx(ctx, nil, func(ctx context.Context, tx bun.Tx) error {
+		if _, err := tx.NewInsert().
+			Model(project).
+			Exec(ctx); err != nil {
+			return err
 		}
-	}
 
-	// Create user-project relation
-	// Match Arango (user_project_edges) and Mongo (user_projects): creator role is "admin",
-	// which must exist as a key in project.roles for BuildSystemParam / public schema permissions.
-	_, err = p.ORM.NewInsert().
-		Model(&map[string]interface{}{
-			"user_id":     userId,
-			"project_id":  project.ID,
-			"role":        "admin",
-			"permissions": `["read", "write", "admin"]`,
-		}).
-		TableExpr("user_projects").
-		Exec(ctx)
+		project.Driver = driverToPersist
+		if project.Driver != nil {
+			if _, err := tx.NewInsert().Model(project.Driver).Exec(ctx); err != nil && !isSQLUniqueViolation(err) {
+				return err
+			}
+		}
+
+		// Create user-project relation
+		// Match Arango (user_project_edges) and Mongo (user_projects): creator role is "admin",
+		// which must exist as a key in project.roles for BuildSystemParam / public schema permissions.
+		if _, err := tx.NewInsert().
+			Model(&map[string]interface{}{
+				"user_id":     userId,
+				"project_id":  project.ID,
+				"role":        "admin",
+				"permissions": `["read", "write", "admin"]`,
+			}).
+			TableExpr("user_projects").
+			Exec(ctx); err != nil {
+			return err
+		}
+
+		if err := p.syncProjectSchemaModelsTx(ctx, tx, project); err != nil {
+			return err
+		}
+		if err := p.syncProjectTokensTx(ctx, tx, project); err != nil {
+			return err
+		}
+		return p.syncProjectSettingsTx(ctx, tx, project)
+	})
 	if err != nil {
-		return nil, err
-	}
-
-	// Bun does not insert rel:belongs-to / has-many on NewInsert(Model(project)). Persist schema + model_types
-	// the same way as UpdateProject (SaaS bootstrap tenant model, console templates, etc.).
-	if err = p.syncProjectSchemaModels(ctx, project); err != nil {
-		return nil, err
-	}
-	if err = p.syncProjectTokens(ctx, project); err != nil {
-		return nil, err
-	}
-	if err = p.syncProjectSettings(ctx, project); err != nil {
 		return nil, err
 	}
 
@@ -465,33 +462,34 @@ func (p *SystemSQLDriver) UpdateSystemUser(ctx context.Context, user *models.Sys
 func (p *SystemSQLDriver) UpdateProject(ctx context.Context, project *models.Project, replace bool) error {
 	project.UpdatedAt = time.Now().Format(time.RFC3339)
 
-	var err error
-	if replace {
-		_, err = p.ORM.NewUpdate().
-			Model(project).
-			Where("id = ?", project.ID).
-			Exec(ctx)
-	} else {
-		_, err = p.ORM.NewUpdate().
-			Model(project).
-			Where("id = ?", project.ID).
-			ExcludeColumn("id", "created_at").
-			Exec(ctx)
-	}
-	if err != nil {
-		return err
-	}
-	// Bun updates only the projects row; has-many rows (project_schemas, model_types, tokens) are not cascaded.
-	if err = p.syncProjectSchemaModels(ctx, project); err != nil {
-		return err
-	}
-	if err = p.syncProjectTokens(ctx, project); err != nil {
-		return err
-	}
-	if project.Settings != nil {
-		return p.syncProjectSettings(ctx, project)
-	}
-	return nil
+	return p.ORM.RunInTx(ctx, nil, func(ctx context.Context, tx bun.Tx) error {
+		var err error
+		if replace {
+			_, err = tx.NewUpdate().
+				Model(project).
+				Where("id = ?", project.ID).
+				Exec(ctx)
+		} else {
+			_, err = tx.NewUpdate().
+				Model(project).
+				Where("id = ?", project.ID).
+				ExcludeColumn("id", "created_at").
+				Exec(ctx)
+		}
+		if err != nil {
+			return err
+		}
+		if err = p.syncProjectSchemaModelsTx(ctx, tx, project); err != nil {
+			return err
+		}
+		if err = p.syncProjectTokensTx(ctx, tx, project); err != nil {
+			return err
+		}
+		if project.Settings != nil {
+			return p.syncProjectSettingsTx(ctx, tx, project)
+		}
+		return nil
+	})
 }
 
 // syncProjectSchemaModels persists ProjectSchema and ModelType rows (ORM relations are not written by Update).
@@ -499,10 +497,20 @@ func (p *SystemSQLDriver) syncProjectSchemaModels(ctx context.Context, project *
 	if project == nil || project.Schema == nil {
 		return nil
 	}
+	return p.ORM.RunInTx(ctx, nil, func(ctx context.Context, tx bun.Tx) error {
+		return p.syncProjectSchemaModelsTx(ctx, tx, project)
+	})
+}
+
+// syncProjectSchemaModelsTx is the transactional implementation (used by CreateProject/UpdateProject in the same tx).
+func (p *SystemSQLDriver) syncProjectSchemaModelsTx(ctx context.Context, tx bun.Tx, project *models.Project) error {
+	if project == nil || project.Schema == nil {
+		return nil
+	}
 	schema := project.Schema
 	schema.ProjectID = project.ID
 
-	schemaExists, err := p.ORM.NewSelect().
+	schemaExists, err := tx.NewSelect().
 		Model((*models.ProjectSchema)(nil)).
 		Where("project_id = ?", project.ID).
 		Exists(ctx)
@@ -514,12 +522,12 @@ func (p *SystemSQLDriver) syncProjectSchemaModels(ctx context.Context, project *
 			ProjectID:           project.ID,
 			NamingSchemaVersion: schema.NamingSchemaVersion,
 		}
-		if _, err := p.ORM.NewInsert().Model(row).Exec(ctx); err != nil && !isSQLUniqueViolation(err) {
+		if _, err := tx.NewInsert().Model(row).Exec(ctx); err != nil && !isSQLUniqueViolation(err) {
 			return err
 		}
 	} else if schema.NamingSchemaVersion != 0 {
 		ps := &models.ProjectSchema{ProjectID: project.ID, NamingSchemaVersion: schema.NamingSchemaVersion}
-		if _, err := p.ORM.NewUpdate().
+		if _, err := tx.NewUpdate().
 			Model(ps).
 			Column("naming_schema_version").
 			Where("project_id = ?", project.ID).
@@ -529,7 +537,7 @@ func (p *SystemSQLDriver) syncProjectSchemaModels(ctx context.Context, project *
 	}
 
 	if schema.Models != nil {
-		return p.PersistProjectModelTypes(ctx, project.ID, schema.Models)
+		return p.persistProjectModelTypesTx(ctx, tx, project.ID, schema.Models)
 	}
 	return nil
 }
@@ -541,7 +549,12 @@ func (p *SystemSQLDriver) PersistProjectModelTypes(ctx context.Context, projectI
 	if projectID == "" || schemaModels == nil {
 		return nil
 	}
+	return p.ORM.RunInTx(ctx, nil, func(ctx context.Context, tx bun.Tx) error {
+		return p.persistProjectModelTypesTx(ctx, tx, projectID, schemaModels)
+	})
+}
 
+func (p *SystemSQLDriver) persistProjectModelTypesTx(ctx context.Context, tx bun.Tx, projectID string, schemaModels []*models.ModelType) error {
 	var keepNames []string
 	for _, m := range schemaModels {
 		if m == nil || m.Name == "" {
@@ -552,12 +565,12 @@ func (p *SystemSQLDriver) PersistProjectModelTypes(ctx context.Context, projectI
 
 	var err error
 	if len(keepNames) == 0 {
-		_, err = p.ORM.NewDelete().
+		_, err = tx.NewDelete().
 			Model((*models.ModelType)(nil)).
 			Where("project_id = ?", projectID).
 			Exec(ctx)
 	} else {
-		_, err = p.ORM.NewDelete().
+		_, err = tx.NewDelete().
 			Model((*models.ModelType)(nil)).
 			Where("project_id = ?", projectID).
 			Where("name NOT IN (?)", bun.In(keepNames)).
@@ -573,12 +586,12 @@ func (p *SystemSQLDriver) PersistProjectModelTypes(ctx context.Context, projectI
 		}
 		row := *m
 		row.ProjectID = projectID
-		_, err := p.ORM.NewInsert().Model(&row).Exec(ctx)
+		_, err := tx.NewInsert().Model(&row).Exec(ctx)
 		if err != nil {
 			if !isSQLUniqueViolation(err) {
 				return err
 			}
-			if _, err = p.ORM.NewUpdate().
+			if _, err = tx.NewUpdate().
 				Model(&row).
 				Where("project_id = ? AND name = ?", row.ProjectID, row.Name).
 				ExcludeColumn("project_id", "name").
@@ -649,26 +662,30 @@ func (p *SystemSQLDriver) syncProjectTokens(ctx context.Context, project *models
 	if project == nil {
 		return nil
 	}
+	return p.ORM.RunInTx(ctx, nil, func(ctx context.Context, tx bun.Tx) error {
+		return p.syncProjectTokensTx(ctx, tx, project)
+	})
+}
 
-	// Delete existing tokens for this project
-	_, err := p.ORM.NewDelete().
+func (p *SystemSQLDriver) syncProjectTokensTx(ctx context.Context, tx bun.Tx, project *models.Project) error {
+	if project == nil {
+		return nil
+	}
+
+	if _, err := tx.NewDelete().
 		Model((*models.ProjectToken)(nil)).
 		Where("project_id = ?", project.ID).
-		Exec(ctx)
-	if err != nil {
+		Exec(ctx); err != nil {
 		return err
 	}
 
-	// Insert new tokens
 	for _, token := range project.Tokens {
 		if token == nil {
 			continue
 		}
 		row := *token
 		row.ProjectID = project.ID
-		_, err = p.ORM.NewInsert().Model(&row).Exec(ctx)
-		if err != nil {
-			// Skip duplicate key errors
+		if _, err := tx.NewInsert().Model(&row).Exec(ctx); err != nil {
 			if !isSQLUniqueViolation(err) {
 				return err
 			}
@@ -679,6 +696,15 @@ func (p *SystemSQLDriver) syncProjectTokens(ctx context.Context, project *models
 
 // syncProjectSettings persists project_settings (Bun does not insert belongs-to on project insert/update).
 func (p *SystemSQLDriver) syncProjectSettings(ctx context.Context, project *models.Project) error {
+	if project == nil {
+		return nil
+	}
+	return p.ORM.RunInTx(ctx, nil, func(ctx context.Context, tx bun.Tx) error {
+		return p.syncProjectSettingsTx(ctx, tx, project)
+	})
+}
+
+func (p *SystemSQLDriver) syncProjectSettingsTx(ctx context.Context, tx bun.Tx, project *models.Project) error {
 	if project == nil {
 		return nil
 	}
@@ -694,7 +720,7 @@ func (p *SystemSQLDriver) syncProjectSettings(ctx context.Context, project *mode
 	row := *st
 	row.ProjectID = project.ID
 
-	exists, err := p.ORM.NewSelect().
+	exists, err := tx.NewSelect().
 		Model((*models.ProjectSettings)(nil)).
 		Where("project_id = ?", project.ID).
 		Exists(ctx)
@@ -702,10 +728,10 @@ func (p *SystemSQLDriver) syncProjectSettings(ctx context.Context, project *mode
 		return err
 	}
 	if !exists {
-		_, err = p.ORM.NewInsert().Model(&row).Exec(ctx)
+		_, err = tx.NewInsert().Model(&row).Exec(ctx)
 		return err
 	}
-	_, err = p.ORM.NewUpdate().
+	_, err = tx.NewUpdate().
 		Model(&row).
 		Where("project_id = ?", project.ID).
 		ExcludeColumn("project_id").

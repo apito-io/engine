@@ -21,6 +21,10 @@ func SetTokenClaimsToRouter(ctx echo.Context, tokenClaims *models.TokenClaims) e
 		// rest is set using id token
 		if tokenClaims.ProjectID != "" {
 			ctx.Set("project", tokenClaims.ProjectID)
+		} else if len(tokenClaims.ProjectIDs) > 0 && tokenClaims.ProjectIDs[0] != "" {
+			// Sync tokens may carry project_ids[] without ProjectID.
+			// Keep backward compatibility by setting the primary project to the first item.
+			ctx.Set("project", tokenClaims.ProjectIDs[0])
 		}
 
 		if tokenClaims.Role != "" {

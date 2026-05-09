@@ -789,6 +789,7 @@ func (s *GraphQLExecutor) HandlePayloadFormatting(ctx context.Context, param *mo
 					dbPayload[identifier] = processed
 				}
 			}
+		
 		case _const.ListField:
 
 			if f.Validation != nil && f.Validation.FixedListElements == nil { // dynamic string
@@ -922,6 +923,7 @@ func (s *GraphQLExecutor) HandlePayloadFormatting(ctx context.Context, param *mo
 					dbPayload[identifier] = formattedInput
 				}
 			}
+		
 		case _const.ObjectField:
 			if userInput, ok := inputPayload[f.Identifier].(map[string]interface{}); ok && len(userInput) > 0 {
 				var oldUserInput map[string]interface{}

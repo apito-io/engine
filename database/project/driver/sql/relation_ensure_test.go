@@ -14,11 +14,11 @@ func TestFkPhysicalColumnOnModelToTarget(t *testing.T) {
 			{Identifier: "system_person_id", SystemGenerated: true},
 		},
 	}
-	col, ok := fkPhysicalColumnOnModelToTarget(work, "person")
+	col, ok := fkPhysicalColumnOnModelToTarget(work, "person", "")
 	require.True(t, ok)
 	require.Equal(t, "person_id", col)
 
-	_, ok = fkPhysicalColumnOnModelToTarget(work, "tenant")
+	_, ok = fkPhysicalColumnOnModelToTarget(work, "tenant", "")
 	require.False(t, ok)
 }
 

@@ -131,7 +131,7 @@ type ProjectDBInterface interface {
 	// DropField drops/deletes a field and its data from the project.
 	DropField(ctx context.Context, param *models.CommonSystemParams) error
 	// RenameField renames a field in a model along with its data key.
-	RenameField(ctx context.Context, oldFieldName string, repeatedFieldGroup string, param *models.CommonSystemParams) error
+	RenameField(ctx context.Context, oldFieldName string, parentField string, param *models.CommonSystemParams) error
 	//DuplicateModel(project *models.Project, modelName, newName string) (*models.ProjectSchema, error)
 
 	// DuplicateField rename a field in a model along with its data key

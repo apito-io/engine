@@ -8,6 +8,7 @@ import (
 	"github.com/apito-io/engine/models"
 )
 
+
 func ConnectDisconnectParamBuilder(project *models.Project, uid string, connectionIds map[string]interface{}, modelType *models.ModelType) ([]*models.ConnectDisconnectParam, error) {
 
 	projectID := project.ID
@@ -24,33 +25,31 @@ func ConnectDisconnectParamBuilder(project *models.Project, uid string, connecti
 		var ids []string
 		var relationTo string
 		if strings.HasSuffix(k, "_ids") {
-			switch v.(type) {
-			case []interface{}:
-				if val, ok := v.([]interface{}); ok && len(val) > 0 {
-					for _, id := range val {
-						if id != nil {
-							ids = append(ids, id.(string))
-						}
-					}
-				}
-				relationTo = strings.TrimSuffix(k, "_ids")
-			default:
-				return nil, errors.New(fmt.Sprintf("invalid Relation '%s' Input Type, Expected a List", k))
+			val, ok := v.([]interface{})
+			if !ok {
+				return nil, errors.New(fmt.Sprintf("invalid Relation '%s' Input Type, Expected a List but got %T", k, v))
 			}
-		} else if strings.HasSuffix(k, "_id") {
-			if v != nil {
-				switch v.(type) {
-				case string:
-					ids = append(ids, v.(string))
-				default:
-					return nil, errors.New(fmt.Sprintf("invalid Relation '%s' Input Type, Expected a String", k))
+			for _, id := range val {
+				if sid, ok := id.(string); ok && sid != "" {
+					ids = append(ids, sid)
 				}
+			}
+			relationTo = strings.TrimSuffix(k, "_ids")
+		} else if strings.HasSuffix(k, "_id") {
+			if sid, ok := v.(string); ok && sid != "" {
+				ids = append(ids, sid)
 				relationTo = strings.TrimSuffix(k, "_id")
+			} else if v != nil {
+				return nil, errors.New(fmt.Sprintf("invalid Relation '%s' Input Type, Expected a String but got empty string", k))
 			}
 		}
 
+		if len(ids) == 0 {
+			return nil, errors.New(fmt.Sprintf("Relation '%s' you are trying to connect with has no ids", k))
+		}
+
 		if relationTo == "" { // skip if relationTo is not found then no need to build the connection
-			continue
+			return nil, errors.New(fmt.Sprintf("Relation you are trying to connect with '%s' not found", k))
 		}
 
 		var knownAs string
@@ -219,3 +218,4 @@ func ConnectDisconnectParamBuilder(project *models.Project, uid string, connecti
 
 	return connParams, nil
 }
+

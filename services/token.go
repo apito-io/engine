@@ -37,6 +37,19 @@ type ApitoTokenService struct {
 	cancel context.CancelFunc
 }
 
+func getPrimaryProjectIDFromClaims(claims *models.TokenClaims) string {
+	if claims == nil {
+		return ""
+	}
+	if claims.ProjectID != "" {
+		return claims.ProjectID
+	}
+	if len(claims.ProjectIDs) > 0 {
+		return claims.ProjectIDs[0]
+	}
+	return ""
+}
+
 func (t *ApitoTokenService) runPostTokenValidateHook(ctx echo.Context, claims *models.TokenClaims) {
 	if t == nil || t.cfg == nil || claims == nil || t.cfg.PostTokenValidateHook == nil {
 		return
@@ -234,7 +247,7 @@ func (t *ApitoTokenService) ApitoTokenHandler(next echo.HandlerFunc) echo.Handle
 
 		useCookies := ctx.Request().Header.Get("X-Use-Cookies")
 		apitoKey := ctx.Request().Header.Get("X-Apito-Key")
-		syncKey := ctx.Request().Header.Get("X-Apito-Sync-Key")		
+		syncKey := ctx.Request().Header.Get("X-Apito-Sync-Key")
 		if apitoKey != "" || ((requestPath == "/secured/graphql" || requestPath == "/secured/graphql/v2") || strings.HasPrefix(requestPath, "/secured/rest/") || strings.HasPrefix(requestPath, "/secured/upload/file")) && useCookies == "" {
 			var token *string
 			if apitoKey != "" {
@@ -248,23 +261,25 @@ func (t *ApitoTokenService) ApitoTokenHandler(next echo.HandlerFunc) echo.Handle
 			}
 			var verifiedToken *models.TokenClaims
 			if strings.HasPrefix(*token, "ak_") {
+				// for projec token
 				verifiedToken, err = t.apiKeyManager.ValidateAndSetContext(ctx, *token)
 				if err != nil {
 					return ctx.JSON(http.StatusForbidden, map[string]interface{}{"message": ae.InvalidToken})
 				}
 			} else {
+				// for cli and system token
 				verifiedToken, err = t.blankaService.ValidateAndSetContext(ctx, *token)
 				if err != nil {
 					return ctx.JSON(http.StatusForbidden, map[string]interface{}{"message": ae.InvalidToken})
 				}
 			}
 			t.runPostTokenValidateHook(ctx, verifiedToken)
-			projectID = verifiedToken.ProjectID
+			projectID = getPrimaryProjectIDFromClaims(verifiedToken)
 			userID = verifiedToken.UserID
 
 		} else if useCookies == "false" || syncKey != "" {
 			var verifiedToken *models.TokenClaims
-			if strings.HasPrefix(syncKey, "cli-") {
+			if strings.HasPrefix(syncKey, "cli-") || strings.HasPrefix(syncKey, "sdk-") {
 				verifiedToken, err = t.syncKeyManager.ValidateSyncTokenOptimized(ctx.Request().Context(), syncKey)
 				if err != nil {
 					return ctx.JSON(http.StatusForbidden, map[string]interface{}{"message": ae.InvalidToken})
@@ -291,7 +306,7 @@ func (t *ApitoTokenService) ApitoTokenHandler(next echo.HandlerFunc) echo.Handle
 
 			t.runPostTokenValidateHook(ctx, verifiedToken)
 
-			projectID = verifiedToken.ProjectID
+			projectID = getPrimaryProjectIDFromClaims(verifiedToken)
 			userID = verifiedToken.UserID
 
 		} else {
@@ -335,7 +350,7 @@ func (t *ApitoTokenService) ApitoTokenHandler(next echo.HandlerFunc) echo.Handle
 
 			t.runPostTokenValidateHook(ctx, tokenClaims)
 
-			projectID = tokenClaims.ProjectID
+			projectID = getPrimaryProjectIDFromClaims(tokenClaims)
 			userID = tokenClaims.UserID
 		}
 

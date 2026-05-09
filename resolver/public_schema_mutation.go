@@ -34,7 +34,8 @@ func mutationPermissionForRole(role *models.Role, modelName string) (*models.API
 
 func (s *GraphQLServer) updateAndConnectDocument(ctx context.Context, cache *models.ApplicationCache, param *models.CommonSystemParams, hooks []*models.Webhook, userInputPayload map[string]interface{}, permission *models.APIPermission, connections, disconnects map[string]interface{}, deltaUpdate bool) (*types.DefaultDocumentStructure, error) {
 
-	if len(userInputPayload) == 0 {
+	relationWork := len(connections) > 0 || len(disconnects) > 0
+	if len(userInputPayload) == 0 && !relationWork {
 		return nil, errors.New("payload is required")
 	}
 
@@ -81,8 +82,11 @@ func (s *GraphQLServer) updateAndConnectDocument(ctx context.Context, cache *mod
 			inputPayload = val
 		}
 	}
+	if inputPayload == nil {
+		inputPayload = make(map[string]interface{})
+	}
 
-	if len(inputPayload) == 0 {
+	if len(inputPayload) == 0 && !relationWork {
 		return nil, errors.New("user input payload is required")
 	}
 
@@ -95,11 +99,13 @@ func (s *GraphQLServer) updateAndConnectDocument(ctx context.Context, cache *mod
 	modelType := param.Model
 
 	//#todo need image param validation
-	updatedPayload, err := s.GraphQLExecutor.HandlePayloadFormatting(ctx, param, local, modelType.Fields, inputPayload, doc.Data, deltaUpdate)
-	if err != nil {
-		return nil, err
+	if len(inputPayload) > 0 {
+		updatedPayload, err := s.GraphQLExecutor.HandlePayloadFormatting(ctx, param, local, modelType.Fields, inputPayload, doc.Data, deltaUpdate)
+		if err != nil {
+			return nil, err
+		}
+		doc.Data = updatedPayload
 	}
-	doc.Data = updatedPayload
 
 	// update the meta
 	doc.Meta.UpdatedAt = utility.GetCurrentTime()
@@ -433,7 +439,7 @@ func (s *GraphQLServer) MutationResolverFn(p graphql.ResolveParams) (interface{}
 		}
 
 		var payload map[string]interface{}
-		if userInputPayload, ok := p.Args["payload"].(map[string]interface{}); ok && len(userInputPayload) > 0 {
+		if userInputPayload, ok := p.Args["payload"].(map[string]interface{}); ok {
 			payload = userInputPayload
 		}
 
@@ -475,7 +481,6 @@ func (s *GraphQLServer) MutationResolverFn(p graphql.ResolveParams) (interface{}
 					if !param.Role.IsProjectUser {
 						return nil, errors.New("Authentication is required to Update a Document")
 					}
-					break
 				case "own":
 					if doc.Type == "user" && param.Role.IsProjectUser && param.UserID != doc.ID {
 						return nil, errors.New("You are not authorized to delete this document")

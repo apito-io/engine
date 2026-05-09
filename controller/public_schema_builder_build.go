@@ -325,6 +325,9 @@ func (st *publicSchemaBuildState) loadOrBuildPreConnectionMaps() error {
 						"local": &graphql.ArgumentConfig{
 							Type: st.localEnum,
 						},
+						"status": &graphql.ArgumentConfig{
+							Type: enums.PublishStatusEnums,
+						},
 					}
 				}
 			}

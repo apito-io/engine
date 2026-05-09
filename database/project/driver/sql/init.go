@@ -9,6 +9,7 @@ import (
 	"net/url"
 	"path/filepath"
 	"strings"
+	"time"
 
 	_const "github.com/apito-io/engine/const"
 	"github.com/apito-io/engine/models"
@@ -50,6 +51,11 @@ func GetSQLDriver(cfg *models.Config, driverCredentials *models.DriverCredential
 		if err != nil {
 			return nil, err
 		}
+		// SQLite PRAGMAs are connection-local; DDL rebuilds rely on stable FK pragma state.
+		sqldb.SetMaxOpenConns(1)
+		sqldb.SetMaxIdleConns(1)
+		sqldb.SetConnMaxLifetime(10 * time.Minute)
+		sqldb.SetConnMaxIdleTime(5 * time.Minute)
 		bunDB = bun.NewDB(sqldb, sqlitedialect.New())
 		if err := ApplySQLiteConnectionPragmas(context.Background(), bunDB, driverCredentials.Engine, dsn); err != nil {
 			_ = bunDB.Close()
@@ -63,6 +69,8 @@ func GetSQLDriver(cfg *models.Config, driverCredentials *models.DriverCredential
 		if err != nil {
 			return nil, err
 		}
+		sqlDB.SetConnMaxLifetime(10 * time.Minute)
+		sqlDB.SetConnMaxIdleTime(5 * time.Minute)
 		bunDB = bun.NewDB(sqlDB, mysqldialect.New())
 	case _const.PostgreSQLDriver:
 		dsn, err := BuildPostgresDSN(driverCredentials)
@@ -70,6 +78,8 @@ func GetSQLDriver(cfg *models.Config, driverCredentials *models.DriverCredential
 			return nil, err
 		}
 		sqlDB = sql.OpenDB(pgdriver.NewConnector(pgdriver.WithDSN(dsn)))
+		sqlDB.SetConnMaxLifetime(10 * time.Minute)
+		sqlDB.SetConnMaxIdleTime(5 * time.Minute)
 		bunDB = bun.NewDB(sqlDB, pgdialect.New())
 
 	default:

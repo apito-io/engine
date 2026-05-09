@@ -16,8 +16,8 @@ type GraphQLExecutor struct {
 	//projectDriver     interfaces.ProjectDBInterface
 	connectionManager *database.ConnectionManager
 	//SharedDriver      interfaces.SharedDBInterface no longer needed
-	Dataloaders       *models.DataLoaders
-	Cache             *models.ApplicationCache
+	Dataloaders *models.DataLoaders
+	Cache       *models.ApplicationCache
 }
 
 func GetGraphQLExecutor(cfg *models.Config, systemDB interfaces.ApitoSystemDB) *GraphQLExecutor {

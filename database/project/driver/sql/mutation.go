@@ -16,8 +16,8 @@ import (
 	"github.com/uptrace/bun"
 )
 
-// ensureEnableIndexingForModel creates secondary indexes for fields with EnableIndexing=true.
-func (S *SQLDriver) ensureEnableIndexingForModel(ctx context.Context, project *models.Project, model *models.ModelType) error {
+// ensureEnableIndexingForModelIDB creates indexes without ANALYZE (caller runs RunSQLiteLikePostDDL / RunAnalyzeAfterIndexDDL).
+func (S *SQLDriver) ensureEnableIndexingForModelIDB(ctx context.Context, db bun.IDB, project *models.Project, model *models.ModelType) error {
 	if model == nil {
 		return nil
 	}
@@ -33,10 +33,19 @@ func (S *SQLDriver) ensureEnableIndexingForModel(ctx context.Context, project *m
 		if id == "" {
 			continue
 		}
-		if err := S.CreateIndex(ctx, idxParam, id, ""); err != nil {
+		if err := S.execCreateIndexDDL(ctx, db, idxParam, id, ""); err != nil {
 			return err
 		}
 	}
+	return nil
+}
+
+// ensureEnableIndexingForModel creates secondary indexes for fields with EnableIndexing=true.
+func (S *SQLDriver) ensureEnableIndexingForModel(ctx context.Context, project *models.Project, model *models.ModelType) error {
+	if err := S.ensureEnableIndexingForModelIDB(ctx, S.ORM, project, model); err != nil {
+		return err
+	}
+	RunAnalyzeAfterIndexDDL(ctx, S)
 	return nil
 }
 
@@ -111,6 +120,11 @@ func (a *SQLDriver) CheckTableOrCollectionExists(ctx context.Context, param *mod
 	return count > 0, nil
 }
 
+func ddlBatchTxnSupported(engine string) bool {
+	e := strings.ToLower(strings.TrimSpace(engine))
+	return engineIsSQLiteLike(e) || e == _const.PostgreSQLDriver
+}
+
 func (S *SQLDriver) AddModel(ctx context.Context, project *models.Project, model *models.ModelType) (*models.ProjectSchema, error) {
 
 	// if schema not found then create
@@ -140,14 +154,33 @@ func (S *SQLDriver) AddModel(ctx context.Context, project *models.Project, model
 		Name string
 	}
 
-	if err := S.CreateModelTable(ctx, model, false); err != nil {
-		return nil, err
+	eng := ""
+	if S.DriverCredential != nil {
+		eng = S.DriverCredential.Engine
 	}
-	if err := S.ensureEnableIndexingForModel(ctx, project, model); err != nil {
-		return nil, err
-	}
-	if err := S.installRowCountTriggersForModel(ctx, model); err != nil {
-		return nil, err
+	if ddlBatchTxnSupported(eng) {
+		err := S.ORM.RunInTx(ctx, nil, func(ctx context.Context, tx bun.Tx) error {
+			if err := S.createModelTableExec(ctx, tx, model, false); err != nil {
+				return err
+			}
+			if err := S.ensureEnableIndexingForModelIDB(ctx, tx, project, model); err != nil {
+				return err
+			}
+			return S.installRowCountTriggersForModelTx(ctx, tx, model)
+		})
+		if err != nil {
+			return nil, err
+		}
+	} else {
+		if err := S.CreateModelTable(ctx, model, false); err != nil {
+			return nil, err
+		}
+		if err := S.ensureEnableIndexingForModel(ctx, project, model); err != nil {
+			return nil, err
+		}
+		if err := S.installRowCountTriggersForModel(ctx, model); err != nil {
+			return nil, err
+		}
 	}
 	if err := RunSQLiteLikePostDDL(ctx, S); err != nil {
 		return nil, err
@@ -199,15 +232,23 @@ func (s *SQLDriver) AddRelationFields_AUTOGEN(ctx context.Context, from *models.
 
 func (S *SQLDriver) AddRelationFields(ctx context.Context, from *models.ConnectionType, to *models.ConnectionType) error {
 
+	if S.DriverCredential != nil {
+		eng := strings.ToLower(strings.TrimSpace(S.DriverCredential.Engine))
+		if err := PreflightSQLiteRelationParentTablesForAddRelation(ctx, S.ORM, eng, from, to); err != nil {
+			return err
+		}
+	}
+
 	toTableName := utility.PhysicalSQLTableName(from.Model)
 	fromTableName := utility.PhysicalSQLTableName(to.Model)
-	toFieldName := utility.PhysicalSQLTableName(to.Model)
-	fromFieldName := utility.PhysicalSQLTableName(from.Model)
+	toFKColumn := relationFKColumnNameForModel(to.Model, from, to)
+	fromFKColumn := relationFKColumnNameForModel(from.Model, from, to)
+	pivotTable := relationPivotTableName(from, to)
 
 	// Multi-step DDL must commit or roll back together on SQLite/libsql/Turso and PostgreSQL.
-	err := S.ORM.RunInTx(ctx, nil, func(ctx context.Context, tx bun.Tx) error {
+	runDDL := func(db bun.IDB) error {
 		exec := func(q string) error {
-			_, err := tx.NewRaw(q).Exec(ctx)
+			_, err := db.NewRaw(q).Exec(ctx)
 			return err
 		}
 
@@ -222,55 +263,55 @@ func (S *SQLDriver) AddRelationFields(ctx context.Context, from *models.Connecti
 				eng := strings.ToLower(strings.TrimSpace(S.DriverCredential.Engine))
 				if engineIsSQLiteLike(eng) {
 					q1 := fmt.Sprintf(
-						"ALTER TABLE `%s` ADD %s_id VARCHAR(36) REFERENCES `%s` (id) ON DELETE CASCADE",
-						toTableName, toFieldName, fromTableName)
+						"ALTER TABLE `%s` ADD %s VARCHAR(36) REFERENCES `%s` (id) ON DELETE CASCADE",
+						toTableName, toFKColumn, fromTableName)
 					if err := exec(q1); err != nil {
 						return err
 					}
-					idx1 := fmt.Sprintf("idx_%s_%s_id_unique", toTableName, toFieldName)
+					idx1 := fmt.Sprintf("idx_%s_%s_unique", toTableName, toFKColumn)
 					if err := exec(fmt.Sprintf(
-						"CREATE UNIQUE INDEX IF NOT EXISTS `%s` ON `%s` (`%s_id`)",
-						idx1, toTableName, toFieldName)); err != nil {
+						"CREATE UNIQUE INDEX IF NOT EXISTS `%s` ON `%s` (`%s`)",
+						idx1, toTableName, toFKColumn)); err != nil {
 						return err
 					}
 					q2 := fmt.Sprintf(
-						"ALTER TABLE `%s` ADD %s_id VARCHAR(36) REFERENCES `%s` (id) ON DELETE CASCADE",
-						fromTableName, fromFieldName, toTableName)
+						"ALTER TABLE `%s` ADD %s VARCHAR(36) REFERENCES `%s` (id) ON DELETE CASCADE",
+						fromTableName, fromFKColumn, toTableName)
 					if err := exec(q2); err != nil {
 						return err
 					}
-					idx2 := fmt.Sprintf("idx_%s_%s_id_unique", fromTableName, fromFieldName)
+					idx2 := fmt.Sprintf("idx_%s_%s_unique", fromTableName, fromFKColumn)
 					return exec(fmt.Sprintf(
-						"CREATE UNIQUE INDEX IF NOT EXISTS `%s` ON `%s` (`%s_id`)",
-						idx2, fromTableName, fromFieldName))
+						"CREATE UNIQUE INDEX IF NOT EXISTS `%s` ON `%s` (`%s`)",
+						idx2, fromTableName, fromFKColumn))
 				}
 				if eng == _const.PostgreSQLDriver {
 					q1 := fmt.Sprintf(
 						"ALTER TABLE %s ADD COLUMN %s VARCHAR(36) UNIQUE REFERENCES %s (id) ON DELETE CASCADE",
-						QuotePGIdent(toTableName), QuotePGIdent(toFieldName+"_id"), QuotePGIdent(fromTableName))
+						QuotePGIdent(toTableName), QuotePGIdent(toFKColumn), QuotePGIdent(fromTableName))
 					if err := exec(q1); err != nil {
 						return err
 					}
 					q2 := fmt.Sprintf(
 						"ALTER TABLE %s ADD COLUMN %s VARCHAR(36) UNIQUE REFERENCES %s (id) ON DELETE CASCADE",
-						QuotePGIdent(fromTableName), QuotePGIdent(fromFieldName+"_id"), QuotePGIdent(toTableName))
+						QuotePGIdent(fromTableName), QuotePGIdent(fromFKColumn), QuotePGIdent(toTableName))
 					return exec(q2)
 				}
 				q1 := fmt.Sprintf(
-					"ALTER TABLE `%s` ADD %s_id VARCHAR(36) UNIQUE REFERENCES `%s` (id) ON DELETE CASCADE",
-					toTableName, toFieldName, fromTableName)
+					"ALTER TABLE `%s` ADD %s VARCHAR(36) UNIQUE REFERENCES `%s` (id) ON DELETE CASCADE",
+					toTableName, toFKColumn, fromTableName)
 				if err := exec(q1); err != nil {
 					return err
 				}
 				q2 := fmt.Sprintf(
-					"ALTER TABLE `%s` ADD %s_id VARCHAR(36) UNIQUE REFERENCES `%s` (id) ON DELETE CASCADE",
-					fromTableName, fromFieldName, toTableName)
+					"ALTER TABLE `%s` ADD %s VARCHAR(36) UNIQUE REFERENCES `%s` (id) ON DELETE CASCADE",
+					fromTableName, fromFKColumn, toTableName)
 				return exec(q2)
 			case "has_many":
 				// FK column on fromTableName pointing at toTableName (e.g. chef.tenant_id → tenant.id).
 				// SQLite/libsql: only one ADD per ALTER — use inline REFERENCES, not comma + ADD CONSTRAINT.
 				// MySQL/MariaDB/SQLite/libsql: backtick-quoted identifiers. PostgreSQL: double-quoted (QuotePGIdent).
-				col := fmt.Sprintf("%s_id", fromFieldName)
+				col := fromFKColumn
 				eng := strings.ToLower(strings.TrimSpace(S.DriverCredential.Engine))
 				var query string
 				if eng == _const.PostgreSQLDriver {
@@ -289,33 +330,38 @@ func (S *SQLDriver) AddRelationFields(ctx context.Context, from *models.Connecti
 		case "has_many":
 			switch to.Relation {
 			case "has_many":
-				//same for one to one & one to many
-				query := fmt.Sprintf(`CREATE TABLE IF NOT EXISTS `+"`%s_%s`"+`(
-				%s_id VARCHAR(36) REFERENCES `+"`%s`"+` (id) ON DELETE CASCADE,
-				%s_id VARCHAR(36) REFERENCES `+"`%s`"+` (id) ON DELETE CASCADE,
-				PRIMARY KEY (%s_id, %s_id)
-			);`, fromTableName, toTableName,
-					toFieldName, fromTableName,
-					fromFieldName, toTableName,
-					toFieldName, fromFieldName)
+				// Pivot table name + columns use lexicographic order of physical model slugs (see relationPivotTableNameParts).
+				pa, pb := sortedPhysicalPair(from.Model, to.Model)
+				paq := strings.ReplaceAll(pa, "`", "``")
+				pbq := strings.ReplaceAll(pb, "`", "``")
+				query := fmt.Sprintf(`CREATE TABLE IF NOT EXISTS `+"`%s`"+`(
+				`+"`%s_id`"+` VARCHAR(36) REFERENCES `+"`%s`"+` (id) ON DELETE CASCADE,
+				`+"`%s_id`"+` VARCHAR(36) REFERENCES `+"`%s`"+` (id) ON DELETE CASCADE,
+				PRIMARY KEY (`+"`%s_id`, `%s_id`"+`)
+			);`, pivotTable,
+					paq, paq, pbq, pbq,
+					paq, pbq)
 				if err := exec(query); err != nil {
 					return err
 				}
-				pivotName := fmt.Sprintf("%s_%s", fromTableName, toTableName)
+				pivotName := pivotTable
 				escPivot := strings.ReplaceAll(pivotName, "`", "``")
-				idxTo := fmt.Sprintf("CREATE INDEX IF NOT EXISTS `idx_%s_%s_id` ON `%s` (`%s_id`)", escPivot, toFieldName, escPivot, toFieldName)
-				idxFrom := fmt.Sprintf("CREATE INDEX IF NOT EXISTS `idx_%s_%s_id` ON `%s` (`%s_id`)", escPivot, fromFieldName, escPivot, fromFieldName)
-				if err := exec(idxTo); err != nil {
+				idxA := fmt.Sprintf("CREATE INDEX IF NOT EXISTS `idx_%s_%s_id` ON `%s` (`%s_id`)", escPivot, paq, escPivot, paq)
+				idxB := fmt.Sprintf("CREATE INDEX IF NOT EXISTS `idx_%s_%s_id` ON `%s` (`%s_id`)", escPivot, pbq, escPivot, pbq)
+				if err := exec(idxA); err != nil {
 					return err
 				}
-				return exec(idxFrom)
+				return exec(idxB)
 			case "has_one":
 				//same for one to one & one to many
-				query := fmt.Sprintf("ALTER TABLE `%s` ADD %s_id VARCHAR(36) REFERENCES `%s` (id) ON DELETE CASCADE;", toTableName, toFieldName, fromTableName)
+				query := fmt.Sprintf("ALTER TABLE `%s` ADD %s VARCHAR(36) REFERENCES `%s` (id) ON DELETE CASCADE;", toTableName, toFKColumn, fromTableName)
 				return exec(query)
 			}
 		}
 		return nil
+	}
+	err := S.ORM.RunInTx(ctx, nil, func(ctx context.Context, tx bun.Tx) error {
+		return runDDL(tx)
 	})
 	if err != nil {
 		return err
@@ -348,6 +394,46 @@ func (s *SQLDriver) DeleteRelationDocuments_AUTOGEN(ctx context.Context, project
 	return nil
 }
 
+// sqliteLikeExecDropColumnTx runs ALTER TABLE DROP COLUMN with Turso/libsql/SQLite fallbacks, then table rebuild.
+// Turso MCP on rosna tenant DB: sqlite_master showed 0 triggers on employee; CREATE TABLE mixed
+// inline role_id REFERENCES with a separate CONSTRAINT on tenant_id — plain DROP COLUMN fails (matches stock SQLite).
+func sqliteLikeExecDropColumnTx(ctx context.Context, db bun.IDB, physicalTable, column string) error {
+	tq := strings.ReplaceAll(physicalTable, "`", "``")
+	cq := strings.ReplaceAll(column, "`", "``")
+	alterSQL := fmt.Sprintf("ALTER TABLE `%s` DROP COLUMN `%s`", tq, cq)
+	tryAlter := func() error {
+		_, err := db.NewRaw(alterSQL).Exec(ctx)
+		return err
+	}
+	firstErr := tryAlter()
+	if firstErr == nil {
+		return nil
+	}
+	if _, err := db.NewRaw(`PRAGMA legacy_alter_table = ON`).Exec(ctx); err == nil {
+		err2 := tryAlter()
+		_, _ = db.NewRaw(`PRAGMA legacy_alter_table = OFF`).Exec(ctx)
+		if err2 == nil {
+			return nil
+		}
+	}
+	// This must run outside an active transaction. SQLite ignores PRAGMA foreign_keys changes inside
+	// transactions, which would force FK validation during the rebuild and strip unrelated constraints.
+	if _, err := db.NewRaw(`PRAGMA foreign_keys = OFF`).Exec(ctx); err != nil {
+		return firstErr
+	}
+	err3 := tryAlter()
+	if err3 == nil {
+		_, _ = db.NewRaw(`PRAGMA foreign_keys = ON`).Exec(ctx)
+		return nil
+	}
+	rebuildErr := sqliteRebuildTableWithoutColumnTx(ctx, db, physicalTable, column)
+	_, _ = db.NewRaw(`PRAGMA foreign_keys = ON`).Exec(ctx)
+	if rebuildErr != nil {
+		return fmt.Errorf("%w (sqlite rebuild drop column: %v)", err3, rebuildErr)
+	}
+	return nil
+}
+
 func (S *SQLDriver) DeleteRelationDocuments(ctx context.Context, projectId string, from *models.ConnectionType, to *models.ConnectionType) error {
 	if S.DriverCredential == nil {
 		return errors.New("sql driver: missing credentials")
@@ -363,33 +449,46 @@ func (S *SQLDriver) DeleteRelationDocuments(ctx context.Context, projectId strin
 
 	toTableName := utility.PhysicalSQLTableName(from.Model)
 	fromTableName := utility.PhysicalSQLTableName(to.Model)
-	toFieldName := utility.PhysicalSQLTableName(to.Model)
-	fromFieldName := utility.PhysicalSQLTableName(from.Model)
+	toFKColumn := relationFKColumnNameForModel(to.Model, from, to)
+	fromFKColumn := relationFKColumnNameForModel(from.Model, from, to)
+	pivotTable := relationPivotTableName(from, to)
 
-	err := S.ORM.RunInTx(ctx, nil, func(ctx context.Context, tx bun.Tx) error {
+	runDDL := func(db bun.IDB) error {
 		exec := func(q string) error {
-			_, err := tx.NewRaw(q).Exec(ctx)
+			_, err := db.NewRaw(q).Exec(ctx)
 			return err
 		}
 
 		// Drop a foreign-key column. SQLite/libsql/Turso: only DROP COLUMN (3.35+; FK dropped with column).
 		// MySQL/MariaDB: DROP FOREIGN KEY then DROP COLUMN as separate statements (no multi-statement batch).
 		// PostgreSQL: DROP COLUMN ... CASCADE.
-		dropFKColumn := func(table, col, mysqlFKName string) error {
+		// sqliteLogicalModel: schema model name for this physical table — used to drop/reinstall Apito row-count
+		// triggers before/after DROP COLUMN (triggers may reference dropped cols; SQLite rebuild then fails).
+		dropFKColumn := func(table, col, mysqlFKName string, sqliteLogicalModel string) error {
 			tq := strings.ReplaceAll(table, "`", "``")
 			cq := strings.ReplaceAll(col, "`", "``")
 			if sqliteLike {
+				// Drop every trigger on this table (not only Apito row-count): any trigger body that
+				// references the FK column breaks SQLite DROP COLUMN rebuild if env flags differ from DB state.
+				if err := dropAllTriggersForPhysicalTableTx(ctx, db, eng, table); err != nil {
+					return err
+				}
 				// Dual has_one/has_one adds CREATE UNIQUE INDEX idx_<table>_<peer>_id_unique (see AddRelationFields).
 				// SQLite DROP COLUMN fails if that index still references the column ("error in index ... after drop column").
-				peer := strings.TrimSuffix(col, "_id")
-				if peer != col && peer != "" {
-					idx := fmt.Sprintf("idx_%s_%s_id_unique", table, peer)
+				if strings.TrimSpace(col) != "" {
+					idx := fmt.Sprintf("idx_%s_%s_unique", table, col)
 					iq := strings.ReplaceAll(idx, "`", "``")
 					if err := exec(fmt.Sprintf("DROP INDEX IF EXISTS `%s`", iq)); err != nil {
 						return err
 					}
 				}
-				return exec(fmt.Sprintf("ALTER TABLE `%s` DROP COLUMN `%s`", tq, cq))
+				if err := sqliteLikeExecDropColumnTx(ctx, db, table, col); err != nil {
+					return err
+				}
+				if strings.TrimSpace(sqliteLogicalModel) != "" {
+					return S.installRowCountTriggersForModelTx(ctx, db, &models.ModelType{Name: sqliteLogicalModel})
+				}
+				return nil
 			}
 			if pg {
 				return exec(fmt.Sprintf(
@@ -410,23 +509,23 @@ func (S *SQLDriver) DeleteRelationDocuments(ctx context.Context, projectId strin
 		case "has_one":
 			switch to.Relation {
 			case "has_one":
-				col := fmt.Sprintf("%s_id", toFieldName)
-				fk := fmt.Sprintf("fk_%s_%s", toTableName, toFieldName)
-				if txErr = dropFKColumn(toTableName, col, fk); txErr != nil {
+				col := toFKColumn
+				fk := fmt.Sprintf("fk_%s_%s", toTableName, toFKColumn)
+				if txErr = dropFKColumn(toTableName, col, fk, from.Model); txErr != nil {
 					break
 				}
-				col2 := fmt.Sprintf("%s_id", fromFieldName)
-				fk2 := fmt.Sprintf("fk_%s_%s", fromTableName, fromFieldName)
-				txErr = dropFKColumn(fromTableName, col2, fk2)
+				col2 := fromFKColumn
+				fk2 := fmt.Sprintf("fk_%s_%s", fromTableName, fromFKColumn)
+				txErr = dropFKColumn(fromTableName, col2, fk2, to.Model)
 			case "has_many":
-				col := fmt.Sprintf("%s_id", fromFieldName)
-				fk := fmt.Sprintf("fk_%s_%s_id", fromTableName, fromFieldName)
-				txErr = dropFKColumn(fromTableName, col, fk)
+				col := fromFKColumn
+				fk := fmt.Sprintf("fk_%s_%s", fromTableName, fromFKColumn)
+				txErr = dropFKColumn(fromTableName, col, fk, to.Model)
 			}
 		case "has_many":
 			switch to.Relation {
 			case "has_many":
-				pivot := fmt.Sprintf("%s_%s", fromTableName, toTableName)
+				pivot := pivotTable
 				if pg {
 					txErr = exec(fmt.Sprintf("DROP TABLE IF EXISTS %s", QuotePGIdent(pivot)))
 				} else {
@@ -434,13 +533,25 @@ func (S *SQLDriver) DeleteRelationDocuments(ctx context.Context, projectId strin
 					txErr = exec(fmt.Sprintf("DROP TABLE IF EXISTS `%s`", pq))
 				}
 			case "has_one":
-				col := fmt.Sprintf("%s_id", toFieldName)
-				fk := fmt.Sprintf("fk_%s_%s", toTableName, toFieldName)
-				txErr = dropFKColumn(toTableName, col, fk)
+				col := toFKColumn
+				fk := fmt.Sprintf("fk_%s_%s", toTableName, toFKColumn)
+				txErr = dropFKColumn(toTableName, col, fk, from.Model)
 			}
 		}
 		return txErr
-	})
+	}
+
+	var err error
+	if sqliteLike {
+		// SQLite/libsql requires PRAGMA foreign_keys=OFF for rebuild-with-FK-copy. The PRAGMA is
+		// ignored inside transactions and connection-local; SQLite/libsql handles are configured
+		// with MaxOpenConns(1), so run directly on the tenant/project DB handle.
+		err = runDDL(S.ORM)
+	} else {
+		err = S.ORM.RunInTx(ctx, nil, func(ctx context.Context, tx bun.Tx) error {
+			return runDDL(tx)
+		})
+	}
 	if err != nil {
 		return err
 	}
@@ -483,22 +594,31 @@ func (S *SQLDriver) AddFieldToModel(ctx context.Context, param *models.CommonSys
 		// todo transform this to one to many relation
 	}
 
+	// Root-level metadata updates: resolver already merges FieldInfo into param.Model.Fields.
+	// Avoid ALTER TABLE ADD COLUMN / index DDL here — dedicated mutations handle column lifecycle.
+	if parent_field == "" && isUpdate {
+		return param.Model, nil
+	}
+
 	tableName := utility.PhysicalSQLTableName(param.Model.Name)
 	stmts, err := AlterTableAddFieldSQL(S.DriverCredential.Engine, tableName, param.FieldInfo)
 	if err != nil {
 		return nil, err
 	}
-	for _, query := range stmts {
-		if _, err := S.ORM.NewRaw(query).Exec(ctx); err != nil {
-			return nil, err
+	err = S.ORM.RunInTx(ctx, nil, func(ctx context.Context, tx bun.Tx) error {
+		for _, query := range stmts {
+			if _, err := tx.NewRaw(query).Exec(ctx); err != nil {
+				return err
+			}
 		}
-	}
-
-	if parent_field == "" && !isUpdate && param.FieldInfo.EnableIndexing {
-		idxParam := &models.CommonSystemParams{Model: param.Model, ProjectID: param.ProjectID}
-		if err := S.CreateIndex(ctx, idxParam, param.FieldInfo.Identifier, ""); err != nil {
-			return nil, err
+		if parent_field == "" && !isUpdate && param.FieldInfo.EnableIndexing {
+			idxParam := &models.CommonSystemParams{Model: param.Model, ProjectID: param.ProjectID}
+			return S.execCreateIndexDDL(ctx, tx, idxParam, param.FieldInfo.Identifier, "")
 		}
+		return nil
+	})
+	if err != nil {
+		return nil, err
 	}
 
 	if err := RunSQLiteLikePostDDL(ctx, S); err != nil {
@@ -639,9 +759,8 @@ func (S *SQLDriver) UpdateDocumentOfProject(ctx context.Context, param *models.C
 		// if it's a map then it must be a media field
 		kind := reflect.ValueOf(v).Kind()
 		switch kind {
-		case reflect.String, reflect.Int, reflect.Float64, reflect.Bool:
+		case reflect.String, reflect.Int, reflect.Int64, reflect.Float64, reflect.Bool, reflect.Int32:
 			data[k] = v
-			break
 		case reflect.Map:
 			val := v.(map[string]interface{})
 			if utility.ArrayContains(multilineFields, k) {
@@ -651,11 +770,12 @@ func (S *SQLDriver) UpdateDocumentOfProject(ctx context.Context, param *models.C
 			} else if utility.ArrayContains(pictureField, k) {
 				b, _ := json.Marshal(v)
 				data[k] = string(b)
+			} else {
+				// a map can be a object field like address, contact, etc.
+				data[k] = val
 			}
-			break
 		case reflect.Ptr:
 			fmt.Println(v)
-			break
 		case reflect.Slice:
 			if utility.ArrayContains(galleryField, k) || utility.ArrayContains(listFields, k) || utility.ArrayContains(repeatedFields, k) {
 				b, err := json.Marshal(v)
@@ -664,43 +784,47 @@ func (S *SQLDriver) UpdateDocumentOfProject(ctx context.Context, param *models.C
 				}
 				data[k] = string(b)
 			}
-			break
+		case reflect.Invalid:
+			data[k] = nil
+		case reflect.Struct:
+			data[k] = v
 		default:
 			panic("unhandled default case")
 		}
 
 	}
 	remapSyntheticSystemRelationRowKeys(data, param.Model)
-	q := S.ORM.NewUpdate().Table(tableName).Where("id = ?", doc.ID)
-	q = applyBunHookWheresUpdate(S.Conf, ctx, param, q)
-	_, err := q.Model(&data).Exec(ctx)
-	if err != nil {
+	return S.ORM.RunInTx(ctx, nil, func(ctx context.Context, tx bun.Tx) error {
+		q := tx.NewUpdate().Table(tableName).Where("id = ?", doc.ID)
+		q = applyBunHookWheresUpdate(S.Conf, ctx, param, q)
+		if _, err := q.Model(&data).Exec(ctx); err != nil {
+			return err
+		}
+		metaData := map[string]interface{}{
+			"updated_at": utility.GetCurrentTime(),
+			"updated_by": param.UserID,
+		}
+		_, err := tx.NewUpdate().Table("meta").Where("doc_id = ?", doc.ID).Model(&metaData).Exec(ctx)
 		return err
-	}
-
-	// now insert a meta data
-	metaData := map[string]interface{}{
-		"updated_at": utility.GetCurrentTime(),
-		"updated_by": param.UserID,
-	}
-
-	_, err = S.ORM.NewUpdate().Table("meta").Where("doc_id = ?", doc.ID).Model(&metaData).Exec(ctx)
-	if err != nil {
-		return err
-	}
-
-	return nil
+	})
 }
 
 func (S *SQLDriver) DeleteDocumentFromProject(ctx context.Context, param *models.CommonSystemParams) error {
 
 	tableName := utility.PhysicalSQLTableName(param.Model.Name)
 
-	q := S.ORM.NewDelete().Table(tableName).Where("id = ?", param.DocumentID)
-	q = applyBunHookWheresDelete(S.Conf, ctx, param, q)
-	_, err := q.Exec(ctx)
-	if err != nil {
+	return S.ORM.RunInTx(ctx, nil, func(ctx context.Context, tx bun.Tx) error {
+		if _, err := tx.NewDelete().Table("document_revisions").
+			Where("original_doc_id = ? OR id = ?", param.DocumentID, param.DocumentID).
+			Exec(ctx); err != nil {
+			return err
+		}
+		if _, err := tx.NewDelete().Table("meta").Where("doc_id = ?", param.DocumentID).Exec(ctx); err != nil {
+			return err
+		}
+		q := tx.NewDelete().Table(tableName).Where("id = ?", param.DocumentID)
+		q = applyBunHookWheresDelete(S.Conf, ctx, param, q)
+		_, err := q.Exec(ctx)
 		return err
-	}
-	return nil
+	})
 }

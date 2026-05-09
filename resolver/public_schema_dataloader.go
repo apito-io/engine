@@ -56,12 +56,26 @@ func (s *GraphQLServer) DataLoaderFn(ctx context.Context, keys dataloader.Keys) 
 
 	paramSource := resolveParams.Source.(*types.DefaultDocumentStructure)
 
-	model := utility.SingularResourceName(resolveParams.Info.FieldName)
-
+	// Target schema model id comes from the parent model's connection (e.g. "employee"), not from the
+	// GraphQL field name. When KnownAs is set, the field may be "waiter"/"chef" while ModelType.Name is
+	// still "employee" — matching only by field name yields ModelTypeNotFound or the wrong model.
 	var modelType *models.ModelType
-	for _, _model := range cache.Project.Schema.Models {
-		if utility.ModelIDMatchesGraphQLField(_model.Name, model) {
-			modelType = _model
+	if connectionModel.Model != "" {
+		targetKey := utility.SingularResourceName(connectionModel.Model)
+		for _, _model := range cache.Project.Schema.Models {
+			if _model.Name == connectionModel.Model || utility.ModelIDMatchesGraphQLField(_model.Name, targetKey) {
+				modelType = _model
+				break
+			}
+		}
+	}
+	if modelType == nil {
+		model := utility.SingularResourceName(resolveParams.Info.FieldName)
+		for _, _model := range cache.Project.Schema.Models {
+			if utility.ModelIDMatchesGraphQLField(_model.Name, model) {
+				modelType = _model
+				break
+			}
 		}
 	}
 
@@ -105,7 +119,7 @@ func (s *GraphQLServer) DataLoaderFn(ctx context.Context, keys dataloader.Keys) 
 		return handleError(fmt.Errorf("dataloader: driver returned %T, expected []*dataloader.Result", _results))
 	}
 	if len(results) != len(keys) {
-		return handleError(fmt.Errorf("dataloader: driver returned %d results for %d keys (model %q)", len(results), len(keys), model))
+		return handleError(fmt.Errorf("dataloader: driver returned %d results for %d keys (model %q)", len(results), len(keys), modelType.Name))
 	}
 
 	return results

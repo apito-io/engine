@@ -58,3 +58,19 @@ func TestFormatSQLMetaTimestamp_timeTime(t *testing.T) {
 		t.Fatalf("got %q want %q", s, want)
 	}
 }
+
+func TestRelationEdgeMatchesParentModel_normalizedIds(t *testing.T) {
+	parent := "food_order"
+	if !relationEdgeMatchesParentModel(&models.ConnectionType{Model: "food_order"}, parent) {
+		t.Fatal("exact match should succeed")
+	}
+	if !relationEdgeMatchesParentModel(&models.ConnectionType{Model: "Food_Order"}, parent) {
+		t.Fatal("PhysicalSQLTableName normalization should match legacy casing")
+	}
+	if relationEdgeMatchesParentModel(&models.ConnectionType{Model: "customer"}, parent) {
+		t.Fatal("different model should not match")
+	}
+	if relationEdgeMatchesParentModel(nil, parent) {
+		t.Fatal("nil edge should not match")
+	}
+}

@@ -82,11 +82,11 @@ func withMergedConnectionArgs(param *models.CommonSystemParams, connection map[s
 
 type FieldClassification struct {
 	MultilineFields []string
-	DoubleFields    []string
 	PictureField    []string
 	GalleryField    []string
 	ListFields      []string
 	RepeatedFields  map[string][]*models.FieldInfo
+	ObjectField     []string
 }
 
 func (S *SQLDriver) RelationshipDataLoaderBytes(ctx context.Context, param *models.CommonSystemParams, connection map[string]interface{}) ([]byte, error) {

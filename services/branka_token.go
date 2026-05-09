@@ -70,9 +70,23 @@ func (t *BrankaToken) GenerateSyncToken(ctx context.Context, userID, payload int
 }
 
 func (t *BrankaToken) Validate(ctx context.Context, token string) (*models.TokenClaims, error) {
+
+	if !strings.HasPrefix(token, "cli-") && !strings.HasPrefix(token, "sdk-") {
+		return nil, errors.New("invalid token format")
+	}
+
+	var extractedToken string
+	if strings.HasPrefix(token, "cli-") {
+		extractedToken = token[4:]
+	} else if strings.HasPrefix(token, "sdk-") {
+		extractedToken = token[5:]
+	} else {
+		return nil, errors.New("invalid token format")
+	}
+
 	// Decode Branca Token.
 	// "7d7b9970-6a7d-4026-949b-f953f0d4109a|todo_note_p2a46||Z55EW5FB1C5W5PP310 |api_key|1876759200"
-	m, err := t.Token.DecodeToString(token)
+	m, err := t.Token.DecodeToString(extractedToken)
 	if err != nil {
 		return nil, err
 	}

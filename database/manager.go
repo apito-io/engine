@@ -225,7 +225,8 @@ func (cm *ConnectionManager) GetConnection(ctx context.Context, connKey string) 
 	// Try to get from cache first
 	if cached, found := cm.activeConns.Get(connKey); found {
 		conn := cached.(*Connection)
-		// Update last accessed time for proper LRU behavior
+		// Returning cached drivers directly avoids closing a shared *sql.DB while
+		// concurrent GraphQL field resolvers are still queued on the same handle.
 		conn.LastAccessed = time.Now()
 		cm.mu.Lock()
 		cm.stats.CacheHits++

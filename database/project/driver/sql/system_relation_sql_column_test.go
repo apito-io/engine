@@ -13,7 +13,7 @@ func TestPhysicalSQLColumnForSystemRelationField(t *testing.T) {
 	require.Equal(t, "tenant_id", PhysicalSQLColumnForSystemRelationField("system_tenant_id", nil))
 	require.Equal(t, "person_id", PhysicalSQLColumnForSystemRelationField("system_person_id", nil))
 	require.Equal(t, "task_id", PhysicalSQLColumnForSystemRelationField("system_task_id", nil))
-	require.Equal(t, "food_category_id", PhysicalSQLColumnForSystemRelationField("system_food_category_as_primary_id", nil))
+	require.Equal(t, "food_category_as_primary_id", PhysicalSQLColumnForSystemRelationField("system_food_category_as_primary_id", nil))
 	require.Equal(t, "food_category_id", PhysicalSQLColumnForSystemRelationField("system_foodCategory_id", nil))
 	require.Equal(t, "title", PhysicalSQLColumnForSystemRelationField("title", nil))
 	require.Equal(t, "system_other", PhysicalSQLColumnForSystemRelationField("system_other", nil)) // no _id suffix
@@ -55,4 +55,18 @@ func TestSkipDDLSyntheticSystemRelationField(t *testing.T) {
 	require.False(t, skipDDLSyntheticSystemRelationField(&models.FieldInfo{
 		Identifier: "custom_note", SystemGenerated: true,
 	}, nil))
+}
+
+func TestRelationFKColumnNameParts(t *testing.T) {
+	t.Parallel()
+	require.Equal(t, "employee_id", relationFKColumnNameParts("employee", ""))
+	require.Equal(t, "employee_as_waiter_id", relationFKColumnNameParts("employee", "Waiter"))
+}
+
+func TestRelationPivotTableNameParts_lexicalOrder(t *testing.T) {
+	t.Parallel()
+	a := relationPivotTableNameParts("stock", "draft_stock", "")
+	b := relationPivotTableNameParts("draft_stock", "stock", "")
+	require.Equal(t, a, b, "pivot name must not depend on argument order")
+	require.Equal(t, "draft_stock_stock", a)
 }

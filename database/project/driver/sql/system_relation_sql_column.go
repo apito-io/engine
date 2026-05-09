@@ -32,10 +32,84 @@ func resolvePhysicalFKFromSchemaSyntheticCore(core string, modelType *models.Mod
 		}
 		synCore := strings.TrimSuffix(strings.TrimPrefix(syn, pfx), sfx)
 		if collapseSyntheticRelationCore(synCore) == want {
-			return utility.PhysicalSQLTableName(conn.Model) + "_id"
+			return relationFKColumnName(conn)
 		}
 	}
 	return ""
+}
+
+func relationFKColumnNameParts(model, knownAs string) string {
+	modelSlug := strings.TrimSpace(utility.PhysicalSQLTableName(model))
+	if modelSlug == "" {
+		return ""
+	}
+	knownSlug := strings.TrimSpace(utility.PhysicalSQLTableName(knownAs))
+	if knownSlug == "" {
+		return modelSlug + "_id"
+	}
+	return modelSlug + "_as_" + knownSlug + "_id"
+}
+
+func relationFKColumnName(conn *models.ConnectionType) string {
+	if conn == nil {
+		return ""
+	}
+	return relationFKColumnNameParts(conn.Model, conn.KnownAs)
+}
+
+func relationKnownAs(conns ...*models.ConnectionType) string {
+	for _, conn := range conns {
+		if conn == nil {
+			continue
+		}
+		if known := strings.TrimSpace(conn.KnownAs); known != "" {
+			return known
+		}
+	}
+	return ""
+}
+
+func relationFKColumnNameForModel(model string, conns ...*models.ConnectionType) string {
+	return relationFKColumnNameParts(model, relationKnownAs(conns...))
+}
+
+// sortedPhysicalPair returns the two physical SQL table slugs for modelA and modelB in
+// lexicographic order (a <= b). Used so pivot table names and DDL match list/connect/query
+// regardless of which endpoint is “forward” vs “backward” or schema iteration order.
+func sortedPhysicalPair(modelA, modelB string) (string, string) {
+	a := strings.TrimSpace(utility.PhysicalSQLTableName(modelA))
+	b := strings.TrimSpace(utility.PhysicalSQLTableName(modelB))
+	if a == "" || b == "" {
+		return a, b
+	}
+	if a > b {
+		return b, a
+	}
+	return a, b
+}
+
+func relationPivotTableNameParts(fromModel, toModel, knownAs string) string {
+	a, b := sortedPhysicalPair(fromModel, toModel)
+	if a == "" || b == "" {
+		return ""
+	}
+	base := a + "_" + b
+	known := strings.TrimSpace(utility.PhysicalSQLTableName(knownAs))
+	if known == "" {
+		return base
+	}
+	return base + "_as_" + known
+}
+
+func relationPivotTableName(from, to *models.ConnectionType) string {
+	if from == nil || to == nil {
+		return ""
+	}
+	knownAs := strings.TrimSpace(from.KnownAs)
+	if knownAs == "" {
+		knownAs = strings.TrimSpace(to.KnownAs)
+	}
+	return relationPivotTableNameParts(from.Model, to.Model, knownAs)
 }
 
 // PhysicalSQLColumnForSystemRelationField maps GraphQL/schema synthetic relation keys
@@ -58,20 +132,21 @@ func PhysicalSQLColumnForSystemRelationField(identifier string, modelType *model
 			return resolved
 		}
 	}
-	// SQL DDL uses the referenced model segment only (known_as does not change the column name today).
-	slug := core
-	if idx := strings.Index(core, systemRelationFieldCoreAs); idx >= 0 {
-		slug = core[:idx]
-	}
-	slug = strings.TrimSpace(slug)
+	slug := strings.TrimSpace(core)
 	if slug == "" {
 		return id
 	}
-	physSlug := utility.PhysicalSQLTableName(slug)
-	if physSlug == "" {
-		return slug + "_id"
+	if idx := strings.Index(slug, systemRelationFieldCoreAs); idx >= 0 {
+		modelSlug := strings.TrimSpace(slug[:idx])
+		knownAsSlug := strings.TrimSpace(slug[idx+len(systemRelationFieldCoreAs):])
+		if col := relationFKColumnNameParts(modelSlug, knownAsSlug); col != "" {
+			return col
+		}
 	}
-	return physSlug + "_id"
+	if col := relationFKColumnNameParts(slug, ""); col != "" {
+		return col
+	}
+	return id
 }
 
 // remapSyntheticSystemRelationRowKeys copies values from system_*_id keys onto physical FK

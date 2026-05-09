@@ -70,10 +70,10 @@ CREATE TABLE tag (
   id VARCHAR(36) NOT NULL PRIMARY KEY,
   name TEXT
 );
-CREATE TABLE tag_post (
-  tag_id VARCHAR(36) NOT NULL REFERENCES tag(id) ON DELETE CASCADE,
+CREATE TABLE post_tag (
   post_id VARCHAR(36) NOT NULL REFERENCES post(id) ON DELETE CASCADE,
-  PRIMARY KEY (tag_id, post_id)
+  tag_id VARCHAR(36) NOT NULL REFERENCES tag(id) ON DELETE CASCADE,
+  PRIMARY KEY (post_id, tag_id)
 );
 `).Exec(ctx)
 	require.NoError(t, err)
@@ -82,8 +82,8 @@ CREATE TABLE tag_post (
 		return execMetaMediaSecondaryDDL(ctx, tx, "`meta`", "`media`", "`document_revisions`")
 	}))
 	_, err = db.NewRaw(`
-CREATE INDEX IF NOT EXISTS idx_tag_post_post_id ON tag_post (post_id);
-CREATE INDEX IF NOT EXISTS idx_tag_post_tag_id ON tag_post (tag_id);
+CREATE INDEX IF NOT EXISTS idx_post_tag_post_id ON post_tag (post_id);
+CREATE INDEX IF NOT EXISTS idx_post_tag_tag_id ON post_tag (tag_id);
 `).Exec(ctx)
 	require.NoError(t, err)
 	_, _ = db.NewRaw("ANALYZE").Exec(ctx)

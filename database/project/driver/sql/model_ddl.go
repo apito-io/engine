@@ -8,11 +8,11 @@ import (
 	_const "github.com/apito-io/engine/const"
 	"github.com/apito-io/engine/models"
 	"github.com/apito-io/engine/utility"
+	"github.com/uptrace/bun"
 )
 
-// CreateModelTable creates a model table with only an id primary key column.
-// Use ifNotExists to guard against duplicate table errors during provisioning.
-func (S *SQLDriver) CreateModelTable(ctx context.Context, model *models.ModelType, ifNotExists bool) error {
+// createModelTableExec runs CREATE TABLE DDL on any bun executor (DB or transaction).
+func (S *SQLDriver) createModelTableExec(ctx context.Context, db bun.IDB, model *models.ModelType, ifNotExists bool) error {
 	tableName := utility.PhysicalSQLTableName(model.Name)
 	ifClause := " "
 	if ifNotExists {
@@ -27,6 +27,12 @@ func (S *SQLDriver) CreateModelTable(ctx context.Context, model *models.ModelTyp
 		t := strings.ReplaceAll(tableName, "`", "``")
 		query = fmt.Sprintf("CREATE TABLE%s`%s`( id VARCHAR(36) NOT NULL PRIMARY KEY );", ifClause, t)
 	}
-	_, err := S.ORM.NewRaw(query).Exec(ctx)
+	_, err := db.NewRaw(query).Exec(ctx)
 	return err
+}
+
+// CreateModelTable creates a model table with only an id primary key column.
+// Use ifNotExists to guard against duplicate table errors during provisioning.
+func (S *SQLDriver) CreateModelTable(ctx context.Context, model *models.ModelType, ifNotExists bool) error {
+	return S.createModelTableExec(ctx, S.ORM, model, ifNotExists)
 }
