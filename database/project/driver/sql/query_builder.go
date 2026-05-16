@@ -220,6 +220,92 @@ func getFieldType(val interface{}) reflect.Kind {
 	return reflect.TypeOf(val).Kind()
 }
 
+// parseBetweenRaw extracts two boundary values from a GraphQL `between` filter (parity with Arango query builder).
+func parseBetweenRaw(value interface{}) ([2]interface{}, error) {
+	var out [2]interface{}
+	switch v := value.(type) {
+	case []interface{}:
+		if len(v) < 2 {
+			return out, errors.New("between requires two values")
+		}
+		out[0], out[1] = v[0], v[1]
+	case []string:
+		if len(v) < 2 {
+			return out, errors.New("between requires two values")
+		}
+		out[0], out[1] = v[0], v[1]
+	case string:
+		parts := strings.Split(v, ",")
+		if len(parts) < 2 {
+			return out, errors.New("between string must contain two comma-separated values")
+		}
+		out[0] = strings.TrimSpace(parts[0])
+		out[1] = strings.TrimSpace(parts[1])
+	default:
+		return out, fmt.Errorf("between value type not supported: %T", value)
+	}
+	return out, nil
+}
+
+func sqlLiteralForFilter(v interface{}) string {
+	if v == nil {
+		return "NULL"
+	}
+	switch t := v.(type) {
+	case string:
+		return fmt.Sprintf("'%s'", strings.ReplaceAll(t, "'", "''"))
+	case int, int32, int64, float64, bool:
+		return fmt.Sprintf("%v", t)
+	default:
+		return fmt.Sprintf("'%s'", strings.ReplaceAll(fmt.Sprint(t), "'", "''"))
+	}
+}
+
+// coerceBetweenBound maps a single `between` endpoint to a bindable value for the field's logical type.
+func coerceBetweenBound(kind reflect.Kind, v interface{}) (interface{}, error) {
+	switch kind {
+	case reflect.String, reflect.Interface:
+		switch t := v.(type) {
+		case string:
+			return t, nil
+		case float64:
+			return fmt.Sprint(t), nil
+		case int, int32, int64:
+			return fmt.Sprint(t), nil
+		default:
+			return nil, fmt.Errorf("between bound must be string-like for this field, got %T", v)
+		}
+	case reflect.Int:
+		switch t := v.(type) {
+		case int:
+			return t, nil
+		case int32:
+			return int(t), nil
+		case int64:
+			return int(t), nil
+		case float64:
+			return int(t), nil
+		default:
+			return nil, fmt.Errorf("between bound must be numeric for int field, got %T", v)
+		}
+	case reflect.Float64:
+		switch t := v.(type) {
+		case float64:
+			return t, nil
+		case int:
+			return float64(t), nil
+		case int32:
+			return float64(t), nil
+		case int64:
+			return float64(t), nil
+		default:
+			return nil, fmt.Errorf("between bound must be numeric for float field, got %T", v)
+		}
+	default:
+		return v, nil
+	}
+}
+
 func ConditionBuilder(variable string, args map[string]interface{}, modelType *models.ModelType, sqlArgs *[]interface{}) (map[string][]string, error) {
 
 	userDefinedFieldNames := make(map[string]reflect.Kind)
@@ -241,11 +327,24 @@ func ConditionBuilder(variable string, args map[string]interface{}, modelType *m
 			// if AND / OR found
 			switch field {
 			case "AND":
-				conditions["AND"], _ = FilterBuilder(variable, filterObj.(map[string]interface{}), modelType, sqlArgs)
+				preds, err := FilterBuilder(variable, filterObj.(map[string]interface{}), modelType, sqlArgs)
+				if err != nil {
+					return nil, err
+				}
+				conditions["AND"] = append(conditions["AND"], preds...)
 			case "OR":
-				conditions["OR"], _ = FilterBuilder(variable, filterObj.(map[string]interface{}), modelType, sqlArgs)
+				preds, err := FilterBuilder(variable, filterObj.(map[string]interface{}), modelType, sqlArgs)
+				if err != nil {
+					return nil, err
+				}
+				conditions["OR"] = append(conditions["OR"], preds...)
 			default:
-				conditions["AND"], _ = FilterBuilder(variable, where, modelType, sqlArgs)
+				sub := map[string]interface{}{field: filterObj}
+				preds, err := FilterBuilder(variable, sub, modelType, sqlArgs)
+				if err != nil {
+					return nil, err
+				}
+				conditions["AND"] = append(conditions["AND"], preds...)
 			}
 		}
 	}
@@ -264,6 +363,16 @@ func FilterBuilder(variable string, where map[string]interface{}, modelType *mod
 
 	for field, filterObj := range where {
 
+		kind, fieldOK := userDefinedFieldNames[field]
+		if !fieldOK {
+			return nil, fmt.Errorf("invalid field name %s in query", field)
+		}
+
+		filterMap, ok := filterObj.(map[string]interface{})
+		if !ok {
+			return nil, fmt.Errorf("invalid filter shape for field %s", field)
+		}
+
 		sqlField := field
 		// SQL row filters use table alias `x`; Arango-style paths use `x.data` — keep document keys intact there.
 		if variable == "x" {
@@ -272,11 +381,34 @@ func FilterBuilder(variable string, where map[string]interface{}, modelType *mod
 		fieldName := fmt.Sprintf("%s.%s", variable, sqlField)
 
 		var actualValue interface{}
-		for suffix, value := range filterObj.(map[string]interface{}) {
+		skipKindCheck := false
+
+		for suffix, value := range filterMap {
 
 			actualValue = value
 
 			switch suffix {
+			case "between":
+				raw, err := parseBetweenRaw(value)
+				if err != nil {
+					return nil, fmt.Errorf("%s: %w", field, err)
+				}
+				lo, err := coerceBetweenBound(kind, raw[0])
+				if err != nil {
+					return nil, fmt.Errorf("%s: %w", field, err)
+				}
+				hi, err := coerceBetweenBound(kind, raw[1])
+				if err != nil {
+					return nil, fmt.Errorf("%s: %w", field, err)
+				}
+				if sqlArgs != nil {
+					conditions = append(conditions, fmt.Sprintf(`(%s >= ? AND %s <= ?)`, fieldName, fieldName))
+					*sqlArgs = append(*sqlArgs, lo, hi)
+				} else {
+					conditions = append(conditions, fmt.Sprintf(`(%s >= %s AND %s <= %s)`,
+						fieldName, sqlLiteralForFilter(lo), fieldName, sqlLiteralForFilter(hi)))
+				}
+				skipKindCheck = true
 			case "contains":
 				if sqlArgs != nil {
 					conditions = append(conditions, fmt.Sprintf(`%s LIKE ?`, fieldName))
@@ -333,14 +465,10 @@ func FilterBuilder(variable string, where map[string]interface{}, modelType *mod
 			}
 		}
 
-		//validate the field & type
-		if kind, ok := userDefinedFieldNames[field]; ok {
-			k := getFieldType(actualValue)
-			if kind != k {
-				return nil, errors.New(fmt.Sprintf("Invalid Value for %s in Query. Type mismatched", field))
+		if !skipKindCheck {
+			if k := getFieldType(actualValue); kind != k {
+				return nil, fmt.Errorf("invalid value for %s in query: type mismatched", field)
 			}
-		} else {
-			return nil, errors.New(fmt.Sprintf("Invalid Field Name %s in Query", field))
 		}
 
 	}
@@ -465,6 +593,10 @@ func CommonDocTransformation(model *models.ModelType, local string, result map[s
 						return nil, err
 					}
 					data[k] = object
+				}
+			} else if utility.ArrayContains(classification.BooleanFields, k) {
+				if val, ok := v.(int64); ok {
+					data[k] = val == 1
 				}
 			} else {
 				data[k] = v

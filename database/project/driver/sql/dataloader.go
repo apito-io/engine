@@ -87,6 +87,7 @@ type FieldClassification struct {
 	ListFields      []string
 	RepeatedFields  map[string][]*models.FieldInfo
 	ObjectField     []string
+	BooleanFields   []string // this is needed because in turso and sqlite boolean is stored as integer
 }
 
 func (S *SQLDriver) RelationshipDataLoaderBytes(ctx context.Context, param *models.CommonSystemParams, connection map[string]interface{}) ([]byte, error) {

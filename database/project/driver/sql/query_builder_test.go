@@ -5,6 +5,7 @@ import (
 	"testing"
 	"time"
 
+	_const "github.com/apito-io/engine/const"
 	"github.com/apito-io/engine/models"
 )
 
@@ -56,6 +57,59 @@ func TestFormatSQLMetaTimestamp_timeTime(t *testing.T) {
 	}
 	if want := "2026-04-01T12:30:00Z"; s != want {
 		t.Fatalf("got %q want %q", s, want)
+	}
+}
+
+func TestFilterBuilder_between_stringField(t *testing.T) {
+	model := &models.ModelType{
+		Name: "food_order",
+		Fields: []*models.FieldInfo{
+			{Identifier: "date", InputType: _const.StringInput, FieldType: _const.DateField},
+		},
+	}
+	var sqlArgs []interface{}
+	preds, err := FilterBuilder("x", map[string]interface{}{
+		"date": map[string]interface{}{
+			"between": []interface{}{"2026-05-12", "2026-05-13"},
+		},
+	}, model, &sqlArgs)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(preds) != 1 {
+		t.Fatalf("expected 1 predicate, got %v", preds)
+	}
+	if !strings.Contains(preds[0], ">=") || !strings.Contains(preds[0], "<=") {
+		t.Fatalf("expected range predicate, got %q", preds[0])
+	}
+	if len(sqlArgs) != 2 {
+		t.Fatalf("expected 2 args, got %v", sqlArgs)
+	}
+}
+
+func TestConditionBuilder_multipleScalarFields(t *testing.T) {
+	model := &models.ModelType{
+		Name: "t",
+		Fields: []*models.FieldInfo{
+			{Identifier: "a", InputType: _const.StringInput, FieldType: _const.TextField},
+			{Identifier: "b", InputType: _const.StringInput, FieldType: _const.TextField},
+		},
+	}
+	var sqlArgs []interface{}
+	filters, err := ConditionBuilder("x", map[string]interface{}{
+		"where": map[string]interface{}{
+			"a": map[string]interface{}{"eq": "1"},
+			"b": map[string]interface{}{"eq": "2"},
+		},
+	}, model, &sqlArgs)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if g := filters["AND"]; len(g) != 2 {
+		t.Fatalf("expected 2 AND predicates, got %v", g)
+	}
+	if len(sqlArgs) != 2 {
+		t.Fatalf("expected 2 bind args, got %v", sqlArgs)
 	}
 }
 

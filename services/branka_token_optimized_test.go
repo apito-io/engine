@@ -277,6 +277,36 @@ func TestGenerateSyncTokenOptimized(t *testing.T) {
 	}
 }
 
+// TestValidateSyncTokenOptimizedMcpPrefix ensures mcp- prefix strips like cli- for the same inner payload.
+func TestValidateSyncTokenOptimizedMcpPrefix(t *testing.T) {
+	cfg := &models.Config{
+		BrankaKey: "test-branka-key",
+	}
+	service := GetBrankaTokenOptimized(cfg, nil)
+	ctx := context.Background()
+	userID := "user-mcp"
+	projectIDs := []string{"projA"}
+	scopes := []string{"system_api_read"}
+	tokenType := "mcp_token"
+	expireAt := time.Now().Unix() + 7200
+
+	raw, err := service.GenerateSyncTokenOptimized(ctx, userID, projectIDs, scopes, tokenType, expireAt)
+	if err != nil || raw == nil {
+		t.Fatalf("generate: %v", err)
+	}
+	prefixed := "mcp-" + *raw
+	claims, err := service.ValidateSyncTokenOptimized(ctx, prefixed)
+	if err != nil {
+		t.Fatalf("validate mcp-: %v", err)
+	}
+	if claims.UserID != userID {
+		t.Errorf("UserID got %q want %q", claims.UserID, userID)
+	}
+	if claims.TokenType != tokenType {
+		t.Errorf("TokenType got %q want %q", claims.TokenType, tokenType)
+	}
+}
+
 // TestValidateSyncTokenOptimizedInvalidToken tests invalid token validation
 func TestValidateSyncTokenOptimizedInvalidToken(t *testing.T) {
 	cfg := &models.Config{

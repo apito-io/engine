@@ -495,7 +495,8 @@ func (t *BrankaTokenOptimized) GenerateSyncTokenOptimized(ctx context.Context, u
 func (t *BrankaTokenOptimized) ValidateSyncTokenOptimized(ctx context.Context, token string) (*models.TokenClaims, error) {
 
 	extractedToken := token
-	if strings.HasPrefix(token, "cli-") || strings.HasPrefix(token, "sdk-") {
+	if strings.HasPrefix(token, "cli-") || strings.HasPrefix(token, "sdk-") || strings.HasPrefix(token, "mcp-") {
+		// cli-, sdk-, and mcp- are all 4-byte ASCII prefixes; strip before decoding the inner payload.
 		extractedToken = token[4:]
 	}
 

@@ -1550,42 +1550,64 @@ func (s *GraphQLServer) deleteModel(cache *models.ApplicationCache, project *mod
 
 	var _model *models.ModelType
 
-	// if schema not found then create
 	if project.Schema == nil {
 		return nil, errors.New("nothing to Delete")
-	} else {
-		var index int
-		for i, ct := range project.Schema.Models {
-			if ct.Name == modelName {
-				_model = ct
-				index = i
-				break
-			}
-		}
-
-		if _model == nil {
-			return nil, errors.New("could not find model to delete")
-		}
-
-		// delete all the data connected to this model
-		err := driver.DeleteDocumentsFromProject(cache.Ctx, &models.CommonSystemParams{ProjectID: project.ID, Model: _model})
-		if err != nil {
-			return nil, err
-		}
-		// drop the model from schema
-		project.Schema.Models = append(project.Schema.Models[:index], project.Schema.Models[index+1:]...)
 	}
 
-	// also remove all its relations
+	var index int
+	for i, ct := range project.Schema.Models {
+		if ct.Name == modelName {
+			_model = ct
+			index = i
+			break
+		}
+	}
+
+	if _model == nil {
+		return nil, errors.New("could not find model to delete")
+	}
+
+	if len(_model.Connections) > 0 {
+		return nil, fmt.Errorf(
+			"model %q still has %d outgoing schema connection(s); remove each with deleteConnectionFromModel (system GraphQL) before deleting the model",
+			modelName, len(_model.Connections),
+		)
+	}
+
 	for _, m := range project.Schema.Models {
-		for i, c := range m.Connections {
-			if c.Model == modelName {
-				m.Connections = append(m.Connections[:i], m.Connections[i+1:]...)
+		if m == nil || m.Name == modelName {
+			continue
+		}
+		for _, c := range m.Connections {
+			if c != nil && c.Model == modelName {
+				return nil, fmt.Errorf(
+					"model %q is still referenced from schema model %q (connection to %q); remove that relation with deleteConnectionFromModel before deleting the model",
+					modelName, m.Name, modelName,
+				)
 			}
 		}
-		if len(m.Connections) == 0 {
-			m.Connections = nil
-		}
+	}
+
+	if err := driver.DeleteDocumentsFromProject(cache.Ctx, &models.CommonSystemParams{ProjectID: project.ID, Model: _model}); err != nil {
+		return nil, err
+	}
+
+	project.Schema.Models = append(project.Schema.Models[:index], project.Schema.Models[index+1:]...)
+
+	if err := driver.DropModel(cache.Ctx, project, modelName); err != nil {
+		return nil, err
+	}
+
+	// Persist schema change without full UpdateProject: SQL deletes model_types row;
+	// document stores load project, splice model from embedded schema, then save.
+	if err := s.SystemDriver.DeleteModelType(cache.Ctx, project.ID, modelName); err != nil {
+		return nil, err
+	}
+	if _, err := s.refreshProjectAndReCache(cache.Ctx, project.ID); err != nil {
+		return nil, err
+	}
+	if err := s.ExpireGraphQLProjectCache(cache.Ctx, project.ID); err != nil {
+		return nil, err
 	}
 
 	return _model, nil

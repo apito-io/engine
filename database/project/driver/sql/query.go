@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log"
 	"sort"
 	"strings"
 
@@ -85,9 +86,155 @@ func pivotManyManyInsertRow(cdp *models.ConnectDisconnectParam, relatedID string
 	}
 }
 
+// humanizeSQLModelName turns snake_case table/model ids into spaced words for log readability.
+func humanizeSQLModelName(model string) string {
+	if model == "" {
+		return ""
+	}
+	return strings.ReplaceAll(utility.PhysicalSQLTableName(model), "_", " ")
+}
+
+func connectBuilderKnownAsSuffix(cdp *models.ConnectDisconnectParam) string {
+	if cdp == nil {
+		return ""
+	}
+	k := cdp.KnownAs
+	if k == "" && cdp.ForwardConnectionType != nil {
+		k = cdp.ForwardConnectionType.KnownAs
+	}
+	if k == "" {
+		return ""
+	}
+	return fmt.Sprintf(` known_as=%q`, k)
+}
+
+func connectBuilderSchemaArrow(cdp *models.ConnectDisconnectParam) string {
+	if cdp == nil || cdp.ForwardConnectionType == nil || cdp.BackwardConnectionType == nil {
+		return "(incomplete schema)"
+	}
+	fm := utility.PhysicalSQLTableName(cdp.ForwardConnectionType.Model)
+	bm := utility.PhysicalSQLTableName(cdp.BackwardConnectionType.Model)
+	return fmt.Sprintf("%s (%s) → %s (%s)%s",
+		fm, cdp.ForwardConnectionType.Relation,
+		bm, cdp.BackwardConnectionType.Relation,
+		connectBuilderKnownAsSuffix(cdp))
+}
+
+// connectBuilderCardinalitySentence describes the forward/backward pair in plain English.
+func connectBuilderCardinalitySentence(cdp *models.ConnectDisconnectParam) string {
+	if cdp == nil || cdp.ForwardConnectionType == nil || cdp.BackwardConnectionType == nil {
+		return ""
+	}
+	fm := humanizeSQLModelName(cdp.ForwardConnectionType.Model)
+	bm := humanizeSQLModelName(cdp.BackwardConnectionType.Model)
+	fr, br := cdp.ForwardConnectionType.Relation, cdp.BackwardConnectionType.Relation
+	switch {
+	case fr == "has_one" && br == "has_one":
+		return fmt.Sprintf("Each %s has at most one %s, and each %s has at most one %s (one-to-one).",
+			fm, bm, bm, fm)
+	case fr == "has_one" && br == "has_many":
+		return fmt.Sprintf("Each %s belongs to one %s; each %s has many %s.",
+			bm, fm, fm, bm)
+	case fr == "has_many" && br == "has_one":
+		return fmt.Sprintf("Each %s belongs to one %s; each %s has many %s.",
+			fm, bm, bm, fm)
+	case fr == "has_many" && br == "has_many":
+		return fmt.Sprintf("Many-to-many between %s and %s (pivot table).", fm, bm)
+	default:
+		return fmt.Sprintf("%s is %s on the forward side; %s is %s on the backward side.", fm, fr, bm, br)
+	}
+}
+
+// connectBuilderConnectNarrative is a compact multi-line summary for logs (schema + cardinality + ids).
+func connectBuilderConnectNarrative(cdp *models.ConnectDisconnectParam, actionID string) string {
+	if cdp == nil {
+		return "connect: (nil param)"
+	}
+	var b strings.Builder
+	b.WriteString(fmt.Sprintf("connection_type=%s\n", cdp.ConnectionType))
+	b.WriteString("edge: ")
+	b.WriteString(connectBuilderSchemaArrow(cdp))
+	b.WriteByte('\n')
+	if s := connectBuilderCardinalitySentence(cdp); s != "" {
+		b.WriteString("summary: ")
+		b.WriteString(s)
+		b.WriteByte('\n')
+	}
+	b.WriteString(fmt.Sprintf("ids: forward_connection_id=%s action_id=%s (all action_ids=%v)",
+		cdp.ForwardConnectionID, actionID, cdp.ActionIDs))
+	return b.String()
+}
+
+func logConnectBuilderBegin(narrative string) {
+	var b strings.Builder
+	b.WriteString("[sqldriver.ConnectBuilder] begin connect\n")
+	for _, line := range strings.Split(narrative, "\n") {
+		b.WriteString("  ")
+		b.WriteString(line)
+		b.WriteByte('\n')
+	}
+	log.Print(b.String())
+}
+
+// formatBunUpdateSQL returns the parameterized SQL bun would run for an UPDATE (after Model/Where/Set chain).
+func formatBunUpdateSQL(qu *bun.UpdateQuery) (string, error) {
+	if qu == nil {
+		return "", errors.New("nil update query")
+	}
+	db := qu.DB()
+	if db == nil {
+		return "", errors.New("nil DB on update query")
+	}
+	b, err := qu.AppendQuery(db.Formatter(), nil)
+	if err != nil {
+		return "", err
+	}
+	return string(b), nil
+}
+
+func (S *SQLDriver) logConnectBuilderSQL(narrative, step, sql string, args []interface{}) {
+	eng := ""
+	if S != nil && S.DriverCredential != nil {
+		eng = strings.TrimSpace(S.DriverCredential.Engine)
+	}
+	var b strings.Builder
+	b.WriteString("[sqldriver.ConnectBuilder] SQL\n")
+	if narrative != "" {
+		for _, line := range strings.Split(narrative, "\n") {
+			b.WriteString("  ")
+			b.WriteString(line)
+			b.WriteByte('\n')
+		}
+	}
+	if step != "" {
+		b.WriteString("  step: ")
+		b.WriteString(step)
+		b.WriteByte('\n')
+	}
+	b.WriteString("  engine: ")
+	b.WriteString(eng)
+	b.WriteString("\n  SQL: ")
+	b.WriteString(sql)
+	if len(args) > 0 {
+		b.WriteString("\n  args: ")
+		fmt.Fprintf(&b, "%v", args)
+	}
+	b.WriteByte('\n')
+	log.Print(b.String())
+}
+
+func (S *SQLDriver) logBunUpdateQuery(narrative, step string, qu *bun.UpdateQuery) {
+	sql, err := formatBunUpdateSQL(qu)
+	if err != nil {
+		log.Printf("[sqldriver.ConnectBuilder] step=%s format sql: %v", step, err)
+		return
+	}
+	S.logConnectBuilderSQL(narrative, step, sql, nil)
+}
+
 // execPivotInsertIgnoreDuplicate inserts one M:N pivot row; duplicate primary keys are ignored so
 // update mutations can safely resend the same connect payload as create (SQLite UNIQUE, etc.).
-func (S *SQLDriver) execPivotInsertIgnoreDuplicate(ctx context.Context, tx bun.Tx, pivotTable string, row map[string]interface{}) error {
+func (S *SQLDriver) execPivotInsertIgnoreDuplicate(ctx context.Context, tx bun.Tx, pivotTable string, row map[string]interface{}, narrative string) error {
 	if len(row) == 0 {
 		return errors.New("empty pivot row")
 	}
@@ -135,6 +282,7 @@ func (S *SQLDriver) execPivotInsertIgnoreDuplicate(ctx context.Context, tx bun.T
 	default:
 		sqlStr = fmt.Sprintf("INSERT OR IGNORE INTO %s (%s) VALUES (%s)", tblQ, colList, ph)
 	}
+	S.logConnectBuilderSQL(narrative, "pivot insert (many-to-many link row)", sqlStr, args)
 	_, err := tx.ExecContext(ctx, sqlStr, args...)
 	return err
 }
@@ -162,7 +310,7 @@ func connectDisconnectIsOneToOne(cdp *models.ConnectDisconnectParam) bool {
 }
 
 // runDualHasOneConnectTx sets both FK columns for 1:1 inside an existing transaction.
-func (S *SQLDriver) runDualHasOneConnectTx(ctx context.Context, tx bun.Tx, root *models.CommonSystemParams, cdp *models.ConnectDisconnectParam, id string) error {
+func (S *SQLDriver) runDualHasOneConnectTx(ctx context.Context, tx bun.Tx, root *models.CommonSystemParams, cdp *models.ConnectDisconnectParam, id string, narrative string) error {
 	peerTbl := utility.PhysicalSQLTableName(cdp.ForwardConnectionType.Model)
 	holderTbl := utility.PhysicalSQLTableName(cdp.BackwardConnectionType.Model)
 	colOnPeerToHolder := relationFKColumnNameForModel(cdp.BackwardConnectionType.Model, cdp.ForwardConnectionType, cdp.BackwardConnectionType)
@@ -170,13 +318,23 @@ func (S *SQLDriver) runDualHasOneConnectTx(ctx context.Context, tx bun.Tx, root 
 	u1 := map[string]interface{}{colOnPeerToHolder: cdp.ForwardConnectionID}
 	q1 := tx.NewUpdate().Table(peerTbl).Where("id = ?", id)
 	q1 = applyBunHookWheresUpdate(S.Conf, ctx, root, q1)
-	if _, err := q1.Model(&u1).Exec(ctx); err != nil {
+	q1 = q1.Model(&u1)
+	step1 := fmt.Sprintf("dual has_one 1/2: set FK on %s row id=%s (point toward %s id=%s)",
+		humanizeSQLModelName(cdp.ForwardConnectionType.Model), id,
+		humanizeSQLModelName(cdp.BackwardConnectionType.Model), cdp.ForwardConnectionID)
+	S.logBunUpdateQuery(narrative, step1, q1)
+	if _, err := q1.Exec(ctx); err != nil {
 		return err
 	}
 	u2 := map[string]interface{}{colOnHolderToPeer: id}
 	q2 := tx.NewUpdate().Table(holderTbl).Where("id = ?", cdp.ForwardConnectionID)
 	q2 = applyBunHookWheresUpdate(S.Conf, ctx, root, q2)
-	_, err := q2.Model(&u2).Exec(ctx)
+	q2 = q2.Model(&u2)
+	step2 := fmt.Sprintf("dual has_one 2/2: set FK on %s row id=%s (point back to %s id=%s)",
+		humanizeSQLModelName(cdp.BackwardConnectionType.Model), cdp.ForwardConnectionID,
+		humanizeSQLModelName(cdp.ForwardConnectionType.Model), id)
+	S.logBunUpdateQuery(narrative, step2, q2)
+	_, err := q2.Exec(ctx)
 	return err
 }
 
@@ -210,6 +368,8 @@ func (S *SQLDriver) ConnectBuilder(ctx context.Context, root *models.CommonSyste
 	return S.ORM.RunInTx(ctx, nil, func(ctx context.Context, tx bun.Tx) error {
 		for _, cdp := range root.ConDisParam {
 			for _, id := range cdp.ActionIDs {
+				nar := connectBuilderConnectNarrative(cdp, id)
+				logConnectBuilderBegin(nar)
 				switch cdp.ConnectionType {
 				case "forward":
 					switch cdp.BackwardConnectionType.Relation {
@@ -217,14 +377,19 @@ func (S *SQLDriver) ConnectBuilder(ctx context.Context, root *models.CommonSyste
 						tableName := utility.PhysicalSQLTableName(cdp.ForwardConnectionType.Model)
 						var err error
 						if connectDisconnectIsOneToOne(cdp) {
-							err = S.runDualHasOneConnectTx(ctx, tx, root, cdp, id)
+							err = S.runDualHasOneConnectTx(ctx, tx, root, cdp, id, nar)
 						} else {
 							u := map[string]interface{}{
 								relationFKColumnNameForModel(cdp.BackwardConnectionType.Model, cdp.ForwardConnectionType, cdp.BackwardConnectionType): cdp.ForwardConnectionID,
 							}
 							qu := tx.NewUpdate().Table(tableName).Where("id = ?", id)
 							qu = applyBunHookWheresUpdate(S.Conf, ctx, root, qu)
-							_, err = qu.Model(&u).Exec(ctx)
+							qu = qu.Model(&u)
+							step := fmt.Sprintf("forward has_one: set FK on %s row action_id=%s → points to %s forward_connection_id=%s",
+								humanizeSQLModelName(cdp.ForwardConnectionType.Model), id,
+								humanizeSQLModelName(cdp.BackwardConnectionType.Model), cdp.ForwardConnectionID)
+							S.logBunUpdateQuery(nar, step, qu)
+							_, err = qu.Exec(ctx)
 						}
 						if err != nil {
 							return err
@@ -236,13 +401,19 @@ func (S *SQLDriver) ConnectBuilder(ctx context.Context, root *models.CommonSyste
 							u := map[string]interface{}{fkCol: id}
 							qu := tx.NewUpdate().Table(tbl).Where("id = ?", cdp.ForwardConnectionID)
 							qu = applyBunHookWheresUpdate(S.Conf, ctx, root, qu)
-							if _, err := qu.Model(&u).Exec(ctx); err != nil {
+							qu = qu.Model(&u)
+							step := fmt.Sprintf("forward has_many (parent has_one on %s): set FK on %s row id=%s → references %s id=%s (column %s)",
+								humanizeSQLModelName(cdp.ForwardConnectionType.Model),
+								humanizeSQLModelName(cdp.BackwardConnectionType.Model), cdp.ForwardConnectionID,
+								humanizeSQLModelName(cdp.ForwardConnectionType.Model), id, fkCol)
+							S.logBunUpdateQuery(nar, step, qu)
+							if _, err := qu.Exec(ctx); err != nil {
 								return err
 							}
 						} else {
 							pivot := connectDisconnectPivotTableName(cdp)
 							row := pivotManyManyInsertRow(cdp, id)
-							if err := S.execPivotInsertIgnoreDuplicate(ctx, tx, pivot, row); err != nil {
+							if err := S.execPivotInsertIgnoreDuplicate(ctx, tx, pivot, row, nar); err != nil {
 								return err
 							}
 						}
@@ -253,14 +424,19 @@ func (S *SQLDriver) ConnectBuilder(ctx context.Context, root *models.CommonSyste
 						tableName := utility.PhysicalSQLTableName(cdp.ForwardConnectionType.Model)
 						var err error
 						if connectDisconnectIsOneToOne(cdp) {
-							err = S.runDualHasOneConnectTx(ctx, tx, root, cdp, id)
+							err = S.runDualHasOneConnectTx(ctx, tx, root, cdp, id, nar)
 						} else {
 							u := map[string]interface{}{
 								relationFKColumnNameForModel(cdp.BackwardConnectionType.Model, cdp.ForwardConnectionType, cdp.BackwardConnectionType): cdp.ForwardConnectionID,
 							}
 							qu := tx.NewUpdate().Table(tableName).Where("id = ?", id)
 							qu = applyBunHookWheresUpdate(S.Conf, ctx, root, qu)
-							_, err = qu.Model(&u).Exec(ctx)
+							qu = qu.Model(&u)
+							step := fmt.Sprintf("backward has_one: set FK on %s row action_id=%s → points to %s forward_connection_id=%s",
+								humanizeSQLModelName(cdp.ForwardConnectionType.Model), id,
+								humanizeSQLModelName(cdp.BackwardConnectionType.Model), cdp.ForwardConnectionID)
+							S.logBunUpdateQuery(nar, step, qu)
+							_, err = qu.Exec(ctx)
 						}
 						if err != nil {
 							return err
@@ -272,13 +448,19 @@ func (S *SQLDriver) ConnectBuilder(ctx context.Context, root *models.CommonSyste
 							u := map[string]interface{}{fkCol: id}
 							qu := tx.NewUpdate().Table(tbl).Where("id = ?", cdp.ForwardConnectionID)
 							qu = applyBunHookWheresUpdate(S.Conf, ctx, root, qu)
-							if _, err := qu.Model(&u).Exec(ctx); err != nil {
+							qu = qu.Model(&u)
+							step := fmt.Sprintf("backward has_many (child has_one on %s): set FK on %s row id=%s → references %s id=%s (column %s)",
+								humanizeSQLModelName(cdp.BackwardConnectionType.Model),
+								humanizeSQLModelName(cdp.ForwardConnectionType.Model), cdp.ForwardConnectionID,
+								humanizeSQLModelName(cdp.BackwardConnectionType.Model), id, fkCol)
+							S.logBunUpdateQuery(nar, step, qu)
+							if _, err := qu.Exec(ctx); err != nil {
 								return err
 							}
 						} else {
 							pivot := connectDisconnectPivotTableName(cdp)
 							row := pivotManyManyInsertRow(cdp, id)
-							if err := S.execPivotInsertIgnoreDuplicate(ctx, tx, pivot, row); err != nil {
+							if err := S.execPivotInsertIgnoreDuplicate(ctx, tx, pivot, row, nar); err != nil {
 								return err
 							}
 						}
@@ -534,6 +716,8 @@ func (S *SQLDriver) BuildFieldClassification(_fields []*models.FieldInfo) *Field
 			classification.RepeatedFields[f.Identifier] = append(classification.RepeatedFields[f.Identifier], f.SubFieldInfo...)
 		} else if f.FieldType == _const.ObjectField {
 			classification.ObjectField = append(classification.ObjectField, f.Identifier)
+		} else if f.FieldType == _const.BooleanField {
+			classification.BooleanFields = append(classification.BooleanFields, f.Identifier)
 		}
 	}
 	return &classification

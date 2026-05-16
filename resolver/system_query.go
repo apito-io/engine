@@ -2,8 +2,10 @@ package resolver
 
 import (
 	"context"
+	"database/sql"
 	"errors"
 	"fmt"
+	"sort"
 	"strings"
 
 	"github.com/apito-io/engine/database/helper"
@@ -240,16 +242,31 @@ func (s *GraphQLServer) GetCurrentProjectResolverFn(p graphql.ResolveParams) (in
 }
 
 func (s *GraphQLServer) GetProjectResolverFn(p graphql.ResolveParams) (interface{}, error) {
-
 	var projectID string
 	if val, ok := p.Args["_id"].(string); ok {
-		// Opaque project id — do not use SingularResourceName (it lowerCamels e.g. fitness_abcdef → fitnessAbcdef).
 		projectID = strings.TrimSpace(val)
-	} else {
-		return nil, errors.New(ae.MODEL_NAME_REQUIRED)
+	}
+	// Empty _id means "current project" (matches GraphQL field description).
+	if projectID == "" {
+		v := p.Context.Value
+		router, ok := v("router").(echo.Context)
+		if !ok {
+			return nil, errors.New("router context missing")
+		}
+		cache, err := s.GetApplicationCache(router)
+		if err != nil {
+			return nil, err
+		}
+		if cache.Project == nil || strings.TrimSpace(cache.Project.ID) == "" {
+			return nil, errors.New(ae.MODEL_NAME_REQUIRED)
+		}
+		projectID = cache.Project.ID
 	}
 	project, err := s.SystemDriver.GetProject(p.Context, projectID)
 	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, errors.New("project not found")
+		}
 		return nil, err
 	}
 	project.Schema = nil
@@ -402,6 +419,205 @@ func (s *GraphQLServer) ListModelsInfoResolverFn(p graphql.ResolveParams) (inter
 	}
 
 	return project.Schema.Models, nil
+}
+
+// ProjectSchemaRelationGraphResolverFn returns a JSON payload (edges, models, mermaid) for MCP / tooling.
+// Schema is taken from the current application cache project (same scope as projectModelsInfo without model_name).
+func (s *GraphQLServer) ProjectSchemaRelationGraphResolverFn(p graphql.ResolveParams) (interface{}, error) {
+	s.Lock()
+	defer s.Unlock()
+
+	var (
+		v      = p.Context.Value
+		router = v("router").(echo.Context)
+	)
+
+	cache, err := s.GetApplicationCache(router)
+	if err != nil {
+		return nil, err
+	}
+	project := cache.Project
+	if project == nil || project.Schema == nil {
+		return map[string]interface{}{
+			"project_id": projectIDOrEmpty(project),
+			"models":     []string{},
+			"edges":      []interface{}{},
+			"mermaid":    "erDiagram\n  NO_SCHEMA {\n    string note \"no schema\"\n  }\n",
+		}, nil
+	}
+
+	if val, ok := p.Args["_id"].(string); ok && strings.TrimSpace(val) != "" {
+		if project.ID != strings.TrimSpace(val) {
+			return nil, fmt.Errorf("%w :: relation graph is only available for the active project", ae.NotAllowed)
+		}
+	}
+
+	return buildProjectRelationGraphPayload(project), nil
+}
+
+func projectIDOrEmpty(p *models.Project) string {
+	if p == nil {
+		return ""
+	}
+	return p.ID
+}
+
+func buildProjectRelationGraphPayload(project *models.Project) map[string]interface{} {
+	modelSet := make(map[string]struct{})
+	var edges []map[string]interface{}
+	for _, m := range project.Schema.Models {
+		if m == nil || m.Name == "" {
+			continue
+		}
+		modelSet[m.Name] = struct{}{}
+		for _, c := range m.Connections {
+			if c == nil || c.Model == "" {
+				continue
+			}
+			modelSet[c.Model] = struct{}{}
+			edges = append(edges, map[string]interface{}{
+				"from":     m.Name,
+				"to":       c.Model,
+				"relation": c.Relation,
+				"type":     c.Type,
+				"known_as": c.KnownAs,
+			})
+		}
+	}
+	models := make([]string, 0, len(modelSet))
+	for name := range modelSet {
+		models = append(models, name)
+	}
+	sort.Strings(models)
+
+	mermaid := buildRelationGraphMermaid(models, edges)
+
+	return map[string]interface{}{
+		"project_id": project.ID,
+		"models":     models,
+		"edges":      edgesJSON(edges),
+		"mermaid":    mermaid,
+	}
+}
+
+func edgesJSON(edges []map[string]interface{}) []interface{} {
+	out := make([]interface{}, len(edges))
+	for i := range edges {
+		out[i] = edges[i]
+	}
+	return out
+}
+
+func mermaidSafeID(name string) string {
+	var b strings.Builder
+	for _, r := range name {
+		switch {
+		case (r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z') || (r >= '0' && r <= '9'):
+			b.WriteRune(r)
+		default:
+			b.WriteByte('_')
+		}
+	}
+	s := b.String()
+	if s == "" {
+		return "model"
+	}
+	return s
+}
+
+func mermaidNodeIDs(models []string) map[string]string {
+	out := make(map[string]string)
+	used := make(map[string]struct{})
+	for _, name := range models {
+		base := mermaidSafeID(name)
+		id := base
+		for n := 0; ; n++ {
+			if _, ok := used[id]; !ok {
+				used[id] = struct{}{}
+				out[name] = id
+				break
+			}
+			id = fmt.Sprintf("%s_%d", base, n)
+		}
+	}
+	return out
+}
+
+func buildRelationGraphMermaid(models []string, edges []map[string]interface{}) string {
+	idFor := mermaidNodeIDs(models)
+
+	var sb strings.Builder
+	sb.WriteString("erDiagram\n")
+
+	connected := make(map[string]struct{})
+	for _, e := range edges {
+		from, _ := e["from"].(string)
+		to, _ := e["to"].(string)
+		if from == "" || to == "" || from == to {
+			continue
+		}
+		fid, ok1 := idFor[from]
+		tid, ok2 := idFor[to]
+		if !ok1 || !ok2 {
+			continue
+		}
+		connected[from] = struct{}{}
+		connected[to] = struct{}{}
+
+		rel, _ := e["relation"].(string)
+		ka, _ := e["known_as"].(string)
+		card := erDiagramCardinality(rel)
+		label := erDiagramEdgeLabel(rel, ka)
+		sb.WriteString(fmt.Sprintf("  %s %s %s : \"%s\"\n", fid, card, tid, label))
+	}
+
+	for _, name := range models {
+		if _, ok := connected[name]; ok {
+			continue
+		}
+		sb.WriteString(fmt.Sprintf("  %s\n", idFor[name]))
+	}
+
+	if sb.String() == "erDiagram\n" {
+		return "erDiagram\n  NO_CONNECTIONS {\n    string note \"no connections\"\n  }\n"
+	}
+	return sb.String()
+}
+
+// erDiagramCardinality maps Apito connection relation to Mermaid erDiagram crow's-foot line.
+func erDiagramCardinality(rel string) string {
+	switch strings.ToLower(strings.TrimSpace(rel)) {
+	case "has_many":
+		return "||--o{"
+	case "has_one":
+		return "||--||"
+	case "many_to_many", "many-many", "many_many":
+		return "}o--o{"
+	default:
+		return "||--o{"
+	}
+}
+
+func erDiagramEdgeLabel(rel, knownAs string) string {
+	rel = strings.TrimSpace(rel)
+	knownAs = strings.TrimSpace(knownAs)
+	var b strings.Builder
+	if rel != "" {
+		b.WriteString(rel)
+	}
+	if knownAs != "" {
+		if b.Len() > 0 {
+			b.WriteByte(' ')
+		}
+		b.WriteByte('(')
+		b.WriteString(strings.ReplaceAll(knownAs, `"`, `'`))
+		b.WriteByte(')')
+	}
+	s := b.String()
+	if s == "" {
+		return "relates"
+	}
+	return strings.ReplaceAll(s, `"`, `'`)
 }
 
 // resolveProjectModelFromSchema maps admin GraphQL `model` / `model_name` to ProjectSchema.Models[].Name.

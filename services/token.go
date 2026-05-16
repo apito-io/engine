@@ -266,8 +266,26 @@ func (t *ApitoTokenService) ApitoTokenHandler(next echo.HandlerFunc) echo.Handle
 				if err != nil {
 					return ctx.JSON(http.StatusForbidden, map[string]interface{}{"message": ae.InvalidToken})
 				}
+			} else if strings.HasPrefix(*token, "cli-") || strings.HasPrefix(*token, "sdk-") || strings.HasPrefix(*token, "mcp-") {
+				// Optimized sync-style token (same payload as X-Apito-Sync-Key path), including console MCP-prefixed tokens.
+				verifiedToken, err = t.syncKeyManager.ValidateSyncTokenOptimized(ctx.Request().Context(), *token)
+				if err != nil {
+					return ctx.JSON(http.StatusForbidden, map[string]interface{}{"message": ae.InvalidToken})
+				}
+				err = utility.SetTokenClaimsToRouter(ctx, verifiedToken)
+				if err != nil {
+					return err
+				}
+				ctx.Set("token", *token)
+				ctx.Set("sync_token_claims", verifiedToken)
+				if len(verifiedToken.ProjectIDs) > 0 {
+					ctx.Set("project_ids", verifiedToken.ProjectIDs)
+				}
+				if len(verifiedToken.Scopes) > 0 {
+					ctx.Set("scopes", verifiedToken.Scopes)
+				}
 			} else {
-				// for cli and system token
+				// Legacy Branka (non-optimized) cli/sdk payloads and other bearer material
 				verifiedToken, err = t.blankaService.ValidateAndSetContext(ctx, *token)
 				if err != nil {
 					return ctx.JSON(http.StatusForbidden, map[string]interface{}{"message": ae.InvalidToken})
@@ -279,7 +297,7 @@ func (t *ApitoTokenService) ApitoTokenHandler(next echo.HandlerFunc) echo.Handle
 
 		} else if useCookies == "false" || syncKey != "" {
 			var verifiedToken *models.TokenClaims
-			if strings.HasPrefix(syncKey, "cli-") || strings.HasPrefix(syncKey, "sdk-") {
+			if strings.HasPrefix(syncKey, "cli-") || strings.HasPrefix(syncKey, "sdk-") || strings.HasPrefix(syncKey, "mcp-") {
 				verifiedToken, err = t.syncKeyManager.ValidateSyncTokenOptimized(ctx.Request().Context(), syncKey)
 				if err != nil {
 					return ctx.JSON(http.StatusForbidden, map[string]interface{}{"message": ae.InvalidToken})

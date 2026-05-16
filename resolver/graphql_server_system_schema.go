@@ -151,6 +151,17 @@ func (s *GraphQLServer) BuildServerQueriesAndMutations() {
 			Type:    graphql.NewList(privateSchemaObjects.ModelTypeObject),
 			Resolve: s.ListModelsInfoResolverFn,
 		},
+		"projectSchemaRelationGraph": &graphql.Field{
+			Name: "ProjectSchemaRelationGraph",
+			Type: scaler.ScalarJSON,
+			Args: graphql.FieldConfigArgument{
+				"_id": &graphql.ArgumentConfig{
+					Type:        graphql.String,
+					Description: "optional; when set must match the active project id (same as projectModelsInfo scope)",
+				},
+			},
+			Resolve: s.ProjectSchemaRelationGraphResolverFn,
+		},
 		/*"projectModelInfoByName": &graphql.Field{
 			Name:    "ProjectModelInfoByName",
 			Type:    privateSchemaObjects.ModelTypeObject,

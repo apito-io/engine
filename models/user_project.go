@@ -131,6 +131,8 @@ type Project struct {
 	ProjectSecretKey string `json:"project_secret_key,omitempty" firestore:"project_secret_key,omitempty" bson:"project_secret_key,omitempty"`
 }
 
+
+
 type SyncProject struct {
 	ProjectID                string `bun:"type:uuid,pk" json:"project_id,omitempty" firestore:"project_id,omitempty" bson:"_id,omitempty"`
 	SyncedTokenUsed          string `json:"synced_token_used,omitempty" firestore:"synced_token_used,omitempty" bson:"synced_token_used,omitempty"`
