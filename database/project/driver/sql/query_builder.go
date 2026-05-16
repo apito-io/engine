@@ -536,27 +536,27 @@ func CommonDocTransformation(model *models.ModelType, local string, result map[s
 				})
 				data[k] = processed
 			} else if utility.ArrayContains(classification.PictureField, k) {
-				if val, ok := v.([]byte); ok {
+				if val, ok := v.(string); ok {
 					var pic map[string]interface{}
-					err := json.Unmarshal(val, &pic)
+					err := json.Unmarshal([]byte(val), &pic)
 					if err != nil {
 						return nil, err
 					}
 					data[k] = pic
 				}
 			} else if utility.ArrayContains(classification.GalleryField, k) {
-				if val, ok := v.([]byte); ok {
+				if val, ok := v.(string); ok {
 					var gallery []map[string]interface{}
-					err := json.Unmarshal(val, &gallery)
+					err := json.Unmarshal([]byte(val), &gallery)
 					if err != nil {
 						return nil, err
 					}
 					data[k] = gallery
 				}
 			} else if utility.ArrayContains(classification.ListFields, k) {
-				if val, ok := v.([]byte); ok {
+				if val, ok := v.(string); ok {
 					var lists []interface{}
-					err := json.Unmarshal(val, &lists)
+					err := json.Unmarshal([]byte(val), &lists)
 					if err != nil {
 						return nil, err
 					}

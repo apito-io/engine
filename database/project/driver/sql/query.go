@@ -705,7 +705,7 @@ func (S *SQLDriver) BuildFieldClassification(_fields []*models.FieldInfo) *Field
 			classification.MultilineFields = append(classification.MultilineFields, f.Identifier)
 		} else if f.FieldType == _const.MediaField && f.Validation != nil && f.Validation.IsGallery {
 			classification.GalleryField = append(classification.GalleryField, f.Identifier)
-		} else if f.FieldType == _const.MediaField && f.Validation != nil && !f.Validation.IsGallery {
+		} else if f.FieldType == _const.MediaField {
 			classification.PictureField = append(classification.PictureField, f.Identifier)
 		} else if f.FieldType == _const.ListField && f.Validation != nil && (len(f.Validation.FixedListElements) == 0 || f.Validation.IsMultiChoice) {
 			classification.ListFields = append(classification.ListFields, f.Identifier)
