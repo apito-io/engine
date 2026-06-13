@@ -65,6 +65,7 @@ type SyncToken struct {
 	ProjectID string `json:"project_id,omitempty" firestore:"project_id,omitempty" bson:"project_id,omitempty"`
 	Name      string `json:"name,omitempty" firestore:"name,omitempty" bson:"name,omitempty"`
 	Token     string `json:"token,omitempty" firestore:"token,omitempty" bson:"token,omitempty"`
+	TokenType string `json:"token_type,omitempty" firestore:"token_type,omitempty" bson:"token_type,omitempty"`
 	Expire    string `json:"expire,omitempty" firestore:"expire,omitempty" bson:"expire,omitempty"`
 	CreatedAt string `json:"created_at,omitempty" firestore:"created_at,omitempty" bson:"created_at,omitempty"`
 	// extra information
@@ -80,6 +81,8 @@ type ProjectCreateRequest struct {
 	Engine      string             `json:"engine" bson:"engine,omitempty"`
 	Driver      *DriverCredentials `json:"driver" bson:"driver,omitempty"`
 	Example     string             `json:"example" bson:"example,omitempty"`
+	// DeleteDatabase opts in to physical/platform database removal on project delete (REST only).
+	DeleteDatabase bool `json:"delete_database,omitempty" bson:"delete_database,omitempty"`
 }
 
 type Workspace struct {

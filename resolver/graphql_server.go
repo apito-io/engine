@@ -13,12 +13,11 @@ import (
 	"sync"
 	"time"
 
-	"github.com/ThreeDotsLabs/watermill/message"
 	_const "github.com/apito-io/engine/const"
 	"github.com/apito-io/engine/database"
 	"github.com/apito-io/engine/database/cache"
 	"github.com/apito-io/engine/database/kv"
-	"github.com/apito-io/engine/database/queue"
+	"github.com/apito-io/engine/database/realtime"
 	"github.com/apito-io/engine/database/system"
 	"github.com/apito-io/engine/executor"
 	"github.com/apito-io/engine/interfaces"
@@ -27,9 +26,6 @@ import (
 	"github.com/apito-io/engine/schemas/objects"
 	"github.com/apito-io/engine/services"
 	"github.com/apito-io/engine/utility"
-	"github.com/aws/aws-sdk-go-v2/aws"
-	"github.com/aws/aws-sdk-go-v2/config"
-	"github.com/aws/aws-sdk-go-v2/credentials"
 	"github.com/edwingeng/hotswap"
 	svg "github.com/h2non/go-is-svg"
 	"github.com/labstack/echo/v4"
@@ -112,8 +108,6 @@ type GraphQLServer struct {
 	//JwtService         *services.JWTService
 	ProjectDBConnPools *sync.Map
 
-	AwsConfig aws.Config
-
 	ProjectCache interfaces.CacheDBInterface
 
 	// for HashiCorp plugins only
@@ -134,8 +128,7 @@ type GraphQLServer struct {
 	//LocalPluginGraphQLSchemas chan *extensions.ThirdPartyGraphQLSchemas
 	//LocalPluginRoutes chan []*extensions.ThirdPartyRESTApi
 
-	GraphQLSubscription *GraphQLSubscriptions
-	PubSubService       interfaces.QueueEngineInterface
+	RealtimeBus         interfaces.RealtimeBus
 	KVService           interfaces.KeyValueServiceInterface
 
 	PluginManagerSwapper *hotswap.PluginManagerSwapper
@@ -147,23 +140,12 @@ type GraphQLServer struct {
 
 func BuildGraphQL(ctx context.Context, cfg *models.Config, extensionRouter *echo.Group, mainEcho *echo.Echo) (*GraphQLServer, error) {
 
-	_awsConfig, _ := config.LoadDefaultConfig(context.Background(),
-		config.WithRegion(cfg.AWSRegion),
-		config.WithCredentialsProvider(
-			credentials.StaticCredentialsProvider{
-				Value: aws.Credentials{
-					AccessKeyID:     cfg.AWSKey,
-					SecretAccessKey: cfg.AWSSecret,
-				}},
-		),
-	)
-
 	kvStorage, err := kv.CreateKVDriver(cfg.KVStorageEngine, cfg)
 	if err != nil {
 		return nil, err
 	}
 
-	queueEngine, err := queue.CreateQueueEngine(cfg.QueueStorageEngine, cfg)
+	realtimeBus, err := realtime.CreateRealtimeBus(cfg.RealtimeEngine, cfg)
 	if err != nil {
 		return nil, err
 	}
@@ -173,15 +155,13 @@ func BuildGraphQL(ctx context.Context, cfg *models.Config, extensionRouter *echo
 		wg:  sync.WaitGroup{},
 		Cfg: cfg,
 
-		AwsConfig: _awsConfig,
-
 		SystemQueriesChan:   make(chan *graphql.Fields),
 		SystemMutationsChan: make(chan *graphql.Fields),
 
 		SystemDriverReadyChan: make(chan interfaces.ApitoSystemDB, 1),
 
-		KVService:     kvStorage,
-		PubSubService: queueEngine,
+		KVService:   kvStorage,
+		RealtimeBus: realtimeBus,
 
 		//GraphQLExecutor:    _executor,
 		ProjectDBConnPools:  &sync.Map{},
@@ -228,8 +208,8 @@ func BuildGraphQL(ctx context.Context, cfg *models.Config, extensionRouter *echo
 	tokenWg := sync.WaitGroup{}
 
 	// system driver
+	tokenWg.Add(1)
 	go func() {
-		tokenWg.Add(1)
 		defer tokenWg.Done()
 		fmt.Println("connecting to system driver")
 		_cred := models.DriverCredentials{
@@ -247,93 +227,18 @@ func BuildGraphQL(ctx context.Context, cfg *models.Config, extensionRouter *echo
 		srv.SystemDriverReadyChan <- systemDriver
 	}()
 
-	// redis & graphql subscription
-	go func() {
-		defer func() {
-			if r := recover(); r != nil {
-				fmt.Printf("GraphQL subscription goroutine panic: %v\n", r)
-			}
-		}()
-
-		subs, err := GetGraphQLSubscriptions()
-		if err != nil {
-			fmt.Println(err.Error())
-			return
-		}
-		srv.GraphQLSubscription = subs
-
-		ctx, cancel := context.WithCancel(context.Background())
-		defer cancel()
-
-		messageChan, err := srv.PubSubService.Subscribe(ctx, "system_notify_channel")
-		if err != nil {
-			fmt.Println(err.Error())
-			return
-		}
-
-		// Add graceful shutdown channel monitoring
-		shutdownChan := make(chan struct{})
-		defer close(shutdownChan)
-
-		for {
-			select {
-			case <-ctx.Done():
-				fmt.Println("GraphQL subscription context cancelled, exiting")
-				return
-			case <-shutdownChan:
-				return
-			case msg, ok := <-messageChan:
-				if !ok {
-					fmt.Println("Message channel closed, exiting subscription loop")
-					return
-				}
-
-				if msg != nil {
-					var data models.SubscriptionEvent
-					err = json.Unmarshal(msg.Payload, &data)
-					if err != nil {
-						fmt.Printf("Subscription unmarshal error: %v\n", err)
-						continue
-					}
-
-					for userID, sub := range subs.getSubscribers(context.TODO()) {
-						if userID == data.UserID {
-							select {
-							case sub.Data <- data:
-							case <-ctx.Done():
-								return
-							default:
-								// Non-blocking send to prevent deadlock
-							}
-						}
-					}
-				}
-			}
-		}
-	}()
-
 	// auth services
+	tokenWg.Add(1)
 	go func(cfg *models.Config) {
-		tokenWg.Add(1)
 		defer tokenWg.Done()
 		var authService services.AuthServiceInterface
 		var err error
 
 		tokenService := services.GetJWTServiceWithRedis(cfg, srv.KVService)
 
-		switch cfg.AuthServiceProvider {
-		case "cognito", "oauth", "third-party":
-			// you can implement your own follow the official doc
-		case "local":
-			authService, err = services.NewLocalAuthService(cfg, tokenService)
-			if err != nil {
-				fmt.Println(err.Error())
-			}
-		default:
-			authService, err = services.NewLocalAuthService(cfg, tokenService)
-			if err != nil {
-				fmt.Println(err.Error())
-			}
+		authService, err = services.NewLocalAuthService(cfg, tokenService)
+		if err != nil {
+			fmt.Println(err.Error())
 		}
 
 		srv.JWTTokenService = tokenService
@@ -364,6 +269,8 @@ func BuildGraphQL(ctx context.Context, cfg *models.Config, extensionRouter *echo
 		}
 		srv.CodeGenClient = codegen.NewCodeGenClient(conn)
 	}()*/
+
+	go srv.RegisterUserSchema()
 
 	// Copy System Schema
 	go func() {
@@ -515,24 +422,29 @@ func (s *GraphQLServer) cacheId(projectId string, modelName string) string {
 }
 
 func (s *GraphQLServer) PublishSystemMessage(ctx context.Context, userID string, data *models.SubscriptionEvent) error {
+	if s == nil || s.RealtimeBus == nil {
+		return fmt.Errorf("realtime bus is not configured")
+	}
 
 	data.UserID = userID
 
-	var err error
 	payload, err := json.Marshal(data)
 	if err != nil {
 		return err
 	}
 
-	// Create Watermill message
-	msg := message.NewMessage(userID, payload)
-	err = s.PubSubService.Publish("system_notify_channel", msg)
-	if err != nil {
+	topic := s.realtimeTopic(ctx, RealtimeSystemUserNotifyTopic(userID))
+	if err := s.RealtimeBus.Publish(ctx, topic, payload); err != nil {
 		return err
 	}
 
-	fmt.Println(string(payload))
-	return err
+	// Also fan-out on project-scoped subject when project + type are set.
+	if data.ProjectID != "" && data.Type != "" {
+		projectTopic := s.realtimeTopic(ctx, RealtimeSystemProjectEventTopic(data.ProjectID, data.Type))
+		_ = s.RealtimeBus.Publish(ctx, projectTopic, payload)
+	}
+
+	return nil
 }
 
 func (s *GraphQLServer) UpdateApplicationCache(ctx context.Context, projectID string) {
@@ -555,6 +467,11 @@ func (s *GraphQLServer) refreshProjectAndReCache(ctx context.Context, projectID 
 		return nil, err
 	}
 	return fresh, nil
+}
+
+// RefreshProjectAndReCache reloads project from system DB into ProjectCache (exported for pro publish).
+func (s *GraphQLServer) RefreshProjectAndReCache(ctx context.Context, projectID string) (*models.Project, error) {
+	return s.refreshProjectAndReCache(ctx, projectID)
 }
 
 func (s *GraphQLServer) GetFunctionProvider() ([]string, error) {
@@ -910,7 +827,9 @@ func (s *GraphQLServer) BuildSystemParam(i echo.Context, project *models.Project
 				param.Role.SystemGenerated = false
 			}
 		} else {
-			return nil, errors.New("this Role does not exist")
+			// Project end-user roles (e.g. "none", custom app roles from loginUser tokens).
+			param.Role.IsAdmin = false
+			param.Role.SystemGenerated = false
 		}
 	}
 	return param, nil

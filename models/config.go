@@ -32,6 +32,11 @@ type Config struct {
 	ServePort string `env:"SERVE_PORT" env-default:"5050"` // Server Listening Port
 
 	DefaultDatabaseDir string `env:"DEFAULT_DATABASE_DIR" env-default:"~/.apito/db"`
+	// SQLiteDataDir is the persistent root for local SQLite replicas (sqlite/ subtree).
+	// Default ./db is relative to the engine working directory; production mounts a volume at this path.
+	SQLiteDataDir string `env:"SQLITE_DATA_DIR" env-default:"./db"`
+	// LibsqlSyncDataDir is deprecated; use SQLITE_DATA_DIR. Kept for one release of backward compatibility.
+	LibsqlSyncDataDir string `env:"LIBSQL_SYNC_DATA_DIR" env-default:""`
 
 	// System Database Information
 	SystemDatabaseEngine string `env:"SYSTEM_DB_ENGINE" env-default:"coredb"`
@@ -55,12 +60,21 @@ type Config struct {
 	KVStorageEnginePassword string `env:"KV_PASSWORD" env-default:""`
 	KVStorageEngineDatabase string `env:"KV_DATABASE" env-default:"apito_kv.db"`
 
-	QueueStorageEngine         string `env:"QUEUE_ENGINE" env-default:"coredb"`
-	QueueStorageEngineHost     string `env:"QUEUE_HOST" env-default:""`
-	QueueStorageEnginePort     string `env:"QUEUE_PORT" env-default:""`
-	QueueStorageEngineUser     string `env:"QUEUE_USER" env-default:""`
-	QueueStorageEnginePassword string `env:"QUEUE_PASSWORD" env-default:""`
-	QueueStorageEngineDatabase string `env:"QUEUE_DATABASE" env-default:"apito_queue.db"`
+	// Realtime bus: unified NATS JetStream fan-out (subscriptions + console notify).
+	// "nats" = embedded or external NATS with JetStream (production default).
+	// "memory" = in-process fan-out (single node, tests/local).
+	RealtimeEngine string `env:"REALTIME_ENGINE" env-default:"nats"`
+	// RealtimeNatsURL, when set, connects to an external/clustered NATS instead of
+	// embedding an in-process server (e.g. "nats://nats:4222").
+	RealtimeNatsURL string `env:"REALTIME_NATS_URL" env-default:""`
+	// RealtimeNatsPort exposes the embedded NATS server on a TCP port for
+	// clustering/leaf-node connections. -1 (default) keeps it in-process only.
+	RealtimeNatsPort int `env:"REALTIME_NATS_PORT" env-default:"-1"`
+	// RealtimeNatsJetStream enables JetStream durable streams for replay and
+	// cross-instance fan-out (default on for production NATS backend).
+	RealtimeNatsJetStream bool `env:"REALTIME_NATS_JETSTREAM" env-default:"true"`
+	// RealtimeNatsStoreDir is the JetStream file store directory for embedded NATS.
+	RealtimeNatsStoreDir string `env:"REALTIME_NATS_STORE_DIR" env-default:""`
 
 	// Token Encryption Credential
 	PublicKeyPath  string `env:"PUBLIC_KEY_PATH" env-default:"keys/public.key"`
@@ -83,9 +97,17 @@ type Config struct {
 
 	TokenTTL string `env:"TOKEN_TTL" env-default:"60"`
 
-	AWSRegion string `env:"AWS_REGION" env-default:""`
-	AWSSecret string `env:"AWS_SECRET" env-default:""`
-	AWSKey    string `env:"AWS_KEY" env-default:""`
+	// Platform free-cloud object storage (R2/S3-compatible). Used when project storage_settings.use_free_cloud_storage=true.
+	FreeCloudDefaultS3AccessKey     string  `env:"FREE_CLOUD_DEFAULT_S3_ACCESS_KEY" env-default:""`
+	FreeCloudDefaultS3SecretKey     string  `env:"FREE_CLOUD_DEFAULT_S3_SECRET_KEY" env-default:""`
+	FreeCloudDefaultS3Endpoint      string  `env:"FREE_CLOUD_DEFAULT_S3_ENDPOINT" env-default:""`
+	FreeCloudDefaultS3BucketName    string  `env:"FREE_CLOUD_DEFAULT_S3_BUCKET_NAME" env-default:""`
+	FreeCloudDefaultS3PublicBaseURL string  `env:"FREE_CLOUD_DEFAULT_S3_PUBLIC_BASE_URL" env-default:""`
+	FreeCloudDefaultS3ForcePathStyle bool   `env:"FREE_CLOUD_DEFAULT_S3_FORCE_PATH_STYLE" env-default:"true"`
+	FreeCloudStorageLimitGB         float64 `env:"FREE_CLOUD_STORAGE_LIMIT_GB" env-default:"0.5"`
+
+	// Resend API key for transactional email (team invites, etc.).
+	ResendAPIKey string `env:"RESEND_API_KEY" env-default:""`
 
 	// Admin password reset: secret required to call POST /admin/reset-password (e.g. set in ~/.apito/bin/.env)
 	AdminResetSecret string `env:"APITO_ADMIN_RESET_SECRET" env-default:""`
@@ -126,6 +148,20 @@ type Config struct {
 	// SchemaIterateHook is called when a schema change needs to propagate to sub-project databases.
 	SchemaIterateHook func(ctx context.Context, project *Project, fn func(ctx context.Context, driver interface{}) error) error `env:"-"`
 
+	// SkipSchemaBaseDDLHook lets extensions skip base project physical DDL for tenant-only storage layouts.
+	SkipSchemaBaseDDLHook func(ctx context.Context, project *Project) bool `env:"-"`
+
+	// PostSchemaChangeHook runs after a successful schema orchestration commit (pro: Turso Sync flush).
+	PostSchemaChangeHook func(ctx context.Context, baseDriver interface{}, project *Project) `env:"-"`
+
+	// SchemaMutationHook runs before schema DDL orchestration; handled=true skips runSchemaChange.
+	SchemaMutationHook SchemaMutationHook `env:"-"`
+
+	// SchemaVersioningEnabled stages schema mutations for review (pro registers the hook).
+	SchemaVersioningEnabled bool `env:"PRO_SCHEMA_VERSIONING_ENABLED" env-default:"true"`
+	// SchemaVersioningBypass applies schema mutations immediately through orchestration.
+	SchemaVersioningBypass bool `env:"PRO_SCHEMA_VERSIONING_BYPASS" env-default:"false"`
+
 	// TokenClaimsHook allows the pro layer to inject additional claims into JWT/token payloads.
 	TokenClaimsHook func(project *Project, claims map[string]interface{}) `env:"-"`
 
@@ -133,11 +169,33 @@ type Config struct {
 	// Open-core stays policy-free and simply invokes this hook when set.
 	ProjectAPITokenClaimsHook func(ctx echo.Context, project *Project, claims *TokenClaims) `env:"-"`
 
+	// ProjectUserGraphQLHooks allows the host to override project end-user GraphQL resolvers before the open-core default.
+	// Type: *resolver.ProjectUserGraphQLHooks (set by pro at boot).
+	ProjectUserGraphQLHooks interface{} `env:"-"`
+
+	// ProjectUserItemFieldsHook lets the host extend the project end-user GraphQL object.
+	// Type: resolver.ProjectUserItemFieldsHook (set by pro at boot). Open-core does not name host fields.
+	ProjectUserItemFieldsHook interface{} `env:"-"`
+
+	// ProjectUserGraphQLOperationFieldHook lets the host extend Args (or other field config) on named
+	// project end-user operations (createUser, searchUsers, …). Type: resolver.ProjectUserGraphQLOperationFieldHook.
+	ProjectUserGraphQLOperationFieldHook interface{} `env:"-"`
+
+	// ProjectUserAPITokenHook lets the host adjust API token type/scopes for app end-user login.
+	// Open-core default: tokenType "user", scopes ["project:<projectID>"].
+	ProjectUserAPITokenHook func(cache *ApplicationCache, userID, role string) (tokenType string, scopes []string) `env:"-"`
+
 	// EnsureScopedDatabaseHook runs before default scoped DB creation (e.g. Postgres/MySQL per-scope isolation).
 	EnsureScopedDatabaseHook func(ctx context.Context, projectID string, base, derived *DriverCredentials) error `env:"-"`
 
 	// LoadProjectCacheHook allows the pro layer to modify a project after loading from the system DB.
 	LoadProjectCacheHook func(ctx context.Context, project *Project) `env:"-"`
+
+	// RealtimeTopicHook lets the host rewrite a realtime subscription topic before
+	// publish/subscribe (e.g. inject a tenant scope prefix). Open-core builds a
+	// neutral base topic and applies this hook identically on both the emit and
+	// subscribe sides so they match. Open-core does not encode tenant semantics.
+	RealtimeTopicHook func(ctx context.Context, baseTopic string) string `env:"-"`
 
 	// NamingV2ArangoPerModelCollections is used when applying Arango naming V2 physical migration:
 	// true means one document collection per model layout; false uses a single p_{projectId} bucket.

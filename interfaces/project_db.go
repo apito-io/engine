@@ -137,4 +137,25 @@ type ProjectDBInterface interface {
 	// DuplicateField rename a field in a model along with its data key
 	//DuplicateField(oldFieldName string, repeatedFieldGroup *string, param models.CommonSystemParams) error
 
+	// Project file metadata (table: files in project DB)
+	EnsureFilesTable(ctx context.Context) error
+	CreateProjectFile(ctx context.Context, file *models.ProjectFile) (*models.ProjectFile, error)
+	GetProjectFile(ctx context.Context, fileID string) (*models.ProjectFile, error)
+	SearchProjectFiles(ctx context.Context, param *models.CommonSystemParams) (*models.SearchResponse[models.ProjectFile], error)
+	DeleteProjectFiles(ctx context.Context, ids []string) error
+	SumProjectFilesSize(ctx context.Context) (int64, error)
+
+	// Project auth users (reserved table: users in project DB)
+	EnsureUsersTable(ctx context.Context) error
+	CreateProjectAuthUser(ctx context.Context, user *models.ProjectAuthUser) (*models.ProjectAuthUser, error)
+	GetProjectAuthUser(ctx context.Context, userID string) (*models.ProjectAuthUser, error)
+	GetProjectAuthUserByUsername(ctx context.Context, username string) (*models.ProjectAuthUser, error)
+	ListProjectAuthUsersByEmail(ctx context.Context, tenantID, email string) ([]*models.ProjectAuthUser, error)
+	ListProjectAuthUsersByPhone(ctx context.Context, tenantID, phone string) ([]*models.ProjectAuthUser, error)
+	ListProjectAuthUsersByGoogleSub(ctx context.Context, tenantID, googleSub string) ([]*models.ProjectAuthUser, error)
+	SearchProjectAuthUsers(ctx context.Context, tenantID string, limit, offset int) ([]*models.ProjectAuthUser, int, error)
+	CountProjectAuthUsersByRole(ctx context.Context, tenantID string) (map[string]int, error)
+	UpdateProjectAuthUser(ctx context.Context, user *models.ProjectAuthUser) error
+	DeleteProjectAuthUser(ctx context.Context, userID string) error
+
 }

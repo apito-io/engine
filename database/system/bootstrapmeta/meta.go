@@ -3,14 +3,19 @@
 package bootstrapmeta
 
 import (
+	"context"
 	"database/sql"
 	"errors"
 	"log"
 	"strings"
 
+	"github.com/apito-io/engine/models"
 	"go.mongodb.org/mongo-driver/v2/mongo"
 	"golang.org/x/crypto/bcrypt"
 )
+
+// CreateStarterProjectFn creates the starter project row when it does not exist yet.
+type CreateStarterProjectFn func(ctx context.Context, userID string, proj *models.Project) error
 
 const (
 	AdminEmail         = "admin@apito.io"

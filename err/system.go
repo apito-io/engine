@@ -37,8 +37,6 @@ var ModelTypeNotFound = fmt.Errorf("model type not found")
 const NEW_MODEL_NAME_REQUIRED = "new model name is required"
 
 // third party
-const S3_REGION_IS_REQUIRED = "S3 region is required"
-const AWS_CREDENTIALS_ARE_NOT_SET = "AWS credentials are not set"
 
 // #todo better exception handling and logging
 func Ew(err error, context string) error {

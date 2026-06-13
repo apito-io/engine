@@ -248,7 +248,7 @@ func (t *ApitoTokenService) ApitoTokenHandler(next echo.HandlerFunc) echo.Handle
 		useCookies := ctx.Request().Header.Get("X-Use-Cookies")
 		apitoKey := ctx.Request().Header.Get("X-Apito-Key")
 		syncKey := ctx.Request().Header.Get("X-Apito-Sync-Key")
-		if apitoKey != "" || ((requestPath == "/secured/graphql" || requestPath == "/secured/graphql/v2") || strings.HasPrefix(requestPath, "/secured/rest/") || strings.HasPrefix(requestPath, "/secured/upload/file")) && useCookies == "" {
+		if apitoKey != "" || ((requestPath == "/secured/graphql" || requestPath == "/secured/graphql/v2") || strings.HasPrefix(requestPath, "/secured/rest/") || strings.HasPrefix(requestPath, "/secured/files/") || strings.HasPrefix(requestPath, "/secured/upload/file")) && useCookies == "" {
 			var token *string
 			if apitoKey != "" {
 				token = &apitoKey

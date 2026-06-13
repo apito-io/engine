@@ -11,9 +11,9 @@ import (
 
 	_const "github.com/apito-io/engine/const"
 	"golang.org/x/crypto/bcrypt"
-	"github.com/apito-io/engine/database/project/driver/bbolt"
-	"github.com/apito-io/engine/database/project/driver/mongo"
-	"github.com/apito-io/engine/database/project/driver/sql"
+	"github.com/apito-io/engine/database/project/bbolt"
+	"github.com/apito-io/engine/database/project/mongo"
+	"github.com/apito-io/engine/database/project"
 	ae "github.com/apito-io/engine/err"
 	"github.com/apito-io/engine/models"
 	"github.com/apito-io/engine/resolver"
@@ -30,11 +30,6 @@ type AuthController struct {
 }
 
 func GetAuthController(cfg *models.Config, commonFn *resolver.GraphQLServer) *AuthController {
-	/*cognito, err := services.NewApitoTokenService(cfg, gqlServer.SystemDriver)
-	if err != nil {
-		return nil
-	}*/
-
 	return &AuthController{
 		Cfg:           cfg,
 		graphQLServer: commonFn,
@@ -214,7 +209,7 @@ func DatabaseCheckCore(a *AuthController, c echo.Context, req *DatabaseRequest) 
 		case _const.MySQLDriver, _const.MariaDBDriver:
 			defPort = "3306"
 		}
-		driver, err := sql.GetSQLDriver(a.Cfg, &models.DriverCredentials{
+		driver, err := project.GetProjectSQLDriver(a.Cfg, &models.DriverCredentials{
 			File:     req.File,
 			Engine:   dbType,
 			Host:     req.Host,
@@ -231,7 +226,14 @@ func DatabaseCheckCore(a *AuthController, c echo.Context, req *DatabaseRequest) 
 			})
 		}
 
-		err = driver.Ping()
+		pinger, ok := driver.(interface{ Ping() error })
+		if !ok {
+			return c.JSON(http.StatusInternalServerError, &models.HttpResponse{
+				Message: "driver does not support connectivity check",
+				Code:    http.StatusInternalServerError,
+			})
+		}
+		err = pinger.Ping()
 		if err != nil {
 			return c.JSON(http.StatusInternalServerError, &models.HttpResponse{
 				Message: err.Error(),
@@ -603,7 +605,7 @@ func (a *AuthController) LoginV2(c echo.Context) error {
 		},
 	}
 
-	users, err := a.graphQLServer.SystemDriver.SearchUsers(ctx, param)
+	users, err := a.graphQLServer.SystemDriver.SearchSystemUsers(ctx, param)
 	if err != nil {
 		return c.JSON(http.StatusForbidden, &models.HttpResponse{
 			Message: err.Error(),
@@ -711,7 +713,7 @@ func (a *AuthController) RegisterV2(c echo.Context) error {
 		},
 	}
 
-	users, err := a.graphQLServer.SystemDriver.SearchUsers(ctx, param)
+	users, err := a.graphQLServer.SystemDriver.SearchSystemUsers(ctx, param)
 	if err != nil {
 		return c.JSON(http.StatusForbidden, &models.HttpResponse{
 			Message: err.Error(),

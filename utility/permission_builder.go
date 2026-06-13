@@ -98,3 +98,33 @@ func ValidateScope(p interface{}) (*string, bool) {
 		return nil, false
 	}
 }
+
+// CloneRole deep-copies a role for duplication. Copied roles are never admin or system-generated.
+func CloneRole(src *models.Role) *models.Role {
+	if src == nil {
+		return &models.Role{}
+	}
+	dst := &models.Role{
+		SystemGenerated: false,
+		IsAdmin:         false,
+		IsProjectUser:   src.IsProjectUser,
+		ReadOnlyProject: src.ReadOnlyProject,
+	}
+	if len(src.LogicExecutions) > 0 {
+		dst.LogicExecutions = append([]string(nil), src.LogicExecutions...)
+	}
+	if len(src.AdministrativePermissions) > 0 {
+		dst.AdministrativePermissions = append([]string(nil), src.AdministrativePermissions...)
+	}
+	if src.APIPermissions != nil {
+		dst.APIPermissions = make(map[string]*models.APIPermission, len(src.APIPermissions))
+		for k, v := range src.APIPermissions {
+			if v == nil {
+				continue
+			}
+			cp := *v
+			dst.APIPermissions[k] = &cp
+		}
+	}
+	return dst
+}

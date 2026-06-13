@@ -2,8 +2,8 @@ package models
 
 type ProjectSchema struct {
 	ProjectID string           `bun:"type:uuid,pk" json:"project_id,omitempty" firestore:"project_id,omitempty" bson:"_id,omitempty"`
-	Models    []*ModelType     `bun:"rel:has-many" json:"models,omitempty" firestore:"models,omitempty" bson:"models,omitempty"`
-	Functions []*ApitoFunction `bun:"rel:has-many" json:"functions,omitempty" firestore:"functions,omitempty" bson:"functions,omitempty"`
+	Models    []*ModelType     `bun:"rel:has-many,join:project_id=project_id" json:"models,omitempty" firestore:"models,omitempty" bson:"models,omitempty"`
+	Functions []*ApitoFunction `bun:"rel:has-many,join:project_id=project_id" json:"functions,omitempty" firestore:"functions,omitempty" bson:"functions,omitempty"`
 	// NamingSchemaVersion 0 = legacy; 1 = canonical snake_case model ids (see utility.NamingSchemaVersionV2).
 	NamingSchemaVersion int `json:"naming_schema_version,omitempty" firestore:"naming_schema_version,omitempty" bson:"naming_schema_version,omitempty"`
 }
@@ -80,4 +80,35 @@ type ConnectionType struct {
 	Relation string `json:"relation,omitempty" firestore:"relation,omitempty" bson:"relation,omitempty"`
 	Type     string `json:"type,omitempty" firestore:"type,omitempty" bson:"type,omitempty"`
 	KnownAs  string `json:"known_as,omitempty" firestore:"known_as,omitempty" bson:"known_as,omitempty"`
+}
+
+// DedupeProjectSchemaFields removes duplicate root-level fields per model (last wins).
+func DedupeProjectSchemaFields(schema *ProjectSchema) {
+	if schema == nil {
+		return
+	}
+	for _, m := range schema.Models {
+		if m == nil {
+			continue
+		}
+		m.Fields = DedupeFieldsByIdentifier(m.Fields)
+	}
+}
+
+// DedupeFieldsByIdentifier keeps one FieldInfo per identifier (last occurrence wins).
+func DedupeFieldsByIdentifier(fields []*FieldInfo) []*FieldInfo {
+	seen := make(map[string]int)
+	out := make([]*FieldInfo, 0, len(fields))
+	for _, f := range fields {
+		if f == nil || f.Identifier == "" {
+			continue
+		}
+		if idx, ok := seen[f.Identifier]; ok {
+			out[idx] = f
+			continue
+		}
+		seen[f.Identifier] = len(out)
+		out = append(out, f)
+	}
+	return out
 }

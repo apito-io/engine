@@ -2,15 +2,24 @@ package resolver
 
 import (
 	"encoding/json"
+	"fmt"
 
-	"github.com/ThreeDotsLabs/watermill/message"
 	"github.com/apito-io/engine/models"
 	"github.com/labstack/echo/v4"
 	"github.com/tailor-platform/graphql"
 )
 
-func (s *GraphQLServer) SendEvent(p graphql.ResolveParams) (interface{}, error) {
+// RealtimeSystemUserNotifyTopic is the per-user subject for operator notifications.
+func RealtimeSystemUserNotifyTopic(userID string) string {
+	return fmt.Sprintf("system.user.%s.notify", userID)
+}
 
+// RealtimeSystemProjectEventTopic is the project-scoped subject for fan-out events.
+func RealtimeSystemProjectEventTopic(projectID, eventType string) string {
+	return fmt.Sprintf("system.project.%s.%s", projectID, eventType)
+}
+
+func (s *GraphQLServer) SendEvent(p graphql.ResolveParams) (interface{}, error) {
 	var (
 		v      = p.Context.Value
 		router = v("router").(echo.Context)
@@ -30,27 +39,22 @@ func (s *GraphQLServer) SendEvent(p graphql.ResolveParams) (interface{}, error) 
 		ProjectID: param.ProjectID,
 		UserID:    param.UserID,
 		Message:   messageText,
-		Type:      "info",
+		Type:      models.SystemEventInfo,
 	}
 
-	payload, err := json.Marshal(data)
-	if err != nil {
-		return nil, err
-	}
-
-	// Create Watermill message
-	msg := message.NewMessage(param.UserID, payload)
-	err = s.PubSubService.Publish("system_notify_channel", msg)
-	if err != nil {
+	if err := s.PublishSystemMessage(p.Context, param.UserID, data); err != nil {
 		return nil, err
 	}
 
 	return map[string]interface{}{
-		"message": "msg published to queue",
+		"message": "event published to realtime bus",
 	}, nil
 }
 
 func (s *GraphQLServer) EventSubscription(p graphql.ResolveParams) (interface{}, error) {
+	if s.RealtimeBus == nil {
+		return nil, fmt.Errorf("realtime bus is not configured")
+	}
 
 	var (
 		v      = p.Context.Value
@@ -62,12 +66,63 @@ func (s *GraphQLServer) EventSubscription(p graphql.ResolveParams) (interface{},
 		return nil, err
 	}
 
-	userID := param.UserID
+	typeFilter, _ := p.Args["type"].(string)
 
-	subs, err := s.GraphQLSubscription.subscribe(p.Context, userID)
+	topic := s.realtimeTopic(p.Context, RealtimeSystemUserNotifyTopic(param.UserID))
+	msgs, err := s.RealtimeBus.Subscribe(p.Context, topic)
 	if err != nil {
 		return nil, err
 	}
 
-	return subs.Data, nil
+	consoleTopic := s.realtimeTopic(p.Context, RealtimeSystemConsoleNotifyTopic)
+	consoleMsgs, err := s.RealtimeBus.Subscribe(p.Context, consoleTopic)
+	if err != nil {
+		return nil, err
+	}
+
+	out := make(chan interface{}, 16)
+	go func() {
+		defer close(out)
+		forward := func(raw []byte) {
+			var evt models.SubscriptionEvent
+			if err := json.Unmarshal(raw, &evt); err != nil {
+				return
+			}
+			if typeFilter != "" && evt.Type != typeFilter {
+				return
+			}
+			payload := map[string]interface{}{
+				"message":    evt.Message,
+				"type":       evt.Type,
+				"project_id": evt.ProjectID,
+			}
+			select {
+			case out <- payload:
+			case <-p.Context.Done():
+			}
+		}
+		for {
+			select {
+			case <-p.Context.Done():
+				return
+			case raw, ok := <-msgs:
+				if !ok {
+					msgs = nil
+				} else {
+					forward(raw)
+				}
+			case raw, ok := <-consoleMsgs:
+				if !ok {
+					consoleMsgs = nil
+				} else {
+					forward(raw)
+				}
+			}
+			if msgs == nil && consoleMsgs == nil {
+				return
+			}
+		}
+	}()
+
+	return out, nil
 }

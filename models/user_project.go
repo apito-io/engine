@@ -129,6 +129,9 @@ type Project struct {
 	SyncedProperty *SyncProject `bun:"rel:belongs-to,join:id=project_id" json:"synced_property,omitempty" firestore:"synced_property,omitempty" bson:"synced_property,omitempty"`
 
 	ProjectSecretKey string `json:"project_secret_key,omitempty" firestore:"project_secret_key,omitempty" bson:"project_secret_key,omitempty"`
+
+	AuthenticationSettings *AuthenticationSettings `json:"authentication_settings,omitempty" firestore:"authentication_settings,omitempty" bson:"authentication_settings,omitempty"`
+	StorageSettings        *StorageSettings        `json:"storage_settings,omitempty" firestore:"storage_settings,omitempty" bson:"storage_settings,omitempty"`
 }
 
 

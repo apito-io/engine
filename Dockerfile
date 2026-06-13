@@ -64,6 +64,9 @@ COPY --chown=apito:apito keys ./keys/
 # Make binary executable
 RUN chmod +x ./engine
 
+COPY docker-entrypoint.sh ./docker-entrypoint.sh
+RUN chmod +x ./docker-entrypoint.sh
+
 # Switch to non-root user
 USER apito
 
@@ -78,4 +81,7 @@ EXPOSE 5050
 HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
     CMD ["/bin/sh", "-c", "ps | grep -v grep | grep engine || exit 1"]
 
-ENTRYPOINT ["./engine"]
+# Restart loop recovers from tursogo SIGABRT and other fatal exits.
+# On VPS also use: docker run --restart=unless-stopped ...
+ENTRYPOINT ["./docker-entrypoint.sh"]
+CMD []

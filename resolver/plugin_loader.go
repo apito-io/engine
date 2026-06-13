@@ -508,6 +508,8 @@ func (s *GraphQLServer) LoadHashiCorpPlugin(ctx context.Context, _dir string, _p
 	}
 	s.Unlock()
 
+	s.EmitPluginStatusChanged(ctx, pluginID, "loaded", "")
+
 	return _pluginDetails, nil
 }
 

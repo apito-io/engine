@@ -258,6 +258,10 @@ func (m *ProjectKeyManager) ValidateAndSetContext(c echo.Context, token string) 
 		return nil, errors.New("invalid token, without role")
 	}
 
+	if tokenObj.IsProjectUser || tokenObj.TokenType == "user" || tokenObj.TokenType == "tenant" {
+		c.Set("is_project_user", true)
+	}
+
 	return tokenObj, nil
 }
 

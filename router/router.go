@@ -18,7 +18,6 @@ import (
 	"github.com/jboursiquot/go-proverbs"
 	"github.com/labstack/echo-contrib/pprof"
 	"github.com/labstack/echo/v4"
-	echoMiddleware "github.com/labstack/echo/v4/middleware"
 )
 
 // InitRouter #todo manage better connection in redis and gRPC
@@ -29,7 +28,10 @@ func InitRouter(cfg *models.Config) (*echo.Echo, error) {
 	fmt.Println("initializing apito engine router")
 	router := echo.New()
 	pprof.Register(router)
-	router.Use(echoMiddleware.Recover())
+
+	// Populated after GraphQLServer + ConnectionManager init (see below).
+	var connectionManagerRef *database.ConnectionManager
+	router.Use(im.RecoverWithConnectionEvict(&connectionManagerRef))
 
 	//router.Use(middleware.Logger())
 	/*router.Use(middleware.LoggerWithConfig(middleware.LoggerConfig{
@@ -126,6 +128,7 @@ func InitRouter(cfg *models.Config) (*echo.Echo, error) {
 	concreteServer := server.GetConcreteServer().(*resolver.GraphQLServer)
 	connectionManager := concreteServer.GetConnectionManager()
 	if connectionManager != nil {
+		connectionManagerRef = connectionManager
 		telemetry.RegisterConnectionManagerObservers(cfg, connectionManager)
 		connectionMonitor := database.NewConnectionMonitor(connectionManager)
 		go func() {
@@ -284,9 +287,17 @@ func InitRouter(cfg *models.Config) (*echo.Echo, error) {
 	}
 
 	// PUBLIC ENDPOINTS
+	filesCtrl := controller.NewFilesController(cfg, server.GetConcreteServer().(*resolver.GraphQLServer))
 	publicProtectedEndpoint := router.Group("/secured")
 	publicProtectedEndpoint.Use(server.Authorize())
 	{
+		fileRoutes := publicProtectedEndpoint.Group("/files")
+		{
+			fileRoutes.POST("/upload", filesCtrl.Upload)
+			fileRoutes.GET("/list", filesCtrl.List)
+			fileRoutes.POST("/delete", filesCtrl.Delete)
+		}
+
 		// rest api
 		publicProtectedEndpoint.GET("/rest/:pid/:model/:id/:relation", graphCtrl.RestToGraphQL)
 		publicProtectedEndpoint.GET("/rest/:pid/:model/:id", graphCtrl.RestToGraphQL)
@@ -297,6 +308,8 @@ func InitRouter(cfg *models.Config) (*echo.Echo, error) {
 
 		// graphql
 		publicProtectedEndpoint.POST("/graphql", graphCtrl.PublicGraphQL)
+		// realtime graphql subscriptions (auto-generated <model>Changed + broadcast)
+		publicProtectedEndpoint.Any("/graphql/subscription", graphCtrl.PublicSubscriptionWrapHandler)
 	}
 
 	/*subsEndpoint := router.Group("/sub")

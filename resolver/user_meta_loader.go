@@ -64,7 +64,7 @@ func (s *GraphQLServer) SystemUserMetaLoader(ctx context.Context, keys dataloade
 				},
 			},
 		}
-		_resp, err := s.SystemDriver.SearchUsers(context.Background(), param)
+		_resp, err := s.SystemDriver.SearchSystemUsers(context.Background(), param)
 		if err != nil {
 			return handleError(err)
 		}

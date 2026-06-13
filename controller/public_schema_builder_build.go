@@ -209,7 +209,7 @@ func (st *publicSchemaBuildState) loadOrBuildPreConnectionMaps() error {
 						whereSortKey = utility.CanonicalSystemRelationFieldIdentifier(f.Identifier)
 					}
 					queryBuilderInformation.WhereParamObjects[whereSortKey] = &graphql.InputObjectFieldConfig{
-						Type: objects.BuildWhereConditionArgument(definedModel.Name+"_"+f.Identifier, f),
+						Type: objects.BuildWhereConditionArgument(definedModel.Name, f.Identifier, f),
 					}
 
 					if f.FieldType == "boolean" || f.FieldType == "list" {
@@ -401,10 +401,16 @@ func (st *publicSchemaBuildState) attachConnectionFields() {
 			relKey := st.resolveRelatedModelStoredKey(connection.Model)
 			relFields := st.commonFields[relKey]
 
-			// Match parent-model guard (see loop above): admins must see connection fields even when the
-			// related model has no explicit permissions[connection.Model] entry (common for staff roles).
-			if permission, ok := permissions[connection.Model]; (ok && permission != nil) || st.schemaRole.IsAdmin {
-				if ok && permission != nil && permission.Read == "none" {
+			// Admins see all connection fields. Staff roles may grant known_as keys (chef) while
+			// connection.Model is the base model (employee). When parent has read access, expose
+			// known_as relation fields so queries on the parent type can traverse those edges.
+			permission, ok := resolveConnectionPermission(permissions, connection, st.schemaRole)
+			parentCanRead := modelReadAllowed(permissions, definedModel.Name, st.schemaRole)
+			knownAsParentTraverse := connection.KnownAs != "" && parentCanRead
+			allowConn := st.schemaRole.IsAdmin || knownAsParentTraverse || (ok && permission != nil)
+			skipReadNone := ok && permission != nil && permission.Read == "none" && !st.schemaRole.IsAdmin && !knownAsParentTraverse
+			if allowConn {
+				if skipReadNone {
 					continue
 				}
 				if len(relFields) == 0 {
@@ -494,6 +500,7 @@ func (st *publicSchemaBuildState) attachConnectionFields() {
 							"connection":    connRef,
 							"selectionSet":  selectionSet,
 							"knownAs":       knownAs,
+							"parentModel":   definedModel.Name,
 						})
 						tx, closeContext := onecontext.Merge(p.Context, typeRelation)
 						defer closeContext()
@@ -580,6 +587,7 @@ func (st *publicSchemaBuildState) attachConnectionFields() {
 								"connection":    connection,
 								"selectionSet":  selectionSet,
 								"knownAs":       knownAs,
+								"parentModel":   definedModel.Name,
 							})
 							tx, closeContext := onecontext.Merge(p.Context, typeRelation)
 							defer closeContext()
@@ -944,6 +952,17 @@ func (st *publicSchemaBuildState) mergeFunctionAndPluginFields() (*models.Applic
 		for k, v := range cache.RawSchemas.Mutations {
 			mutationTypes[k] = v
 		}
+	}
+
+	for name, field := range g.gqlServer.PublicAuthQueryFields() {
+		if field == nil {
+			continue
+		}
+		if _, exists := queryTypes[name]; exists {
+			log.Printf("[apito] public schema: duplicate auth query name %q ignored", name)
+			continue
+		}
+		queryTypes[name] = field
 	}
 
 	if len(queryTypes) == 0 {

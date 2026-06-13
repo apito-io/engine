@@ -9,29 +9,27 @@ import (
 	"github.com/apito-io/engine/models"
 )
 
-func IsValidIdentifier(identifier string) (*models.ValidIdentifier, error) {
-	label := strings.TrimSpace(identifier)
+// IsValidIdentifier normalizes a field label or raw identifier into display label + canonical snake_case id.
+// Word boundaries follow the same rules as CanonicalizeModelName (camelCase, spaces, underscores, hyphens).
+func IsValidIdentifier(raw string) (*models.ValidIdentifier, error) {
+	label := strings.TrimSpace(raw)
+	if label == "" {
+		return nil, errors.New("field name is required")
+	}
 
-	// First, convert to lowercase
-	identifier = strings.ToLower(label)
+	work := regexp.MustCompile(`\(([^)]+)\)`).ReplaceAllString(label, " $1 ")
+	segments, err := splitIntoWordSegments(work)
+	if err != nil {
+		return nil, err
+	}
+	if len(segments) == 0 {
+		return nil, errors.New("invalid field name")
+	}
 
-	// Extract content from parentheses and replace parentheses with underscores
-	// This will convert "Weight (KG)" to "weight_kg"
-	identifier = regexp.MustCompile(`\(([^)]+)\)`).ReplaceAllString(identifier, "_$1")
-
-	// Replace spaces, hyphens, dots, and other common separators with single underscore
-	identifier = regexp.MustCompile(`[\s\-\._]+`).ReplaceAllString(identifier, "_")
-
-	// Remove any remaining non-alphanumeric characters except underscores
-	identifier = regexp.MustCompile(`[^a-z0-9_]`).ReplaceAllString(identifier, "")
-
-	// Clean up multiple consecutive underscores
+	identifier := strings.Join(segments, "_")
 	identifier = regexp.MustCompile(`_+`).ReplaceAllString(identifier, "_")
-
-	// Remove leading and trailing underscores
 	identifier = strings.Trim(identifier, "_")
 
-	// check for valid field name. Restrict a few
 	if strings.HasPrefix(identifier, "_") {
 		return nil, errors.New("field can not begin with _")
 	}
@@ -43,12 +41,11 @@ func IsValidIdentifier(identifier string) (*models.ValidIdentifier, error) {
 		return nil, errors.New("field Name Starts with SYS/Sys is protected. Please Use alternative names")
 	}
 
-	//check if model name starts with number
 	var re = regexp.MustCompile(`^\d`)
-	matchFound := re.FindAllString(identifier, -1)
-	if len(matchFound) > 0 {
+	if len(re.FindAllString(identifier, -1)) > 0 {
 		return nil, errors.New("field name can not start with a number! use character instead")
 	}
+
 	return &models.ValidIdentifier{
 		Label:      label,
 		Identifier: identifier,

@@ -6,13 +6,15 @@ import (
 	"github.com/apito-io/engine/models"
 )
 
-// publicProjectDBContext returns the context used for GetProjectDriver and project DB operations
-// on the public GraphQL surface. Pro SaaS hooks (PostApplicationCacheHook) attach per-tenant routing
-// keys to cache.Ctx; the GraphQL resolve context (p.Context) may not carry those values, which would
-// otherwise route to the shared project database instead of the tenant LibSQL URL.
-func publicProjectDBContext(cache *models.ApplicationCache, requestCtx context.Context) context.Context {
+// PublicProjectDBContext returns the context used for GetProjectDriver on project DB operations.
+// Pro SaaS hooks attach tenant routing keys to cache.Ctx; prefer that over the raw request context.
+func PublicProjectDBContext(cache *models.ApplicationCache, requestCtx context.Context) context.Context {
 	if cache != nil && cache.Ctx != nil {
 		return cache.Ctx
 	}
 	return requestCtx
+}
+
+func publicProjectDBContext(cache *models.ApplicationCache, requestCtx context.Context) context.Context {
+	return PublicProjectDBContext(cache, requestCtx)
 }

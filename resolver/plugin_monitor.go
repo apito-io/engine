@@ -225,6 +225,7 @@ func (pm *PluginMonitor) markPluginHealthy(pluginID string) {
 		status.Status = "Healthy"
 
 		fmt.Printf("✅ [PLUGIN-MONITOR] Plugin health check passed: %s\n", pluginID)
+		pm.server.EmitPluginStatusChanged(context.Background(), pluginID, "healthy", "")
 	}
 }
 
@@ -241,6 +242,7 @@ func (pm *PluginMonitor) markPluginUnhealthy(pluginID, reason string) {
 
 		fmt.Printf("❌ [PLUGIN-MONITOR] Plugin health check failed - ID: %s, Reason: %s, Consecutive Failures: %d\n",
 			pluginID, reason, status.ConsecutiveFailures)
+		pm.server.EmitPluginStatusChanged(context.Background(), pluginID, "unhealthy", reason)
 	}
 }
 
@@ -269,6 +271,7 @@ func (pm *PluginMonitor) handlePluginRestart(ctx context.Context, pluginID strin
 			pluginID, status.RestartAttempts)
 		status.Status = "Permanently Failed"
 		pm.healthMutex.Unlock()
+		pm.server.EmitPluginStatusChanged(context.Background(), pluginID, "permanently_failed", "max restart attempts exceeded")
 		return
 	}
 
@@ -309,6 +312,7 @@ func (pm *PluginMonitor) handlePluginRestart(ctx context.Context, pluginID strin
 			status.Status = "Restarted"
 		}
 		pm.healthMutex.Unlock()
+		pm.server.EmitPluginStatusChanged(context.Background(), pluginID, "restarted", "")
 	}
 }
 

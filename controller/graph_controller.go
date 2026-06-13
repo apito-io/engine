@@ -50,8 +50,26 @@ func GetGraphQLController(cfg *models.Config, commonFn *resolver.GraphQLServer) 
 	}
 
 	// subscriptions / websocket handler
-	subHandler, err := wsgraphql.NewServer(
-		*gqlSchema,
+	subHandler, err := newSubscriptionWSServer(*gqlSchema)
+	if err != nil {
+		fmt.Println(err.Error())
+	}
+
+	return &GraphCtrl{
+		cfg:                cfg,
+		subscriptionSchema: gqlSchema,
+		gqlServer:          commonFn,
+		srv:                subHandler,
+	}
+}
+
+// newSubscriptionWSServer builds a wsgraphql websocket server for a given schema
+// using the standard apollo graphql-ws / graphql-transport-ws configuration.
+// It is reused for both the system subscription schema (built once at boot) and
+// per-connection public subscription schemas.
+func newSubscriptionWSServer(schema graphql.Schema) (wsgraphql.Server, error) {
+	return wsgraphql.NewServer(
+		schema,
 		wsgraphql.WithKeepalive(time.Second*30),
 		wsgraphql.WithConnectTimeout(time.Second*30),
 		wsgraphql.WithUpgrader(gorillaws.Wrap(&websocket.Upgrader{
@@ -66,16 +84,6 @@ func GetGraphQLController(cfg *models.Config, commonFn *resolver.GraphQLServer) 
 			},
 		})),
 	)
-	if err != nil {
-		fmt.Println(err.Error())
-	}
-
-	return &GraphCtrl{
-		cfg:                cfg,
-		subscriptionSchema: gqlSchema,
-		gqlServer:          commonFn,
-		srv:                subHandler,
-	}
 }
 
 func (g *GraphCtrl) PluginUpload(router echo.Context) error {
@@ -583,6 +591,15 @@ func (g *GraphCtrl) exePublicGraphql(i echo.Context, req *models.GraphQLIncoming
 		cache.Dataloaders = _cache.Dataloaders
 	}
 
+	// Inject the generic realtime publish mutation (broadcast layer) so apps can
+	// send messages on a channel that broadcast subscribers receive.
+	if cache.RawSchemas != nil {
+		if cache.RawSchemas.Mutations == nil {
+			cache.RawSchemas.Mutations = graphql.Fields{}
+		}
+		cache.RawSchemas.Mutations["publish"] = g.publishMutationField()
+	}
+
 	schemaConfig := graphql.SchemaConfig{}
 	if len(cache.RawSchemas.Queries) > 0 {
 		schemaConfig.Query = graphql.NewObject(graphql.ObjectConfig{
@@ -757,6 +774,82 @@ func (g *GraphCtrl) SubscriptionWrapHandler(c echo.Context) error {
 
 	g.srv.ServeHTTP(resp, req)
 
+	return nil
+}
+
+// publishMutationField builds the generic `publish(channel, event, payload)`
+// mutation that broadcasts a message to all `broadcast(channel)` subscribers.
+func (g *GraphCtrl) publishMutationField() *graphql.Field {
+	resultObj := graphql.NewObject(graphql.ObjectConfig{
+		Name: "BroadcastPublishResult",
+		Fields: graphql.Fields{
+			"success": &graphql.Field{Type: graphql.Boolean},
+			"channel": &graphql.Field{Type: graphql.String},
+		},
+	})
+	return &graphql.Field{
+		Type: resultObj,
+		Args: graphql.FieldConfigArgument{
+			"channel": &graphql.ArgumentConfig{Type: graphql.NewNonNull(graphql.String)},
+			"event":   &graphql.ArgumentConfig{Type: graphql.String},
+			"payload": &graphql.ArgumentConfig{Type: scaler.ScalarJSON},
+		},
+		Resolve: func(p graphql.ResolveParams) (interface{}, error) {
+			channel, _ := p.Args["channel"].(string)
+			event, _ := p.Args["event"].(string)
+			payload := p.Args["payload"]
+			cache, ok := utility.LegacyApplicationCache(p.Context)
+			if !ok || cache == nil || cache.Param == nil {
+				return nil, errors.New("application cache missing")
+			}
+			if err := g.gqlServer.PublishBroadcast(p.Context, cache.Param.ProjectID, channel, event, payload); err != nil {
+				return nil, err
+			}
+			return map[string]interface{}{"success": true, "channel": channel}, nil
+		},
+	}
+}
+
+// PublicSubscriptionWrapHandler serves per-project public GraphQL subscriptions
+// over websockets. The subscription schema (auto-generated <model>Changed fields
+// + broadcast) is built per connection from the authenticated project/role, then
+// served via a per-connection wsgraphql server.
+func (g *GraphCtrl) PublicSubscriptionWrapHandler(c echo.Context) error {
+	cache, err := g.gqlServer.GetApplicationCache(c)
+	if err != nil {
+		return c.JSON(http.StatusBadRequest, &models.HttpResponse{
+			Message: err.Error(),
+			Code:    http.StatusBadRequest,
+		})
+	}
+
+	schema, err := schemas.PublicSubscriptionSchema(g.gqlServer, cache)
+	if err != nil {
+		return c.JSON(http.StatusBadRequest, &models.HttpResponse{
+			Message: err.Error(),
+			Code:    http.StatusBadRequest,
+		})
+	}
+
+	srv, err := newSubscriptionWSServer(*schema)
+	if err != nil {
+		return c.JSON(http.StatusInternalServerError, &models.HttpResponse{
+			Message: err.Error(),
+			Code:    http.StatusInternalServerError,
+		})
+	}
+
+	// Prefer cache.Ctx (enriched with tenant/routing keys by the pro layer) so
+	// the realtime topic hook resolves the same scoped topic as the emit side.
+	base := cache.Ctx
+	if base == nil {
+		base = c.Request().Context()
+	}
+	ctx := context.WithValue(base, "router", c)
+	resp := c.Response()
+	req := c.Request().WithContext(ctx)
+
+	srv.ServeHTTP(resp, req)
 	return nil
 }
 

@@ -6,6 +6,7 @@ import (
 
 	"github.com/apito-io/engine/models"
 	"github.com/apito-io/engine/schemas/enums"
+	"github.com/apito-io/engine/utility"
 	"github.com/tailor-platform/graphql"
 )
 
@@ -164,13 +165,13 @@ func BuildWhereRelationConditionArgument(name string, connections []*models.Conn
 	})
 }
 
-func BuildWhereConditionArgument(name string, fieldInfo *models.FieldInfo) *graphql.InputObject {
+func BuildWhereConditionArgument(modelName, fieldPath string, fieldInfo *models.FieldInfo) *graphql.InputObject {
 
 	fields := graphql.InputObjectConfigFieldMap{}
 
 	if fieldInfo == nil {
 		return graphql.NewInputObject(graphql.InputObjectConfig{
-			Name:   strings.ToUpper(name + "_Common_Filter_Condition"),
+			Name:   utility.WhereFilterConditionGraphQLTypeName(modelName, fieldPath),
 			Fields: fields,
 		})
 	}
@@ -313,7 +314,7 @@ func BuildWhereConditionArgument(name string, fieldInfo *models.FieldInfo) *grap
 			}*/
 		fields["geo_within"] = &graphql.InputObjectFieldConfig{
 			Type: graphql.NewInputObject(graphql.InputObjectConfig{
-				Name: strings.ToUpper(name + "_Geo_Within_Input"),
+				Name: strings.ToUpper(modelName + "__FIELD__" + fieldPath + "__GEO_WITHIN_INPUT"),
 				Fields: graphql.InputObjectConfigFieldMap{
 					"lat": &graphql.InputObjectFieldConfig{
 						Type: graphql.Float,
@@ -331,7 +332,7 @@ func BuildWhereConditionArgument(name string, fieldInfo *models.FieldInfo) *grap
 	case "repeated":
 		for _, sf := range fieldInfo.SubFieldInfo {
 			fields[sf.Identifier] = &graphql.InputObjectFieldConfig{
-				Type: BuildWhereConditionArgument(name+"_"+fieldInfo.Identifier+"_"+sf.Identifier+"_repeated", &models.FieldInfo{
+				Type: BuildWhereConditionArgument(modelName, fieldPath+"__"+sf.Identifier+"__repeated", &models.FieldInfo{
 					Identifier:      sf.Identifier,
 					Description:     sf.Description,
 					InputType:       sf.InputType,
@@ -347,7 +348,7 @@ func BuildWhereConditionArgument(name string, fieldInfo *models.FieldInfo) *grap
 	case "object":
 		for _, sf := range fieldInfo.SubFieldInfo {
 			fields[sf.Identifier] = &graphql.InputObjectFieldConfig{
-				Type: BuildWhereConditionArgument(name+"_"+fieldInfo.Identifier+"_"+sf.Identifier+"_object", &models.FieldInfo{
+				Type: BuildWhereConditionArgument(modelName, fieldPath+"__"+sf.Identifier+"__object", &models.FieldInfo{
 					Identifier:      sf.Identifier,
 					Description:     sf.Description,
 					InputType:       sf.InputType,
@@ -367,7 +368,7 @@ func BuildWhereConditionArgument(name string, fieldInfo *models.FieldInfo) *grap
 	}
 
 	return graphql.NewInputObject(graphql.InputObjectConfig{
-		Name:   strings.ToUpper(name + "_Common_Filter_Condition"),
+		Name:   utility.WhereFilterConditionGraphQLTypeName(modelName, fieldPath),
 		Fields: fields,
 	})
 }

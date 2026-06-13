@@ -2,8 +2,48 @@ package controller
 
 import (
 	"github.com/apito-io/engine/models"
+	"github.com/apito-io/engine/utility"
 	"github.com/tailor-platform/graphql"
 )
+
+// resolveConnectionPermission looks up API permission for a relation target.
+// Roles often grant permissions on known_as keys (e.g. "chef") while connection.Model is the base model ("employee").
+func resolveConnectionPermission(permissions map[string]*models.APIPermission, conn *models.ConnectionType, role *models.Role) (*models.APIPermission, bool) {
+	if conn == nil {
+		return nil, false
+	}
+	keys := []string{conn.Model}
+	if conn.KnownAs != "" {
+		keys = append([]string{conn.KnownAs}, keys...)
+	}
+	for _, k := range keys {
+		if ap, ok := permissions[k]; ok && ap != nil {
+			return ap, true
+		}
+		if role != nil {
+			if ap, ok := utility.LookupAPIPermission(role, k); ok && ap != nil {
+				return ap, true
+			}
+		}
+	}
+	return nil, false
+}
+
+// modelReadAllowed reports whether the role may read documents of modelName.
+func modelReadAllowed(permissions map[string]*models.APIPermission, modelName string, role *models.Role) bool {
+	if role != nil && role.IsAdmin {
+		return true
+	}
+	if ap, ok := permissions[modelName]; ok && ap != nil {
+		return ap.Read != "none"
+	}
+	if role != nil {
+		if ap, ok := utility.LookupAPIPermission(role, modelName); ok && ap != nil {
+			return ap.Read != "none"
+		}
+	}
+	return false
+}
 
 // connectionModelDisplayName returns KnownAs when set, otherwise the related model name.
 func connectionModelDisplayName(conn *models.ConnectionType) string {

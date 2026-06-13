@@ -45,6 +45,22 @@ type ApitoSystemDB interface {
 	FindUserProjectsWithRoles(ctx context.Context, userId string) ([]*models.ProjectWithRoles, error)
 	// DeleteProjectFromSystem deletes a project from the system
 	DeleteProjectFromSystem(ctx context.Context, projectId string) error
+	// SaveProjectAuthenticationSettings persists authentication_settings on the project row/document.
+	SaveProjectAuthenticationSettings(ctx context.Context, projectID string, auth *models.AuthenticationSettings) error
+	// SaveProjectStorageSettings persists storage_settings on the project row/document.
+	SaveProjectStorageSettings(ctx context.Context, projectID string, storage *models.StorageSettings) error
+
+	// Project application end-users (table: project_users). Not SystemUser (console operators).
+	CreateUser(ctx context.Context, user *models.User) (*models.User, error)
+	GetUser(ctx context.Context, projectID, userID string) (*models.User, error)
+	UpdateUser(ctx context.Context, user *models.User) error
+	DeleteUser(ctx context.Context, projectID, userID string) error
+	SearchProjectUsers(ctx context.Context, projectID string, limit, offset int) ([]*models.User, int, error)
+	CountProjectUsersByRole(ctx context.Context, projectID string) (map[string]int, error)
+	GetUserByUsername(ctx context.Context, projectID, username string) (*models.User, error)
+	ListUsersByEmail(ctx context.Context, projectID, email string) ([]*models.User, error)
+	ListUsersByPhone(ctx context.Context, projectID, phone string) ([]*models.User, error)
+	ListUsersByGoogleSub(ctx context.Context, projectID, googleSub string) ([]*models.User, error)
 
 	// AddATeamMemberToProject adds a team member to a project
 	AddATeamMemberToProject(ctx context.Context, req *models.TeamMemberAddRequest) error
@@ -65,8 +81,8 @@ type ApitoSystemDB interface {
 	CreateSystemUser(ctx context.Context, user *models.SystemUser) (*models.SystemUser, error)
 	// UpdateSystemUser updates a system user's profile
 	UpdateSystemUser(ctx context.Context, user *models.SystemUser, replace bool) error
-	// SearchUsers searches for system users based on a filter
-	SearchUsers(ctx context.Context, param *models.CommonSystemParams) (*models.SearchResponse[models.SystemUser], error)
+	// SearchSystemUsers searches for system users based on a filter
+	SearchSystemUsers(ctx context.Context, param *models.CommonSystemParams) (*models.SearchResponse[models.SystemUser], error)
 	// CheckProjectWithRoles checks if a user belongs to a project
 	CheckProjectWithRoles(ctx context.Context, userId, projectId string) (*models.ProjectWithRoles, error)
 	// AddSystemUserMetaInfo adds metadata to a system user

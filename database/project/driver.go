@@ -5,10 +5,9 @@ import (
 	"log"
 
 	_const "github.com/apito-io/engine/const"
-	//"github.com/apito-io/engine/database/project/driver/mongo"
-	"github.com/apito-io/engine/database/project/driver/bbolt"
-	"github.com/apito-io/engine/database/project/driver/mongo"
-	"github.com/apito-io/engine/database/project/driver/sql"
+	//"github.com/apito-io/engine/database/project/mongo"
+	"github.com/apito-io/engine/database/project/bbolt"
+	"github.com/apito-io/engine/database/project/mongo"
 	"github.com/apito-io/engine/interfaces"
 	"github.com/apito-io/engine/models"
 	"github.com/apito-io/engine/telemetry"
@@ -42,11 +41,8 @@ func GetProjectDriverWithConfig(conf *models.Config, engineConfig *models.Driver
 	switch engineConfig.Engine {
 	case _const.CoreDB, "coreDB":
 		db, err = bbolt.GetBBoltDriver(conf, engineConfig)
-	case //_const.PostgreSQLDriver,
-		//_const.MySQLDriver,
-		//_const.MariaDBDriver,
-		_const.SQLiteDriver:
-		db, err = sql.GetSQLDriver(conf, engineConfig)
+	case _const.SQLiteDriver, _const.PostgreSQLDriver, _const.MySQLDriver, _const.MariaDBDriver:
+		db, err = GetProjectSQLDriver(conf, engineConfig)
 	case _const.MongoDBDriver:
 		db, err = mongo.GetProjectMongoDriver(conf, engineConfig)
 	default:

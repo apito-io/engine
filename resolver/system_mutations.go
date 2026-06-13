@@ -4,19 +4,19 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"log"
 	"regexp"
 	"strings"
 	"time"
 
 	_const "github.com/apito-io/engine/const"
-	"github.com/apito-io/engine/database/project/driver/sql"
+	projdriver "github.com/apito-io/engine/database/project"
 	ae "github.com/apito-io/engine/err"
 	"github.com/apito-io/engine/interfaces"
 	"github.com/apito-io/engine/models"
 	"github.com/apito-io/engine/schemas/enums"
 	"github.com/apito-io/engine/services"
 	pluginService "github.com/apito-io/engine/services/plugin"
+	schemasvc "github.com/apito-io/engine/services/schema"
 	"github.com/apito-io/engine/utility"
 	"github.com/apito-io/types"
 	"github.com/apito-io/types/protobuff"
@@ -524,7 +524,7 @@ func (s *GraphQLServer) UpdateProjectResolverFn(p graphql.ResolveParams) (interf
 		var err error
 		switch driver["engine"] {
 		case _const.PostgreSQLDriver, _const.MySQLDriver, _const.MariaDBDriver:
-			db, err = sql.GetSQLDriver(s.Cfg, &models.DriverCredentials{
+			db, err = projdriver.GetProjectSQLDriver(s.Cfg, &models.DriverCredentials{
 				Host:     host,
 				Port:     port,
 				Database: database,
@@ -643,22 +643,21 @@ func (s *GraphQLServer) UpdateProjectResolverFn(p graphql.ResolveParams) (interf
 			return nil, err
 		}
 
-		// send email to the user
-		go func(_user *models.SystemUser) {
-			// send email to the user
-			ctx := context.Background()
-			req := &models.EmailSendRequest{
-				AppURL:       s.Cfg.CORSOrigin,
-				Sender:       "no-reply@apito.io",
-				Recipients:   []string{_user.Email},
-				TempPassword: _user.TempPassword,
-				ProjectName:  project.Name,
-			}
-			err := services.SendTeamAddEmail(ctx, s.AwsConfig, req)
-			if err != nil {
-				fmt.Println(err.Error())
-			}
-		}(user)
+		if strings.TrimSpace(s.Cfg.ResendAPIKey) != "" {
+			go func(_user *models.SystemUser) {
+				ctx := context.Background()
+				req := &models.EmailSendRequest{
+					AppURL:       s.Cfg.CORSOrigin,
+					Sender:       "no-reply@apito.io",
+					Recipients:   []string{_user.Email},
+					TempPassword: _user.TempPassword,
+					ProjectName:  project.Name,
+				}
+				if err := services.SendTeamAddEmail(ctx, s.Cfg.ResendAPIKey, req); err != nil {
+					fmt.Println(err.Error())
+				}
+			}(user)
+		}
 	}
 
 	if val, ok := p.Args["remove_team_member"].(map[string]interface{}); ok {
@@ -797,6 +796,8 @@ func (s *GraphQLServer) UpdateProjectResolverFn(p graphql.ResolveParams) (interf
 	if err != nil {
 		return nil, err
 	}
+
+	s.EmitProjectLifecycle(cache.Ctx, param.UserID, project.ID, project.Name, models.SystemEventProjectUpdated)
 
 	// hide the schema
 	project.Schema = nil
@@ -1094,7 +1095,7 @@ func (s *GraphQLServer) AddModelToProjectResolverFn(p graphql.ResolveParams) (in
 		return nil, err
 	}
 
-	param := cache.Param
+	project := cache.Project
 
 	var modelName string
 	if val, ok := p.Args["name"].(string); ok {
@@ -1114,35 +1115,6 @@ func (s *GraphQLServer) AddModelToProjectResolverFn(p graphql.ResolveParams) (in
 		return nil, errors.New("model name can not start with a number! use character instead")
 	}
 
-	// inject model type
-	param.Model = &models.ModelType{
-		Name: modelName,
-	}
-
-	// temporary fix for sql driver
-	if cache.Project.Driver != nil {
-		dbKind := strings.ToLower(strings.TrimSpace(cache.Project.Driver.Database))
-		if dbKind == "sqlite" || dbKind == "mysql" || dbKind == "postgres" {
-			param.ProjectID = cache.Project.Driver.Database
-		}
-	}
-
-	driver, err := s.GraphQLExecutor.GetProjectDriver(cache.Ctx)
-	if err != nil {
-		return nil, err
-	}
-
-	checkCollectionExists, err := driver.CheckTableOrCollectionExists(cache.Ctx, param)
-	if err != nil {
-		return nil, err
-	}
-
-	if checkCollectionExists {
-		return nil, errors.New("collection/table already exists")
-	}
-
-	project := cache.Project
-
 	var singleRecord bool
 	if val, ok := p.Args["single_record"].(bool); ok {
 		singleRecord = val
@@ -1153,25 +1125,69 @@ func (s *GraphQLServer) AddModelToProjectResolverFn(p graphql.ResolveParams) (in
 		SinglePage: singleRecord,
 	}
 
-	// if schema not found then create
-	project.Schema, err = driver.AddModel(cache.Ctx, project, model)
-	if err != nil {
-		return nil, err
-	}
+	return s.tryStageSchemaMutation(cache, project, models.SchemaOpTypeCreateModel, graphqlArgsMap(p), func() (interface{}, error) {
+		param := s.NewParam(cache.Param)
+		param.Model = model
+		if cache.Project.Driver != nil {
+			dbKind := strings.ToLower(strings.TrimSpace(cache.Project.Driver.Database))
+			if dbKind == "sqlite" || dbKind == "mysql" || dbKind == "postgres" {
+				param.ProjectID = cache.Project.Driver.Database
+			}
+		}
 
-	err = s.SystemDriver.UpdateProject(cache.Ctx, project, false)
-	if err != nil {
-		return nil, err
-	}
+		driver, skipBaseDDL, err := s.getSchemaBaseProjectDriverIfNeeded(cache.Ctx, project)
+		if err != nil {
+			return nil, err
+		}
 
-	fresh, err := s.refreshProjectAndReCache(cache.Ctx, project.ID)
-	if err != nil {
-		return nil, err
-	}
-	if fresh.Schema == nil {
-		return []*models.ModelType{}, nil
-	}
-	return fresh.Schema.Models, nil
+		if !skipBaseDDL {
+			checkCollectionExists, err := driver.CheckTableOrCollectionExists(cache.Ctx, param)
+			if err != nil {
+				return nil, err
+			}
+			if checkCollectionExists {
+				return nil, errors.New("collection/table already exists")
+			}
+		}
+		err = s.runSchemaChange(cache.Ctx, schemasvc.RunInput{
+			Ctx:           cache.Ctx,
+			Project:       project,
+			OperationType: models.SchemaOpTypeCreateModel,
+			Request:       map[string]interface{}{"name": modelName, "single_record": singleRecord},
+			BaseDriver:    driver,
+			SkipBaseDDL:   skipBaseDDL,
+			ApplyDDL: func(d interfaces.ProjectDBInterface) error {
+				schema, ddlErr := d.AddModel(cache.Ctx, project, model)
+				if ddlErr != nil {
+					return ddlErr
+				}
+				project.Schema = schema
+				return nil
+			},
+			PersistSystem: func() error {
+				return s.SystemDriver.UpdateProject(cache.Ctx, project, false)
+			},
+			RefreshCache: func() error {
+				_, refreshErr := s.refreshProjectAndReCache(cache.Ctx, project.ID)
+				return refreshErr
+			},
+			Compensate: func(d interfaces.ProjectDBInterface) error {
+				return d.DropModel(cache.Ctx, project, modelName)
+			},
+		})
+		if err != nil {
+			return nil, err
+		}
+
+		fresh, err := s.refreshProjectAndReCache(cache.Ctx, project.ID)
+		if err != nil {
+			return nil, err
+		}
+		if fresh.Schema == nil {
+			return []*models.ModelType{}, nil
+		}
+		return fresh.Schema.Models, nil
+	})
 }
 
 func (s *GraphQLServer) RunModelMigrationsResolverFn(p graphql.ResolveParams) (interface{}, error) {
@@ -1217,7 +1233,7 @@ func (s *GraphQLServer) RunModelMigrationsResolverFn(p graphql.ResolveParams) (i
 	}
 
 	// check relation collection
-	driver, err := s.GraphQLExecutor.GetProjectDriver(cache.Ctx)
+	driver, err := s.getSchemaBaseProjectDriver(cache.Ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -1281,68 +1297,66 @@ func (s *GraphQLServer) UpdateModelResolverFn(p graphql.ResolveParams) (interfac
 		singlePageModel = val
 	}
 
-	var resp interface{}
+	opType := models.SchemaOpTypeUpdateModel
 	switch _type {
-	case "update":
-		resp, err = s.updateModel(cache, project, modelName)
-		if err != nil {
-			return nil, err
-		}
-		return resp, nil
 	case "duplicate":
-		var newName string
-		if val, ok := p.Args["new_name"].(string); ok {
-			newName = val
-		} else {
-			return nil, errors.New(ae.NEW_MODEL_NAME_REQUIRED)
-		}
-		resp, err = s.duplicateModel(cache.Ctx, project, newName, modelName)
-		if err != nil {
-			return nil, err
-		}
-		return resp, nil
+		opType = models.SchemaOpTypeDuplicateModel
 	case "rename":
-		var newName string
-		if val, ok := p.Args["new_name"].(string); ok {
-			newName = val
-		} else {
-			return nil, errors.New(ae.NEW_MODEL_NAME_REQUIRED)
-		}
-		resp, err = s.renameModel(cache, project, newName, modelName, singlePageModel)
-		if err != nil {
-			return nil, err
-		}
-		return resp, nil
+		opType = models.SchemaOpTypeRenameModel
 	case "convert":
-		resp, err = s.convertModel(cache, project, modelName)
-		if err != nil {
-			return nil, err
-		}
-		return resp, nil
+		opType = models.SchemaOpTypeConvertModel
 	case "delete":
-		resp, err = s.deleteModel(cache, project, modelName)
-		if err != nil {
-			return nil, err
+		opType = models.SchemaOpTypeDeleteModel
+	}
+	return s.tryStageSchemaMutation(cache, project, opType, graphqlArgsMap(p), func() (interface{}, error) {
+		var resp interface{}
+		switch _type {
+		case "update":
+			resp, err = s.updateModel(cache, project, modelName)
+			if err != nil {
+				return nil, err
+			}
+			return resp, nil
+		case "duplicate":
+			var newName string
+			if val, ok := p.Args["new_name"].(string); ok {
+				newName = val
+			} else {
+				return nil, errors.New(ae.NEW_MODEL_NAME_REQUIRED)
+			}
+			resp, err = s.duplicateModel(cache.Ctx, project, newName, modelName)
+			if err != nil {
+				return nil, err
+			}
+			return resp, nil
+		case "rename":
+			var newName string
+			if val, ok := p.Args["new_name"].(string); ok {
+				newName = val
+			} else {
+				return nil, errors.New(ae.NEW_MODEL_NAME_REQUIRED)
+			}
+			resp, err = s.renameModel(cache, project, newName, modelName, singlePageModel)
+			if err != nil {
+				return nil, err
+			}
+			return resp, nil
+		case "convert":
+			resp, err = s.convertModel(cache, project, modelName)
+			if err != nil {
+				return nil, err
+			}
+			return resp, nil
+		case "delete":
+			resp, err := s.deleteModel(cache, project, modelName)
+			if err != nil {
+				return nil, err
+			}
+			return resp, nil
+		default:
+			return nil, errors.New("invalid update model request")
 		}
-		return resp, nil
-	}
-
-	err = s.SystemDriver.UpdateProject(cache.Ctx, project, false)
-	if err != nil {
-		return nil, err
-	}
-
-	if _, err := s.refreshProjectAndReCache(cache.Ctx, project.ID); err != nil {
-		return nil, err
-	}
-
-	// invalidate project cache
-	err = s.ExpireGraphQLProjectCache(cache.Ctx, project.ID)
-	if err != nil {
-		return nil, err
-	}
-
-	return nil, errors.New("invalid update model request")
+	})
 }
 
 func (s *GraphQLServer) updateModel(cache *models.ApplicationCache, project *models.Project, modelName string) (*models.ModelType, error) {
@@ -1431,7 +1445,7 @@ func (s *GraphQLServer) duplicateModel(ctx context.Context, project *models.Proj
 }
 
 func (s *GraphQLServer) renameModel(cache *models.ApplicationCache, project *models.Project, newName, modelName string, singlePageModel bool) (interface{}, error) {
-	
+
 	if newName == "" {
 		return nil, errors.New(ae.NEW_MODEL_NAME_REQUIRED)
 	}
@@ -1445,7 +1459,7 @@ func (s *GraphQLServer) renameModel(cache *models.ApplicationCache, project *mod
 		return nil, err
 	}
 
-	driver, err := s.GraphQLExecutor.GetProjectDriver(cache.Ctx)
+	driver, err := s.getSchemaBaseProjectDriver(cache.Ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -1543,7 +1557,7 @@ func (s *GraphQLServer) deleteModel(cache *models.ApplicationCache, project *mod
 		return nil, errors.New("can not delete User Model. If you dont want it then remove User Addons")
 	}
 
-	driver, err := s.GraphQLExecutor.GetProjectDriver(cache.Ctx)
+	driver, err := s.getSchemaBaseProjectDriver(cache.Ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -2014,6 +2028,66 @@ func (s *GraphQLServer) UpsertRoleToProjectResolverFn(p graphql.ResolveParams) (
 	return role, nil
 }
 
+func (s *GraphQLServer) DuplicateRoleInProjectResolverFn(p graphql.ResolveParams) (interface{}, error) {
+	var (
+		v      = p.Context.Value
+		router = v("router").(echo.Context)
+	)
+
+	s.injectMetaData("DuplicateRoleInProjectResolverFn", router)
+
+	cache, err := s.GetApplicationCache(router)
+	if err != nil {
+		return nil, err
+	}
+
+	project := cache.Project
+
+	sourceRole, ok := p.Args["source_role"].(string)
+	if !ok || strings.TrimSpace(sourceRole) == "" {
+		return nil, errors.New("source role is required")
+	}
+	newName, ok := p.Args["new_name"].(string)
+	if !ok || strings.TrimSpace(newName) == "" {
+		return nil, errors.New("new role name is required")
+	}
+
+	sourceKey := strings.ToLower(utility.SingularResourceName(sourceRole))
+	newKey := strings.ToLower(utility.SingularResourceName(newName))
+
+	switch newKey {
+	case "admin":
+		return nil, errors.New("a default Role with name `Admin` already exists in your project. Choose other names")
+	case "demo":
+		return nil, errors.New("can not create Role named `Demo`. Its being used internally. Choose other names")
+	}
+
+	if project.Roles == nil {
+		return nil, errors.New("source role not found")
+	}
+	src, ok := project.Roles[sourceKey]
+	if !ok || src == nil {
+		return nil, errors.New("source role not found")
+	}
+	if _, exists := project.Roles[newKey]; exists {
+		return nil, errors.New("a role with this name already exists")
+	}
+
+	copy := utility.CloneRole(src)
+	project.Roles[newKey] = copy
+
+	err = s.SystemDriver.UpdateProject(cache.Ctx, project, true)
+	if err != nil {
+		return nil, err
+	}
+
+	if _, err := s.refreshProjectAndReCache(cache.Ctx, project.ID); err != nil {
+		return nil, err
+	}
+
+	return copy, nil
+}
+
 func (s *GraphQLServer) DeleteFunctionResolverFn(p graphql.ResolveParams) (interface{}, error) {
 
 	var (
@@ -2102,6 +2176,17 @@ func (s *GraphQLServer) DeleteRoleResolverFn(p graphql.ResolveParams) (interface
 		if tokenRelated {
 			return nil, errors.New("there are active API Secrets associated with this role. Delete those API Secrects first")
 		}
+		svc, err := s.ProjectUserService(cache, cache.Ctx)
+		if err != nil {
+			return nil, err
+		}
+		counts, err := svc.CountUsersByRole()
+		if err != nil {
+			return nil, err
+		}
+		if counts[roleToDelete] > 0 {
+			return nil, errors.New("there are app users assigned to this role. Reassign or remove those users first")
+		}
 		delete(project.Roles, roleToDelete)
 	} else {
 		return nil, errors.New("role not Found")
@@ -2146,6 +2231,19 @@ func (s *GraphQLServer) UpsertFieldToModelResolverFn(p graphql.ResolveParams) (i
 		return nil, errors.New(ae.MODEL_NAME_REQUIRED)
 	}
 
+	var identifier string
+	var label string
+	if val, ok := p.Args["field_label"].(string); ok && val != "" {
+		validIdentifier, err := utility.IsValidIdentifier(val)
+		if err != nil {
+			return nil, err
+		}
+		identifier = validIdentifier.Identifier
+		label = validIdentifier.Label
+	} else {
+		return nil, errors.New("field Label Is necessary")
+	}
+
 	var modelType *models.ModelType
 	// if schema not found then create
 	if project.Schema == nil {
@@ -2160,20 +2258,16 @@ func (s *GraphQLServer) UpsertFieldToModelResolverFn(p graphql.ResolveParams) (i
 	}
 
 	if modelType == nil {
-		return nil, errors.New(ae.MODEL_NAME_REQUIRED)
-	}
-
-	var identifier string
-	var label string
-	if val, ok := p.Args["field_label"].(string); ok && val != "" {
-		validIdentifier, err := utility.IsValidIdentifier(val)
-		if err != nil {
-			return nil, err
+		if s.schemaVersioningActive() || s.schemaMutationHook() != nil {
+			args := graphqlArgsMap(p)
+			args["model_name"] = modelName
+			args["field"] = identifier
+			args["field_label"] = label
+			return s.tryStageSchemaMutation(cache, project, models.SchemaOpTypeAddField, args, func() (interface{}, error) {
+				return nil, errors.New(ae.MODEL_NAME_REQUIRED)
+			})
 		}
-		identifier = validIdentifier.Identifier
-		label = validIdentifier.Label
-	} else {
-		return nil, errors.New("field Label Is necessary")
+		return nil, errors.New(ae.MODEL_NAME_REQUIRED)
 	}
 
 	var parentField string
@@ -2187,7 +2281,6 @@ func (s *GraphQLServer) UpsertFieldToModelResolverFn(p graphql.ResolveParams) (i
 	if val, ok := p.Args["is_update"].(bool); ok {
 		isUpdate = val
 	}
-
 	// now search for fields
 	fieldInfo, err := s.searchAndOperateOnFields(&modelType.Fields, &models.ValidIdentifier{
 		Identifier:  identifier,
@@ -2221,6 +2314,10 @@ func (s *GraphQLServer) UpsertFieldToModelResolverFn(p graphql.ResolveParams) (i
 		fieldInfo.InputType = val
 	}
 
+	if val, ok := p.Args["field_sub_type"].(string); ok && val != "" {
+		fieldInfo.FieldSubType = val
+	}
+
 	// validate field & input type combination and other validation
 	switch fieldInfo.FieldType {
 	case "geo":
@@ -2231,7 +2328,7 @@ func (s *GraphQLServer) UpsertFieldToModelResolverFn(p graphql.ResolveParams) (i
 		fieldInfo.SubFieldInfo = []*models.FieldInfo{
 			{
 				Identifier:   "_id",
-				Description:  "An Auto Generated UUIDv4 Unique Identifier",
+				Description:  "An auto-generated ULID unique identifier",
 				InputType:    "string",
 				FieldType:    "text",
 				SubFieldInfo: nil,
@@ -2328,42 +2425,51 @@ func (s *GraphQLServer) UpsertFieldToModelResolverFn(p graphql.ResolveParams) (i
 	param.Model = modelType
 	param.FieldInfo = fieldInfo
 
-	driver, err := s.GraphQLExecutor.GetProjectDriver(cache.Ctx)
+	driver, skipBaseDDL, err := s.getSchemaBaseProjectDriverIfNeeded(cache.Ctx, project)
 	if err != nil {
 		return nil, err
 	}
 
-	modelType, err = driver.AddFieldToModel(cache.Ctx, param, isUpdate, parentField)
-	if err != nil {
-		return nil, err
-	}
-
-	if s.Cfg.SchemaIterateHook != nil {
-		_ = s.Cfg.SchemaIterateHook(cache.Ctx, project, func(ctx context.Context, drv interface{}) error {
-			if td, ok := drv.(interfaces.ProjectDBInterface); ok {
-				_, err := td.AddFieldToModel(ctx, param, isUpdate, parentField)
+	return s.tryStageSchemaMutation(cache, project, models.SchemaOpTypeAddField, graphqlArgsMap(p), func() (interface{}, error) {
+		err = s.runSchemaChange(cache.Ctx, schemasvc.RunInput{
+			Ctx:           cache.Ctx,
+			Project:       project,
+			OperationType: models.SchemaOpTypeAddField,
+			Request: map[string]interface{}{
+				"model_name": modelName, "field": identifier, "is_update": isUpdate,
+			},
+			BaseDriver:  driver,
+			SkipBaseDDL: skipBaseDDL,
+			ApplyDDL: func(d interfaces.ProjectDBInterface) error {
+				updated, ddlErr := d.AddFieldToModel(cache.Ctx, param, isUpdate, parentField)
+				if ddlErr != nil {
+					return ddlErr
+				}
+				modelType = updated
+				return nil
+			},
+			PersistSystem: func() error {
+				return s.SystemDriver.UpdateProject(cache.Ctx, project, true)
+			},
+			RefreshCache: func() error {
+				if err := s.ExpireGraphQLFieldCache(cache.Ctx, project.ID, modelType.Name); err != nil {
+					return err
+				}
+				_, err := s.refreshProjectAndReCache(cache.Ctx, project.ID)
 				return err
-			}
-			return nil
+			},
+			Compensate: func(d interfaces.ProjectDBInterface) error {
+				if isUpdate {
+					return nil
+				}
+				return d.DropField(cache.Ctx, param)
+			},
 		})
-	}
-
-	err = s.SystemDriver.UpdateProject(cache.Ctx, project, true)
-	if err != nil {
-		return nil, err
-	}
-
-	// expire the cache
-	err = s.ExpireGraphQLFieldCache(cache.Ctx, project.ID, modelType.Name)
-	if err != nil {
-		return nil, err
-	}
-
-	if _, err := s.refreshProjectAndReCache(cache.Ctx, project.ID); err != nil {
-		return nil, err
-	}
-
-	return fieldInfo, nil
+		if err != nil {
+			return nil, err
+		}
+		return fieldInfo, nil
+	})
 }
 
 type InputSerialPayload struct {
@@ -2415,12 +2521,14 @@ func (s *GraphQLServer) RearrangeFieldOfModelResolverFn(p graphql.ResolveParams)
 		return nil, errors.New("model Not Found")
 	}
 
-	// Extract field rearrangement parameters
+	// Extract field rearrangement parameters (schema arg is field_name; dragged_field kept for legacy clients)
 	var draggedFieldName string
-	if val, ok := p.Args["dragged_field"].(string); ok && val != "" {
+	if val, ok := p.Args["field_name"].(string); ok && val != "" {
+		draggedFieldName = val
+	} else if val, ok := p.Args["dragged_field"].(string); ok && val != "" {
 		draggedFieldName = val
 	} else {
-		return nil, errors.New("dragged_field is required")
+		return nil, errors.New("field_name is required")
 	}
 
 	var parentId string
@@ -2478,73 +2586,59 @@ func (s *GraphQLServer) RearrangeFieldOfModelResolverFn(p graphql.ResolveParams)
 		return nil, errors.New("dragged field not found")
 	}
 
-	// Handle different move types
-	switch moveType {
-	case "reorder":
-		// Simple reorder within the same level
-		if currentPosition == newPosition {
-			// No change needed
-			return nil, nil
-		}
-		*targetFields = s.moveFieldInSlice(*targetFields, currentPosition, newPosition)
-
-	case "child_to_parent":
-		// Move from child to parent (nested to root)
-		if parentId == "" {
-			return nil, errors.New("cannot move to root when parent_id is empty")
-		}
-
-		sourceParent, _ := s.searchAndOperateOnFields(&modelType.Fields, &models.ValidIdentifier{
-			Identifier: parentId,
-		}, nil, nil)
-		if sourceParent == nil {
-			return nil, errors.New("source parent field not found")
-		}
-
-		for i, field := range sourceParent.SubFieldInfo {
-			if field.Identifier == draggedFieldName {
-				sourceParent.SubFieldInfo = append(sourceParent.SubFieldInfo[:i], sourceParent.SubFieldInfo[i+1:]...)
-				break
+	return s.tryStageSchemaMutation(cache, project, models.SchemaOpTypeRearrangeField, graphqlArgsMap(p), func() (interface{}, error) {
+		switch moveType {
+		case "reorder":
+			if currentPosition == newPosition {
+				return modelType, nil
 			}
-		}
-
-		modelType.Fields = s.insertFieldAtPosition(modelType.Fields, draggedField, newPosition)
-		draggedField.ParentField = ""
-
-	case "parent_to_child":
-		// Move from parent to child (root to nested)
-		if parentId == "" {
-			return nil, errors.New("parent_id is required for parent_to_child move")
-		}
-
-		for i, field := range modelType.Fields {
-			if field.Identifier == draggedFieldName {
-				modelType.Fields = append(modelType.Fields[:i], modelType.Fields[i+1:]...)
-				break
+			*targetFields = s.moveFieldInSlice(*targetFields, currentPosition, newPosition)
+		case "child_to_parent":
+			if parentId == "" {
+				return nil, errors.New("cannot move to root when parent_id is empty")
 			}
+			sourceParent, _ := s.searchAndOperateOnFields(&modelType.Fields, &models.ValidIdentifier{
+				Identifier: parentId,
+			}, nil, nil)
+			if sourceParent == nil {
+				return nil, errors.New("source parent field not found")
+			}
+			for i, field := range sourceParent.SubFieldInfo {
+				if field.Identifier == draggedFieldName {
+					sourceParent.SubFieldInfo = append(sourceParent.SubFieldInfo[:i], sourceParent.SubFieldInfo[i+1:]...)
+					break
+				}
+			}
+			modelType.Fields = s.insertFieldAtPosition(modelType.Fields, draggedField, newPosition)
+			draggedField.ParentField = ""
+		case "parent_to_child":
+			if parentId == "" {
+				return nil, errors.New("parent_id is required for parent_to_child move")
+			}
+			for i, field := range modelType.Fields {
+				if field.Identifier == draggedFieldName {
+					modelType.Fields = append(modelType.Fields[:i], modelType.Fields[i+1:]...)
+					break
+				}
+			}
+			targetParent, _ := s.searchAndOperateOnFields(&modelType.Fields, &models.ValidIdentifier{
+				Identifier: parentId,
+			}, nil, nil)
+			if targetParent == nil {
+				return nil, errors.New("target parent field not found")
+			}
+			targetParent.SubFieldInfo = s.insertFieldAtPosition(targetParent.SubFieldInfo, draggedField, newPosition)
+			draggedField.ParentField = parentId
+		default:
+			return nil, errors.New("invalid move type. Use 'reorder', 'child_to_parent', or 'parent_to_child'")
 		}
 
-		targetParent, _ := s.searchAndOperateOnFields(&modelType.Fields, &models.ValidIdentifier{
-			Identifier: parentId,
-		}, nil, nil)
-		if targetParent == nil {
-			return nil, errors.New("target parent field not found")
+		s.updateFieldSerials(modelType.Fields, 1)
+		if err := s.SystemDriver.UpdateProject(cache.Ctx, project, true); err != nil {
+			return nil, err
 		}
-		targetParent.SubFieldInfo = s.insertFieldAtPosition(targetParent.SubFieldInfo, draggedField, newPosition)
-		draggedField.ParentField = parentId
-
-	default:
-		return nil, errors.New("invalid move type. Use 'reorder', 'child_to_parent', or 'parent_to_child'")
-	}
-
-	s.updateFieldSerials(modelType.Fields, 1)
-
-	err = s.SystemDriver.UpdateProject(cache.Ctx, project, true)
-	if err != nil {
-		return nil, err
-	}
-
-	return nil, nil
+		return modelType, nil
+	})
 }
 
 func (s *GraphQLServer) DeleteModelDataFn(p graphql.ResolveParams) (interface{}, error) {
@@ -2606,7 +2700,7 @@ func (s *GraphQLServer) DeleteModelDataFn(p graphql.ResolveParams) (interface{},
 	param.DocumentID = docId
 	param.Model = modelType
 
-	driver, err := s.GraphQLExecutor.GetProjectDriver(cache.Ctx)
+	driver, err := s.getSchemaBaseProjectDriver(cache.Ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -2742,12 +2836,15 @@ func (s *GraphQLServer) ModelFieldOperationResolverFn(p graphql.ResolveParams) (
 		parentField = val
 	}
 
-	driver, err := s.GraphQLExecutor.GetProjectDriver(cache.Ctx)
+	driver, skipBaseDDL, err := s.getSchemaBaseProjectDriverIfNeeded(cache.Ctx, project)
 	if err != nil {
 		return nil, err
 	}
 
 	var affectedField *models.FieldInfo
+	var applyDDL func(interfaces.ProjectDBInterface) error
+	var compensate func(interfaces.ProjectDBInterface) error
+	var beforePersist func() error
 
 	switch _type {
 	case enums.FieldOperation_Rename:
@@ -2774,35 +2871,72 @@ func (s *GraphQLServer) ModelFieldOperationResolverFn(p graphql.ResolveParams) (
 			return nil, errors.New("field you are trying to rename to already exists. choose a different name")
 		}
 
-		// now search and do the operation
 		fieldInfo, err := s.searchAndOperateOnFields(&modelType.Fields, &models.ValidIdentifier{
 			Identifier:  fieldName,
 			ParentField: parentField,
-		}, newField, &_type)
+		}, nil, nil)
 		if err != nil {
 			return nil, err
+		}
+		if fieldInfo == nil {
+			if s.schemaVersioningActive() {
+				applyDDL = func(interfaces.ProjectDBInterface) error { return nil }
+				beforePersist = func() error { return nil }
+				affectedField = &models.FieldInfo{
+					Identifier:  newField.Identifier,
+					Label:       newField.Label,
+					ParentField: parentField,
+				}
+				break
+			}
+			return nil, errors.New("field to rename not found")
 		}
 
 		param := s.NewParam(cache.Param)
 		param.Model = modelType
-		param.FieldInfo = fieldInfo
+		param.FieldInfo = &models.FieldInfo{
+			Identifier:      newField.Identifier,
+			Label:           newField.Label,
+			Description:     fieldInfo.Description,
+			InputType:       fieldInfo.InputType,
+			FieldType:       fieldInfo.FieldType,
+			Validation:      fieldInfo.Validation,
+			Serial:          fieldInfo.Serial,
+			ParentField:     fieldInfo.ParentField,
+			SystemGenerated: fieldInfo.SystemGenerated,
+			SubFieldInfo:    fieldInfo.SubFieldInfo,
+		}
 		param.SinglePageData = singlePageModel
+		oldName := fieldName
 
-		affectedField = param.FieldInfo
-
-		if fieldName != param.FieldInfo.Identifier { // skip renaming if the same value is given
-			err := driver.RenameField(cache.Ctx, fieldName, parentField, param)
-			if err != nil {
-				return nil, err
+		if fieldName != newField.Identifier {
+			applyDDL = func(d interfaces.ProjectDBInterface) error {
+				return d.RenameField(cache.Ctx, oldName, parentField, param)
 			}
-			if s.Cfg.SchemaIterateHook != nil {
-				_ = s.Cfg.SchemaIterateHook(cache.Ctx, project, func(ctx context.Context, drv interface{}) error {
-					if td, ok := drv.(interfaces.ProjectDBInterface); ok {
-						return td.RenameField(ctx, fieldName, parentField, param)
-					}
-					return nil
-				})
+			compensate = func(d interfaces.ProjectDBInterface) error {
+				back := &models.FieldInfo{
+					Identifier:  oldName,
+					Label:       fieldInfo.Label,
+					Description: fieldInfo.Description,
+					InputType:   fieldInfo.InputType,
+					FieldType:   fieldInfo.FieldType,
+					Validation:  fieldInfo.Validation,
+					Serial:      fieldInfo.Serial,
+					ParentField: fieldInfo.ParentField,
+				}
+				rev := s.NewParam(cache.Param)
+				rev.Model = modelType
+				rev.FieldInfo = back
+				rev.SinglePageData = singlePageModel
+				return d.RenameField(cache.Ctx, newField.Identifier, parentField, rev)
 			}
+		}
+		beforePersist = func() error {
+			affectedField, err = s.searchAndOperateOnFields(&modelType.Fields, &models.ValidIdentifier{
+				Identifier:  fieldName,
+				ParentField: parentField,
+			}, newField, &_type)
+			return err
 		}
 	case enums.FieldOperation_Duplicate:
 		var newField *models.ValidIdentifier
@@ -2870,53 +3004,82 @@ func (s *GraphQLServer) ModelFieldOperationResolverFn(p graphql.ResolveParams) (
 		affectedField = fieldInfo
 
 	case enums.FieldOperation_Delete:
-		// delete the field
 		deletedField, err := s.searchAndOperateOnFields(&modelType.Fields, &models.ValidIdentifier{
 			Identifier:  fieldName,
 			ParentField: parentField,
-			//}, func() *enums.FieldOperation { op := enums.FieldOperation_Delete; return &op }())
-		}, nil, &_type)
+		}, nil, nil)
 		if err != nil {
 			return nil, err
 		}
-
-		param := s.NewParam(cache.Param)
-		// update the fields
-		param.FieldInfo = deletedField
-		param.Model = modelType
-
-		affectedField = deletedField
-
-		// Drop it from database
-		err = driver.DropField(cache.Ctx, param)
-		if err != nil {
-			//return nil, err
-			log.Println("warning: error dropping field", err)
-		}
-		if s.Cfg.SchemaIterateHook != nil {
-			_ = s.Cfg.SchemaIterateHook(cache.Ctx, project, func(ctx context.Context, drv interface{}) error {
-				if td, ok := drv.(interfaces.ProjectDBInterface); ok {
-					return td.DropField(ctx, param)
+		if deletedField == nil {
+			if s.schemaVersioningActive() {
+				applyDDL = func(interfaces.ProjectDBInterface) error { return nil }
+				beforePersist = func() error { return nil }
+				affectedField = &models.FieldInfo{
+					Identifier:  fieldName,
+					Label:       fieldName,
+					ParentField: parentField,
 				}
-				return nil
-			})
+			} else {
+				return nil, errors.New("field to delete not found")
+			}
+		} else {
+			param := s.NewParam(cache.Param)
+			param.FieldInfo = deletedField
+			param.Model = modelType
+
+			applyDDL = func(d interfaces.ProjectDBInterface) error {
+				return d.DropField(cache.Ctx, param)
+			}
+			beforePersist = func() error {
+				affectedField, err = s.searchAndOperateOnFields(&modelType.Fields, &models.ValidIdentifier{
+					Identifier:  fieldName,
+					ParentField: parentField,
+				}, nil, &_type)
+				return err
+			}
 		}
+
+	default:
+		applyDDL = func(interfaces.ProjectDBInterface) error { return nil }
 	}
 
-	if err := s.SystemDriver.TouchProjectUpdatedAt(cache.Ctx, cache.Project.ID); err != nil {
-		return nil, err
-	}
-	if err := s.SystemDriver.UpsertModelType(cache.Ctx, cache.Project.ID, modelType); err != nil {
-		return nil, err
+	if applyDDL == nil {
+		applyDDL = func(interfaces.ProjectDBInterface) error { return nil }
 	}
 
-	// expire the cache
-	err = s.ExpireGraphQLProjectCache(cache.Ctx, project.ID)
-	if err != nil {
-		return nil, err
-	}
-
-	return affectedField, nil
+	return s.tryStageSchemaMutation(cache, project, models.SchemaOpTypeModelFieldOp, graphqlArgsMap(p), func() (interface{}, error) {
+		err = s.runSchemaChange(cache.Ctx, schemasvc.RunInput{
+			Ctx:           cache.Ctx,
+			Project:       project,
+			OperationType: models.SchemaOpTypeModelFieldOp,
+			Request: map[string]interface{}{
+				"model_name": modelName, "type": _type, "field_name": fieldName,
+			},
+			BaseDriver:  driver,
+			SkipBaseDDL: skipBaseDDL,
+			ApplyDDL:    applyDDL,
+			PersistSystem: func() error {
+				if beforePersist != nil {
+					if err := beforePersist(); err != nil {
+						return err
+					}
+				}
+				if err := s.SystemDriver.TouchProjectUpdatedAt(cache.Ctx, cache.Project.ID); err != nil {
+					return err
+				}
+				return s.SystemDriver.UpsertModelType(cache.Ctx, cache.Project.ID, modelType)
+			},
+			RefreshCache: func() error {
+				return s.ExpireGraphQLProjectCache(cache.Ctx, project.ID)
+			},
+			Compensate: compensate,
+		})
+		if err != nil {
+			return nil, err
+		}
+		return affectedField, nil
+	})
 }
 
 func (s *GraphQLServer) searchAndOperateOnFields(fields *[]*models.FieldInfo, existingField, newField *models.ValidIdentifier, operationType *enums.FieldOperation) (*models.FieldInfo, error) {
@@ -3217,45 +3380,47 @@ func (s *GraphQLServer) DeleteConnectionFromModelResolverFn(p graphql.ResolvePar
 		return nil, errors.New("model Not Found")
 	}
 
-	driver, err := s.GraphQLExecutor.GetProjectDriver(cache.Ctx)
-	if err != nil {
-		return nil, err
-	}
-
-	fromConnectionType, toConnectionType, err := s.deleteRelationField(cache.Ctx, project, fromModelType, toResource, knownAs)
-	if err != nil {
-		return nil, err
-	}
-
-	if err := driver.DeleteRelationDocuments(cache.Ctx, project.ID, fromConnectionType, toConnectionType); err != nil {
-		return nil, err
-	}
-
-	var toModelType *models.ModelType
-	for _, ct := range project.Schema.Models {
-		if ct != nil && ct.Name == toResource {
-			toModelType = ct
-			break
-		}
-	}
-
-	if err := s.SystemDriver.TouchProjectUpdatedAt(cache.Ctx, project.ID); err != nil {
-		return nil, err
-	}
-	if err := s.SystemDriver.UpsertModelType(cache.Ctx, project.ID, fromModelType); err != nil {
-		return nil, err
-	}
-	if toModelType != nil {
-		if err := s.SystemDriver.UpsertModelType(cache.Ctx, project.ID, toModelType); err != nil {
+	return s.tryStageSchemaMutation(cache, project, models.SchemaOpTypeDeleteConnection, graphqlArgsMap(p), func() (interface{}, error) {
+		driver, err := s.GraphQLExecutor.GetProjectDriver(cache.Ctx)
+		if err != nil {
 			return nil, err
 		}
-	}
 
-	if _, err := s.refreshProjectAndReCache(cache.Ctx, project.ID); err != nil {
-		return nil, err
-	}
+		fromConnectionType, toConnectionType, err := s.deleteRelationField(cache.Ctx, project, fromModelType, toResource, knownAs)
+		if err != nil {
+			return nil, err
+		}
 
-	return []*models.ConnectionType{fromConnectionType, toConnectionType}, nil
+		if err := driver.DeleteRelationDocuments(cache.Ctx, project.ID, fromConnectionType, toConnectionType); err != nil {
+			return nil, err
+		}
+
+		var toModelType *models.ModelType
+		for _, ct := range project.Schema.Models {
+			if ct != nil && ct.Name == toResource {
+				toModelType = ct
+				break
+			}
+		}
+
+		if err := s.SystemDriver.TouchProjectUpdatedAt(cache.Ctx, project.ID); err != nil {
+			return nil, err
+		}
+		if err := s.SystemDriver.UpsertModelType(cache.Ctx, project.ID, fromModelType); err != nil {
+			return nil, err
+		}
+		if toModelType != nil {
+			if err := s.SystemDriver.UpsertModelType(cache.Ctx, project.ID, toModelType); err != nil {
+				return nil, err
+			}
+		}
+
+		if _, err := s.refreshProjectAndReCache(cache.Ctx, project.ID); err != nil {
+			return nil, err
+		}
+
+		return []*models.ConnectionType{fromConnectionType, toConnectionType}, nil
+	})
 }
 
 func (s *GraphQLServer) CreateConnectionTypeResolverFn(p graphql.ResolveParams) (interface{}, error) {
@@ -3305,18 +3470,18 @@ func (s *GraphQLServer) CreateConnectionTypeResolverFn(p graphql.ResolveParams) 
 		}
 	}
 
-	driver, err := s.GraphQLExecutor.GetProjectDriver(cache.Ctx)
-	if err != nil {
-		return nil, err
-	}
+	return s.tryStageSchemaMutation(cache, project, models.SchemaOpTypeCreateConnection, graphqlArgsMap(p), func() (interface{}, error) {
+		driver, skipBaseDDL, err := s.getSchemaBaseProjectDriverIfNeeded(cache.Ctx, project)
+		if err != nil {
+			return nil, err
+		}
 
-	var connections []*models.ConnectionType
+		var connections []*models.ConnectionType
+		if project.Schema == nil {
+			return nil, ae.SchemaIsNil
+		}
 
-	var fromModelType *models.ModelType
-	var toModelType *models.ModelType
-	if project.Schema == nil {
-		return nil, ae.SchemaIsNil
-	} else {
+		var fromModelType, toModelType *models.ModelType
 		for _, ct := range project.Schema.Models {
 			switch ct.Name {
 			case fromResource:
@@ -3325,19 +3490,16 @@ func (s *GraphQLServer) CreateConnectionTypeResolverFn(p graphql.ResolveParams) 
 				toModelType = ct
 			}
 		}
-
 		if fromModelType == nil || toModelType == nil {
 			return nil, errors.New("model Not Found")
 		}
-
-		// dont let insert relations without defining any fields
 		if len(fromModelType.Fields) == 0 {
 			return nil, fmt.Errorf("can not create relations with %s, because it has no fields.", strings.Title(strings.ToLower(fromModelType.Name)))
-		} else if len(toModelType.Fields) == 0 {
+		}
+		if len(toModelType.Fields) == 0 {
 			return nil, fmt.Errorf("can not create relations with %s, because it has no fields.", strings.Title(strings.ToLower(toModelType.Name)))
 		}
 
-		// from
 		var fromConnectionInfo *models.ConnectionType
 		for _, f := range fromModelType.Connections {
 			if f.Model == toResource && f.KnownAs == knownAs {
@@ -3345,26 +3507,17 @@ func (s *GraphQLServer) CreateConnectionTypeResolverFn(p graphql.ResolveParams) 
 				break
 			}
 		}
-
 		if fromConnectionInfo == nil {
-			fromConnectionInfo = &models.ConnectionType{
-				Model:   toResource,
-				Type:    "forward",
-				KnownAs: knownAs,
-			}
+			fromConnectionInfo = &models.ConnectionType{Model: toResource, Type: "forward", KnownAs: knownAs}
 			if val, ok := p.Args["forward_connection_type"]; ok {
 				fromConnectionInfo.Relation = val.(string)
 			}
 			fromModelType.Connections = append(fromModelType.Connections, fromConnectionInfo)
-		} else {
-			if val, ok := p.Args["forward_connection_type"]; ok {
-				fromConnectionInfo.Relation = val.(string)
-			}
+		} else if val, ok := p.Args["forward_connection_type"]; ok {
+			fromConnectionInfo.Relation = val.(string)
 		}
-
 		connections = append(connections, fromConnectionInfo)
 
-		// to
 		var toConnectionInfo *models.ConnectionType
 		for _, f := range toModelType.Connections {
 			if f.Model == fromResource && f.KnownAs == knownAs {
@@ -3372,33 +3525,21 @@ func (s *GraphQLServer) CreateConnectionTypeResolverFn(p graphql.ResolveParams) 
 				break
 			}
 		}
-
 		if toConnectionInfo == nil {
-			toConnectionInfo = &models.ConnectionType{
-				Model:   fromResource,
-				Type:    "backward",
-				KnownAs: knownAs,
-			}
+			toConnectionInfo = &models.ConnectionType{Model: fromResource, Type: "backward", KnownAs: knownAs}
 			if val, ok := p.Args["reverse_connection_type"]; ok {
 				toConnectionInfo.Relation = val.(string)
 			}
 			toModelType.Connections = append(toModelType.Connections, toConnectionInfo)
-		} else {
-			if val, ok := p.Args["reverse_connection_type"]; ok {
-				toConnectionInfo.Relation = val.(string)
-			}
+		} else if val, ok := p.Args["reverse_connection_type"]; ok {
+			toConnectionInfo.Relation = val.(string)
 		}
 
-		// For Has One Relation Add a `system_model_id` field by default in that model for
-		// Easy filter purposes
 		if fromConnectionInfo.Relation == "has_one" {
-			// check for already existed id
 			identifier := utility.SyntheticSystemRelationFieldIdentifier(fromConnectionInfo.Model, knownAs)
-			var label string
+			label := fmt.Sprintf(`System %s ID`, strings.Title(fromConnectionInfo.Model))
 			if knownAs != "" {
 				label = fmt.Sprintf(`System %s ID`, strings.Title(knownAs))
-			} else {
-				label = fmt.Sprintf(`System %s ID`, strings.Title(fromConnectionInfo.Model))
 			}
 			var found bool
 			for _, f := range fromModelType.Fields {
@@ -3409,30 +3550,18 @@ func (s *GraphQLServer) CreateConnectionTypeResolverFn(p graphql.ResolveParams) 
 			}
 			if !found {
 				fromModelType.Fields = append(fromModelType.Fields, &models.FieldInfo{
-					Identifier:   identifier,
-					Description:  "An Auto Generated Relation Identifier for Easy Filter Purposes",
-					InputType:    "string",
-					FieldType:    "text",
-					SubFieldInfo: nil,
-					Validation: &models.Validation{
-						Hide:   true,
-						Unique: true,
-					},
-					Serial:          1,
-					Label:           label,
-					SystemGenerated: true,
+					Identifier: identifier, Description: "An Auto Generated Relation Identifier for Easy Filter Purposes",
+					InputType: "string", FieldType: "text",
+					Validation: &models.Validation{Hide: true, Unique: true},
+					Serial:     1, Label: label, SystemGenerated: true,
 				})
 			}
 		}
-
 		if toConnectionInfo.Relation == "has_one" {
-			// check for already existed id
 			identifier := utility.SyntheticSystemRelationFieldIdentifier(toConnectionInfo.Model, knownAs)
-			var label string
+			label := fmt.Sprintf(`System %s ID`, strings.Title(toConnectionInfo.Model))
 			if knownAs != "" {
 				label = fmt.Sprintf(`System %s ID`, strings.Title(knownAs))
-			} else {
-				label = fmt.Sprintf(`System %s ID`, strings.Title(toConnectionInfo.Model))
 			}
 			var found bool
 			for _, f := range toModelType.Fields {
@@ -3443,50 +3572,47 @@ func (s *GraphQLServer) CreateConnectionTypeResolverFn(p graphql.ResolveParams) 
 			}
 			if !found {
 				toModelType.Fields = append(toModelType.Fields, &models.FieldInfo{
-					Identifier:   identifier,
-					Description:  "An Auto Generated Relation Identifier for Easy Filter Purposes",
-					InputType:    "string",
-					FieldType:    "text",
-					SubFieldInfo: nil,
-					Validation: &models.Validation{
-						Hide:   true,
-						Unique: true,
-					},
-					Serial:          1,
-					Label:           label,
-					SystemGenerated: true,
+					Identifier: identifier, Description: "An Auto Generated Relation Identifier for Easy Filter Purposes",
+					InputType: "string", FieldType: "text",
+					Validation: &models.Validation{Hide: true, Unique: true},
+					Serial:     1, Label: label, SystemGenerated: true,
 				})
 			}
 		}
 
-		// #todo we should rearrange all the serial after inserting this at the top
-
-		// used for SQL type driver. For nosql it's not implemented or needed
-		err = driver.AddRelationFields(cache.Ctx, fromConnectionInfo, toConnectionInfo)
+		fwdConn := fromConnectionInfo
+		revConn := toConnectionInfo
+		err = s.runSchemaChange(cache.Ctx, schemasvc.RunInput{
+			Ctx: cache.Ctx, Project: project,
+			OperationType: models.SchemaOpTypeCreateConnection,
+			Request:       map[string]interface{}{"from": fromResource, "to": toResource, "known_as": knownAs},
+			BaseDriver:    driver, SkipBaseDDL: skipBaseDDL,
+			ApplyDDL: func(d interfaces.ProjectDBInterface) error {
+				return d.AddRelationFields(cache.Ctx, fwdConn, revConn)
+			},
+			PersistSystem: func() error {
+				if err := s.SystemDriver.TouchProjectUpdatedAt(cache.Ctx, project.ID); err != nil {
+					return err
+				}
+				if err := s.SystemDriver.UpsertModelType(cache.Ctx, project.ID, fromModelType); err != nil {
+					return err
+				}
+				return s.SystemDriver.UpsertModelType(cache.Ctx, project.ID, toModelType)
+			},
+			RefreshCache: func() error {
+				_, err := s.refreshProjectAndReCache(cache.Ctx, project.ID)
+				return err
+			},
+			Compensate: func(d interfaces.ProjectDBInterface) error {
+				return d.DeleteRelationDocuments(cache.Ctx, project.ID, fwdConn, revConn)
+			},
+		})
 		if err != nil {
 			return nil, err
 		}
-
-		if err := s.SystemDriver.TouchProjectUpdatedAt(cache.Ctx, project.ID); err != nil {
-			return nil, err
-		}
-		if err := s.SystemDriver.UpsertModelType(cache.Ctx, project.ID, fromModelType); err != nil {
-			return nil, err
-		}
-		if err := s.SystemDriver.UpsertModelType(cache.Ctx, project.ID, toModelType); err != nil {
-			return nil, err
-		}
-
-		// Keep ProjectCache in sync with model_types (connections live in SQL); otherwise
-		// projectModelsInfo keeps serving stale Schema from Redis/memory (see refreshProjectAndReCache).
-		if _, err := s.refreshProjectAndReCache(cache.Ctx, project.ID); err != nil {
-			return nil, err
-		}
-
 		connections = append(connections, toConnectionInfo)
-	}
-
-	return connections, nil
+		return connections, nil
+	})
 }
 
 func (s *GraphQLServer) UpsertModelDataFnFn(p graphql.ResolveParams) (interface{}, error) {

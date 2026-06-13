@@ -77,7 +77,7 @@ func (s *SystemDataloader) OrganizationsTeamsLoaderFn(ctx context.Context, keys 
 		},
 	}
 
-	res, err := s.systemDriver.SearchUsers(ctx, param)
+	res, err := s.systemDriver.SearchSystemUsers(ctx, param)
 	if err != nil {
 		return handleError(err)
 	}
@@ -139,7 +139,7 @@ func (s *SystemDataloader) OrganizationsUsersLoaderFn(ctx context.Context, keys 
 		},
 	}
 
-	res, err := s.systemDriver.SearchUsers(ctx, param)
+	res, err := s.systemDriver.SearchSystemUsers(ctx, param)
 	if err != nil {
 		return handleError(err)
 	}
@@ -201,7 +201,7 @@ func (s *SystemDataloader) OrganizationsLoaderFn(ctx context.Context, keys datal
 		},
 	}
 
-	res, err := s.systemDriver.SearchUsers(ctx, param)
+	res, err := s.systemDriver.SearchSystemUsers(ctx, param)
 	if err != nil {
 		return handleError(err)
 	}
@@ -263,7 +263,7 @@ func (s *SystemDataloader) UserLoaderFn(ctx context.Context, keys dataloader.Key
 		},
 	}
 
-	res, err := s.systemDriver.SearchUsers(ctx, param)
+	res, err := s.systemDriver.SearchSystemUsers(ctx, param)
 	if err != nil {
 		return handleError(err)
 	}

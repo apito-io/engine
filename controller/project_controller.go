@@ -239,6 +239,8 @@ func (a *AuthController) ProjectCreation(c echo.Context) error {
 		})
 	}
 
+	a.graphQLServer.EmitProjectLifecycle(ctx, user.ID, _project.ID, _project.Name, models.SystemEventProjectCreated)
+
 	if user.CurrentProjectID == "" {
 		user.CurrentProjectID = _project.ID
 	}
@@ -740,8 +742,22 @@ func (a *AuthController) ProjectDelete(c echo.Context) error {
 	}
 
 	if user.CurrentProjectID == "" {
-		// refresh the token
-		tokens, err := utility.NewRefreshTokenAuthenticator(a.Cfg, user.RefreshToken)
+		tokens, err := a.graphQLServer.JWTTokenService.GenerateLoginToken(ctx, &models.ProjectWithRoles{User: user})
+		if err != nil && strings.TrimSpace(user.RefreshToken) != "" {
+			oauthTokens, oauthErr := utility.NewRefreshTokenAuthenticator(a.Cfg, user.RefreshToken)
+			if oauthErr != nil {
+				return c.JSON(http.StatusInternalServerError, &models.HttpResponse{
+					Message: captureInternalServerError(err).Error(),
+					Code:    http.StatusInternalServerError,
+				})
+			}
+			tokens = &models.JWTTokens{
+				IDToken:      oauthTokens.IDToken,
+				AccessToken:  oauthTokens.AccessToken,
+				RefreshToken: oauthTokens.RefreshToken,
+			}
+			err = nil
+		}
 		if err != nil {
 			return c.JSON(http.StatusInternalServerError, &models.HttpResponse{
 				Message: captureInternalServerError(err).Error(),
@@ -749,10 +765,11 @@ func (a *AuthController) ProjectDelete(c echo.Context) error {
 			})
 		}
 
-		token := tokens.IDToken
-		http.SetCookie(c.Response(), utility.SetTokenCookie(a.Cfg, "userToken", token, true, false))
+		http.SetCookie(c.Response(), utility.SetTokenCookie(a.Cfg, "userToken", tokens.IDToken, false, false))
+		if strings.TrimSpace(tokens.AccessToken) != "" {
+			http.SetCookie(c.Response(), utility.SetTokenCookie(a.Cfg, "accessToken", tokens.AccessToken, true, false))
+		}
 		return c.JSON(http.StatusOK, &models.HttpResponse{
-			//Token:  token,
 			Code: http.StatusOK,
 		})
 	}

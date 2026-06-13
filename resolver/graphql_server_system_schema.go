@@ -15,6 +15,7 @@ func (s *GraphQLServer) BuildServerQueriesAndMutations() {
 
 	privateSchemaObjects := objects.GetSchemaObjects(s.SystemDriver, s.SystemDataloaders)
 	privateSchemaObjects.ObjectModels = privateSchemaObjects.InitPrivateObjects()
+	registerProjectSettingsGraphQLFields(privateSchemaObjects.ObjectModels)
 	s.PrivateSchemObjects = privateSchemaObjects
 
 	if s.Cfg.SchemaObjectsExtensionHook != nil {
@@ -61,6 +62,19 @@ func (s *GraphQLServer) BuildServerQueriesAndMutations() {
 			},
 			Resolve: s.ListAuditLogsFn,
 		},
+		"searchSchemaOperations": &graphql.Field{
+			Name: "SearchSchemaOperations",
+			Type: graphql.NewList(schemaOperationGraphQLObject()),
+			Args: graphql.FieldConfigArgument{
+				"statuses": &graphql.ArgumentConfig{
+					Type: graphql.NewList(graphql.String),
+				},
+				"limit": &graphql.ArgumentConfig{
+					Type: graphql.Int,
+				},
+			},
+			Resolve: s.SearchSchemaOperationsResolverFn,
+		},
 		"listProjects": &graphql.Field{
 			Name: "ListAllProjects",
 			Args: graphql.FieldConfigArgument{
@@ -105,6 +119,21 @@ func (s *GraphQLServer) BuildServerQueriesAndMutations() {
 				},
 			}),
 			Resolve: s.ListRoleScopesResolverFn,
+		},
+		"roleUserCounts": &graphql.Field{
+			Name: "RoleUserCounts",
+			Type: graphql.NewList(graphql.NewObject(graphql.ObjectConfig{
+				Name: "RoleUserCountItem",
+				Fields: graphql.Fields{
+					"role": &graphql.Field{
+						Type: graphql.NewNonNull(graphql.String),
+					},
+					"count": &graphql.Field{
+						Type: graphql.NewNonNull(graphql.Int),
+					},
+				},
+			})),
+			Resolve: s.RoleUserCountsResolverFn,
 		},
 		"getUser": &graphql.Field{
 			Name: "GetLoggedInUser",
@@ -342,8 +371,8 @@ func (s *GraphQLServer) BuildServerQueriesAndMutations() {
 			},
 			Resolve: s.ListDetailedModelsDataProxyResolverFn,
 		},
-		"searchUsers": &graphql.Field{
-			Name: "SearchUsersOfApito",
+		"searchSystemUsers": &graphql.Field{
+			Name: "SearchSystemUsersOfApito",
 			Type: graphql.NewList(privateSchemaObjects.SystemUserObject),
 			Args: graphql.FieldConfigArgument{
 				"_id": &graphql.ArgumentConfig{
@@ -352,7 +381,7 @@ func (s *GraphQLServer) BuildServerQueriesAndMutations() {
 				"filter": args.FilterArg,
 				"where": &graphql.ArgumentConfig{
 					Type: graphql.NewInputObject(graphql.InputObjectConfig{
-						Name: "SearchUsersWhereFilterArgObject",
+						Name: "SearchSystemUsersWhereFilterArgObject",
 						Fields: graphql.InputObjectConfigFieldMap{
 							"first_name": &graphql.InputObjectFieldConfig{
 								Type: args.CommonFilter,
@@ -373,7 +402,7 @@ func (s *GraphQLServer) BuildServerQueriesAndMutations() {
 					}),
 				},
 			},
-			Resolve: s.SearchApitoUsersResolverFn,
+			Resolve: s.SearchSystemUsersResolverFn,
 		},
 		"teamMembers": &graphql.Field{
 			Name: "GetProjectTeamMembers",
@@ -962,6 +991,24 @@ func (s *GraphQLServer) BuildServerQueriesAndMutations() {
 			},
 			Resolve: s.UpdateProjectResolverFn,
 		},
+		"updateProjectAuthenticationSettings": &graphql.Field{
+			Type: projectAuthenticationSettingsPayload,
+			Args: graphql.FieldConfigArgument{
+				"input": &graphql.ArgumentConfig{
+					Type: graphql.NewNonNull(updateProjectAuthenticationInputType),
+				},
+			},
+			Resolve: s.UpdateProjectAuthenticationSettingsResolverFn,
+		},
+		"updateProjectStorageSettings": &graphql.Field{
+			Type: projectStorageSettingsPayload,
+			Args: graphql.FieldConfigArgument{
+				"input": &graphql.ArgumentConfig{
+					Type: graphql.NewNonNull(updateProjectStorageInputType),
+				},
+			},
+			Resolve: s.UpdateProjectStorageSettingsResolverFn,
+		},
 		"updateProfile": &graphql.Field{
 			Name: "UpdateProfile",
 			Type: privateSchemaObjects.SystemUserObject,
@@ -1138,6 +1185,19 @@ func (s *GraphQLServer) BuildServerQueriesAndMutations() {
 							},*/
 			},
 			Resolve: s.UpsertRoleToProjectResolverFn,
+		},
+		"duplicateRoleInProject": &graphql.Field{
+			Name: "DuplicateRoleInProject",
+			Type: privateSchemaObjects.RoleObject,
+			Args: graphql.FieldConfigArgument{
+				"source_role": &graphql.ArgumentConfig{
+					Type: graphql.NewNonNull(graphql.String),
+				},
+				"new_name": &graphql.ArgumentConfig{
+					Type: graphql.NewNonNull(graphql.String),
+				},
+			},
+			Resolve: s.DuplicateRoleInProjectResolverFn,
 		},
 		/*"deleteModelFromProject": &graphql.Field{
 			Name: "DeleteCustomTypes",
@@ -1489,5 +1549,15 @@ func (s *GraphQLServer) BuildServerQueriesAndMutations() {
 			},
 			Resolve: s.DeleteProjectResolverFn,
 		},*/
+		"retrySchemaOperation": &graphql.Field{
+			Name: "RetrySchemaOperation",
+			Type: schemaOperationGraphQLObject(),
+			Args: graphql.FieldConfigArgument{
+				"operation_id": &graphql.ArgumentConfig{
+					Type: graphql.NewNonNull(graphql.String),
+				},
+			},
+			Resolve: s.RetrySchemaOperationResolverFn,
+		},
 	}
 }

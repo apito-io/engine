@@ -241,6 +241,42 @@ func (s *GraphQLServer) GetCurrentProjectResolverFn(p graphql.ResolveParams) (in
 	return project, nil
 }
 
+func (s *GraphQLServer) RoleUserCountsResolverFn(p graphql.ResolveParams) (interface{}, error) {
+	var (
+		v      = p.Context.Value
+		router = v("router").(echo.Context)
+	)
+
+	cache, err := s.GetApplicationCache(router)
+	if err != nil {
+		return nil, err
+	}
+
+	svc, err := s.ProjectUserService(cache, cache.Ctx)
+	if err != nil {
+		return nil, err
+	}
+	counts, err := svc.CountUsersByRole()
+	if err != nil {
+		return nil, err
+	}
+
+	roles := make([]string, 0, len(counts))
+	for role := range counts {
+		roles = append(roles, role)
+	}
+	sort.Strings(roles)
+
+	out := make([]map[string]interface{}, 0, len(roles))
+	for _, role := range roles {
+		out = append(out, map[string]interface{}{
+			"role":  role,
+			"count": counts[role],
+		})
+	}
+	return out, nil
+}
+
 func (s *GraphQLServer) GetProjectResolverFn(p graphql.ResolveParams) (interface{}, error) {
 	var projectID string
 	if val, ok := p.Args["_id"].(string); ok {
@@ -389,6 +425,8 @@ func (s *GraphQLServer) ListModelsInfoResolverFn(p graphql.ResolveParams) (inter
 			return nil, ae.ModelTypeNotFound
 		}
 
+		modelType.Fields = models.DedupeFieldsByIdentifier(modelType.Fields)
+
 		// search and add locals
 		var locals pie.Strings
 		for _, f := range modelType.Fields {
@@ -413,6 +451,10 @@ func (s *GraphQLServer) ListModelsInfoResolverFn(p graphql.ResolveParams) (inter
 	}
 
 	for _, m := range project.Schema.Models {
+		if m == nil {
+			continue
+		}
+		m.Fields = models.DedupeFieldsByIdentifier(m.Fields)
 		if len(m.Connections) > 0 {
 			m.HasConnections = true
 		}
@@ -938,7 +980,7 @@ func (s *GraphQLServer) GetOrganizationsResolverFn(p graphql.ResolveParams) (int
 	return s.SystemDriver.GetOrganizations(p.Context, param.UserID)
 }
 
-func (s *GraphQLServer) SearchApitoUsersResolverFn(p graphql.ResolveParams) (interface{}, error) {
+func (s *GraphQLServer) SearchSystemUsersResolverFn(p graphql.ResolveParams) (interface{}, error) {
 	var (
 		v      = p.Context.Value
 		router = v("router").(echo.Context)
@@ -952,7 +994,7 @@ func (s *GraphQLServer) SearchApitoUsersResolverFn(p graphql.ResolveParams) (int
 	param.ResolveParams = &p
 	param.SystemCollectionName = "users"
 
-	resp, err := s.SystemDriver.SearchUsers(p.Context, param)
+	resp, err := s.SystemDriver.SearchSystemUsers(p.Context, param)
 	if err != nil {
 		return nil, err
 	}
@@ -1417,87 +1459,3 @@ func (s *GraphQLServer) ListAvailableFunctionsResolverFn(p graphql.ResolveParams
 	fmt.Println("Function provider lookup disabled for local plugins")
 	return map[string]interface{}{}, nil
 }
-
-/*func (s *GraphQLServer) AWSLambdaFunctionInfoResolverFn(p graphql.ResolveParams) (interface{}, error) {
-
-	var region string
-	if val, ok := p.Args["region"].(string); ok {
-		region = val
-	} else {
-		return nil, errors.New(ae.S3_REGION_IS_REQUIRED)
-	}
-
-	funcList, err := s.FetchAWSLambdaFunctions(region)
-	if err != nil {
-		return nil, err
-	}
-
-	return funcList, nil
-}*/
-
-/*func (s *GraphQLServer) FetchAWSLambdaFunctions(region string) ([]*models.FunctionProviderConfig, error) {
-
-/*var cred *models.ThirdPartyCredential
-	if val, ok := s.PluginConfigurations["aws"]; ok {
-		cred = val.Credentials
-	} else {
-		return nil, errors.New(ae.AWS_CREDENTIALS_ARE_NOT_SET)
-	}
-
-	var funcList []*models.FunctionProviderConfig
-	if cred != nil {
-		sess, err := session.NewSession(&aws.Config{
-			Region:      aws.String(region),
-			Credentials: credentials.NewStaticCredentials(cred.AccessKey, cred.SecretKey, ""),
-		})
-		if err != nil {
-			return nil, err
-		}
-		_, err = sess.Config.Credentials.Get()
-		if err != nil {
-			return nil, err
-		}
-
-		svc := lambda.New(sess)
-		resp, err := svc.ListFunctions(nil)
-		if err != nil {
-			return nil, err
-		} else if len(resp.Functions) == 0 {
-			return nil, nil
-		}
-
-		for _, f := range resp.Functions {
-
-			var envs []*models.FunctionEnvVariables
-			if f.Environment != nil {
-				for k, v := range f.Environment.Variables {
-					envs = append(envs, &models.FunctionEnvVariables{
-						Key:   k,
-						Value: *v,
-					})
-				}
-			}
-
-			funcConfig := models.FunctionProviderConfig{
-				RemoteFunctionName: *f.FunctionName,
-				Region:             region,
-				EnvVars:            envs,
-				Configs: &models.FunctionInternalConfig{
-					Runtime: *f.Runtime,
-					Memory:  *f.MemorySize,
-					Handler: *f.Handler,
-					TimeOut: *f.Timeout,
-				},
-			}
-			//parseDate(*f.LastModified).Format(time.RFC822),
-			//fmt.Sprintf("%.2fK", float32(*f.CodeSize)/1024.0),
-			//fmt.Sprintf("%dM", *f.MemorySize),
-			//time.Second*time.Duration(*f.Timeout), descLimited)
-			funcList = append(funcList, &funcConfig)
-		}
-	}
-
-	//return funcList, nil
-	return nil, nil
-}
-*/

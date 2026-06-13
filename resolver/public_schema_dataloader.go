@@ -53,8 +53,24 @@ func (s *GraphQLServer) DataLoaderFn(ctx context.Context, keys dataloader.Keys) 
 	if val, ok := relationMeta["connection"].(*models.ConnectionType); ok {
 		connectionModel = *val
 	}
+	parentModel, _ := relationMeta["parentModel"].(string)
 
 	paramSource := resolveParams.Source.(*types.DefaultDocumentStructure)
+	parentID := ""
+	parentType := parentModel
+	if paramSource != nil {
+		parentID = paramSource.ID
+		if paramSource.Type != "" {
+			parentType = paramSource.Type
+		}
+	}
+	if parentID == "" {
+		out := make([]*dataloader.Result, len(keys))
+		for i := range keys {
+			out[i] = &dataloader.Result{Data: nil}
+		}
+		return out
+	}
 
 	// Target schema model id comes from the parent model's connection (e.g. "employee"), not from the
 	// GraphQL field name. When KnownAs is set, the field may be "waiter"/"chef" while ModelType.Name is
@@ -84,8 +100,8 @@ func (s *GraphQLServer) DataLoaderFn(ctx context.Context, keys dataloader.Keys) 
 	}
 
 	connection := map[string]interface{}{
-		"to_model":        paramSource.Type, // issue
-		"model":           modelType.Name,   // comment
+		"to_model":        parentType,     // issue
+		"model":           modelType.Name, // comment
 		"relation_type":   relationMeta["relation_type"].(string),
 		"known_as":        connectionModel.KnownAs,
 		"connection_type": connectionModel.Type,

@@ -349,10 +349,11 @@ func (s *GraphQLServer) MutationResolverFn(p graphql.ResolveParams) (interface{}
 				_doc, err := s.updateAndConnectDocument(ctx, cache, param, hooks, payload, permission, nil, nil, false) //#TODO add connections support
 				if err != nil {
 					errs = append(errs, err.Error())
+				} else if _doc != nil {
+					s.EmitModelChange(dbCtx, param.ProjectID, modelType.Name, models.ChangeEventUpdated, _doc.ID, _doc)
 				}
 				responses = append(responses, _doc)
 			} else {
-
 				// connection is only for create operation
 				var connections map[string]interface{}
 				if _connect, ok := payload["_connect"].(map[string]interface{}); ok && len(_connect) > 0 {
@@ -364,6 +365,8 @@ func (s *GraphQLServer) MutationResolverFn(p graphql.ResolveParams) (interface{}
 				_doc, err := s.createAndConnectDocument(ctx, cache, param, hooks, payload, connections) //#TODO add connections support
 				if err != nil {
 					errs = append(errs, err.Error())
+				} else if _doc != nil {
+					s.EmitModelChange(dbCtx, param.ProjectID, modelType.Name, models.ChangeEventCreated, _doc.ID, _doc)
 				}
 				responses = append(responses, _doc)
 			}
@@ -419,6 +422,7 @@ func (s *GraphQLServer) MutationResolverFn(p graphql.ResolveParams) (interface{}
 			return nil, err
 		}
 
+		s.EmitModelChange(dbCtx, param.ProjectID, modelType.Name, models.ChangeEventCreated, _doc.ID, createdDoc)
 		return createdDoc, nil
 	case "update":
 		fields := p.Args
@@ -458,6 +462,7 @@ func (s *GraphQLServer) MutationResolverFn(p graphql.ResolveParams) (interface{}
 			return nil, err
 		}
 
+		s.EmitModelChange(dbCtx, param.ProjectID, modelType.Name, models.ChangeEventUpdated, param.DocumentID, doc)
 		return doc, nil
 	case "delete":
 		fields := p.Args
@@ -494,6 +499,7 @@ func (s *GraphQLServer) MutationResolverFn(p graphql.ResolveParams) (interface{}
 			if err != nil {
 				return nil, err
 			}
+			s.EmitModelChange(dbCtx, param.ProjectID, modelType.Name, models.ChangeEventDeleted, param.DocumentID, nil)
 			documentToDelete++
 		}
 

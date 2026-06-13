@@ -108,10 +108,9 @@ func SystemSubscriptionSchema(ctx context.Context, server *resolver.GraphQLServe
 				Type: graphql.NewObject(graphql.ObjectConfig{
 					Name: "NotifySystemResponse",
 					Fields: graphql.Fields{
-						"message":  &graphql.Field{Type: graphql.String},
-						"type":     &graphql.Field{Type: graphql.String},
-						"duration": &graphql.Field{Type: graphql.Int},
-						"final":    &graphql.Field{Type: graphql.String},
+						"message":    &graphql.Field{Type: graphql.String},
+						"type":       &graphql.Field{Type: graphql.String},
+						"project_id": &graphql.Field{Type: graphql.String},
 					},
 				}),
 				Args: graphql.FieldConfigArgument{

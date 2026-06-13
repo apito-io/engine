@@ -356,3 +356,107 @@ func (w *projectDBMetrics) RenameField(ctx context.Context, oldFieldName string,
 		return w.inner.RenameField(ctx, oldFieldName, repeatedFieldGroup, param)
 	})
 }
+
+func (w *projectDBMetrics) EnsureFilesTable(ctx context.Context) error {
+	return w.run(ctx, "migrate", true, func() error { return w.inner.EnsureFilesTable(ctx) })
+}
+
+func (w *projectDBMetrics) CreateProjectFile(ctx context.Context, file *models.ProjectFile) (*models.ProjectFile, error) {
+	start := time.Now()
+	v, err := w.inner.CreateProjectFile(ctx, file)
+	RecordDBOperation(ctx, w.cfg, w.engine, "insert", err, time.Since(start))
+	return v, err
+}
+
+func (w *projectDBMetrics) GetProjectFile(ctx context.Context, fileID string) (*models.ProjectFile, error) {
+	start := time.Now()
+	v, err := w.inner.GetProjectFile(ctx, fileID)
+	RecordDBOperation(ctx, w.cfg, w.engine, "get", err, time.Since(start))
+	return v, err
+}
+
+func (w *projectDBMetrics) SearchProjectFiles(ctx context.Context, param *models.CommonSystemParams) (*models.SearchResponse[models.ProjectFile], error) {
+	start := time.Now()
+	v, err := w.inner.SearchProjectFiles(ctx, param)
+	RecordDBOperation(ctx, w.cfg, w.engine, "list", err, time.Since(start))
+	return v, err
+}
+
+func (w *projectDBMetrics) DeleteProjectFiles(ctx context.Context, ids []string) error {
+	return w.run(ctx, "delete", false, func() error { return w.inner.DeleteProjectFiles(ctx, ids) })
+}
+
+func (w *projectDBMetrics) SumProjectFilesSize(ctx context.Context) (int64, error) {
+	start := time.Now()
+	v, err := w.inner.SumProjectFilesSize(ctx)
+	RecordDBOperation(ctx, w.cfg, w.engine, "aggregate", err, time.Since(start))
+	return v, err
+}
+
+func (w *projectDBMetrics) EnsureUsersTable(ctx context.Context) error {
+	return w.run(ctx, "migrate", true, func() error { return w.inner.EnsureUsersTable(ctx) })
+}
+
+func (w *projectDBMetrics) CreateProjectAuthUser(ctx context.Context, user *models.ProjectAuthUser) (*models.ProjectAuthUser, error) {
+	start := time.Now()
+	v, err := w.inner.CreateProjectAuthUser(ctx, user)
+	RecordDBOperation(ctx, w.cfg, w.engine, "insert", err, time.Since(start))
+	return v, err
+}
+
+func (w *projectDBMetrics) GetProjectAuthUser(ctx context.Context, userID string) (*models.ProjectAuthUser, error) {
+	start := time.Now()
+	v, err := w.inner.GetProjectAuthUser(ctx, userID)
+	RecordDBOperation(ctx, w.cfg, w.engine, "get", err, time.Since(start))
+	return v, err
+}
+
+func (w *projectDBMetrics) GetProjectAuthUserByUsername(ctx context.Context, username string) (*models.ProjectAuthUser, error) {
+	start := time.Now()
+	v, err := w.inner.GetProjectAuthUserByUsername(ctx, username)
+	RecordDBOperation(ctx, w.cfg, w.engine, "get", err, time.Since(start))
+	return v, err
+}
+
+func (w *projectDBMetrics) ListProjectAuthUsersByEmail(ctx context.Context, tenantID, email string) ([]*models.ProjectAuthUser, error) {
+	start := time.Now()
+	v, err := w.inner.ListProjectAuthUsersByEmail(ctx, tenantID, email)
+	RecordDBOperation(ctx, w.cfg, w.engine, "list", err, time.Since(start))
+	return v, err
+}
+
+func (w *projectDBMetrics) ListProjectAuthUsersByPhone(ctx context.Context, tenantID, phone string) ([]*models.ProjectAuthUser, error) {
+	start := time.Now()
+	v, err := w.inner.ListProjectAuthUsersByPhone(ctx, tenantID, phone)
+	RecordDBOperation(ctx, w.cfg, w.engine, "list", err, time.Since(start))
+	return v, err
+}
+
+func (w *projectDBMetrics) ListProjectAuthUsersByGoogleSub(ctx context.Context, tenantID, googleSub string) ([]*models.ProjectAuthUser, error) {
+	start := time.Now()
+	v, err := w.inner.ListProjectAuthUsersByGoogleSub(ctx, tenantID, googleSub)
+	RecordDBOperation(ctx, w.cfg, w.engine, "list", err, time.Since(start))
+	return v, err
+}
+
+func (w *projectDBMetrics) SearchProjectAuthUsers(ctx context.Context, tenantID string, limit, offset int) ([]*models.ProjectAuthUser, int, error) {
+	start := time.Now()
+	v, c, err := w.inner.SearchProjectAuthUsers(ctx, tenantID, limit, offset)
+	RecordDBOperation(ctx, w.cfg, w.engine, "list", err, time.Since(start))
+	return v, c, err
+}
+
+func (w *projectDBMetrics) CountProjectAuthUsersByRole(ctx context.Context, tenantID string) (map[string]int, error) {
+	start := time.Now()
+	v, err := w.inner.CountProjectAuthUsersByRole(ctx, tenantID)
+	RecordDBOperation(ctx, w.cfg, w.engine, "list", err, time.Since(start))
+	return v, err
+}
+
+func (w *projectDBMetrics) UpdateProjectAuthUser(ctx context.Context, user *models.ProjectAuthUser) error {
+	return w.run(ctx, "update", false, func() error { return w.inner.UpdateProjectAuthUser(ctx, user) })
+}
+
+func (w *projectDBMetrics) DeleteProjectAuthUser(ctx context.Context, userID string) error {
+	return w.run(ctx, "delete", false, func() error { return w.inner.DeleteProjectAuthUser(ctx, userID) })
+}

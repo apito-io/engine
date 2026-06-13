@@ -297,6 +297,14 @@ func GraphQLTypeNameForFilterArg(modelID string) string {
 	return ListGraphQLTypeName(modelID)
 }
 
+// WhereFilterConditionGraphQLTypeName returns a unique GraphQL input type for per-field where filters.
+// Model and field are separate segments so loan.installment_amount and loan_installment.amount do not collide.
+func WhereFilterConditionGraphQLTypeName(modelName, fieldIdentifier string) string {
+	m := strings.TrimSpace(modelName)
+	f := strings.TrimSpace(fieldIdentifier)
+	return strings.ToUpper(m + "__FIELD__" + f + "__COMMON_FILTER_CONDITION")
+}
+
 // ModelIDMatchesGraphQLField reports whether a stored model id matches the lowerCamel resource id used in GraphQL field names.
 func ModelIDMatchesGraphQLField(storedModelID, graphqlLowerCamel string) bool {
 	if storedModelID == "" || graphqlLowerCamel == "" {

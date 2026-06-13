@@ -346,6 +346,13 @@ func (s *JWTService) GenerateLoginIDToken(ctx context.Context, projectWithRoles 
 	claims["email"] = user.Email
 	claims["account"] = user.ID
 
+	if user.IsAdmin {
+		claims["is_super_admin"] = "true"
+		claims["is_admin"] = "true"
+	} else {
+		claims["is_super_admin"] = "false"
+	}
+
 	// by default everyone is admin in their account
 	claims["project_role"] = "admin"
 	claims["project_access"] = strings.Join(models.GlobalPermissions, ",")

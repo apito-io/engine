@@ -16,6 +16,7 @@ var MapActionName = map[string]string{
 	"AddModelToProjectResolverFn":    "added a model to a project",
 	"UpdateModelResolverFn":          "updated a model",
 	"UpsertRoleToProjectResolverFn":  "added or modified a role to a project", // need to be separated
+	"DuplicateRoleInProjectResolverFn": "duplicated a role in a project",
 	"DeleteRoleResolverFn":           "deleted a role",
 	"UpsertFieldToModelResolverFn":   "added or modified a field to a model", // need to be separated
 	"DeleteFieldTypeResolverFn":      "deleted a field",

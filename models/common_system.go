@@ -23,6 +23,7 @@ const (
 type SearchResponse[T any] struct {
 	Results        []*T
 	GroupedResults map[string][]*T
+	Total          int64 `json:"total,omitempty"`
 }
 
 // DataLoaders Dataloaders

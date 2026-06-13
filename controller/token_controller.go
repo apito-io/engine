@@ -2,6 +2,7 @@ package controller
 
 import (
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/apito-io/engine/models"
@@ -62,7 +63,7 @@ func (a *AuthController) DeleteSyncToken(c echo.Context) error {
 	// Find and remove the token from the user's SyncTokens list
 	var tokenFound bool
 	for i, syncToken := range user.SyncTokens {
-		if syncToken.Token == req.Token {
+		if syncTokensMatch(syncToken.Token, req.Token) {
 			user.SyncTokens = append(user.SyncTokens[:i], user.SyncTokens[i+1:]...)
 			tokenFound = true
 			break
@@ -96,6 +97,7 @@ type GenerateSyncTokenRequest struct {
 	Duration   string   `json:"duration"`
 	ProjectIDs []string `json:"project_ids"`
 	Scopes     []string `json:"scopes"`
+	TokenType  string   `json:"token_type"`
 }
 
 func (a *AuthController) GenerateSyncToken(c echo.Context) error {
@@ -111,28 +113,46 @@ func (a *AuthController) GenerateSyncToken(c echo.Context) error {
 	ctx := c.Request().Context()
 	userID := c.Get("user").(string)
 	name := req.Name
-	duration := req.Duration
+	duration := strings.TrimSpace(req.Duration)
 	projectIDs := req.ProjectIDs
 	scopes := req.Scopes
 
-	parseDuration, err := time.Parse("2006-01-02", duration)
+	accessType, err := normalizeAccessTokenType(req.TokenType)
 	if err != nil {
 		return c.JSON(http.StatusBadRequest, &models.HttpResponse{
 			Message: err.Error(),
 			Code:    http.StatusBadRequest,
 		})
+	}
+
+	var expireAtUnix int64
+	if duration == "" {
+		// Never-expiring: far-future expiry (year 2099)
+		expireAtUnix = time.Date(2099, 12, 31, 23, 59, 59, 0, time.UTC).Unix()
+	} else {
+		parseDuration, parseErr := time.Parse("2006-01-02", duration)
+		if parseErr != nil {
+			return c.JSON(http.StatusBadRequest, &models.HttpResponse{
+				Message: parseErr.Error(),
+				Code:    http.StatusBadRequest,
+			})
+		}
+		expireAtUnix = parseDuration.Unix()
 	}
 
 	// Use optimized token service
 	t := services.GetBrankaTokenOptimized(a.Cfg, a.graphQLServer.SystemDriver)
 
-	apiKey, err := t.GenerateSyncTokenOptimized(ctx, userID, projectIDs, scopes, "sync_token", parseDuration.Unix())
+	innerType := accessTokenInnerType(accessType)
+	rawKey, err := t.GenerateSyncTokenOptimized(ctx, userID, projectIDs, scopes, innerType, expireAtUnix)
 	if err != nil {
 		return c.JSON(http.StatusBadRequest, &models.HttpResponse{
 			Message: err.Error(),
 			Code:    http.StatusBadRequest,
 		})
 	}
+
+	prefixedToken := prefixAccessToken(accessType, *rawKey)
 
 	// update user current project id
 	user, err := a.graphQLServer.SystemDriver.GetSystemUser(ctx, userID)
@@ -145,13 +165,14 @@ func (a *AuthController) GenerateSyncToken(c echo.Context) error {
 
 	// append the sync token to the user
 	user.SyncTokens = append(user.SyncTokens, &models.SyncToken{
-		Token:  *apiKey,
-		Name:   name,
-		Expire: duration,
+		Token:     prefixedToken,
+		TokenType: accessType,
+		Name:      name,
+		Expire:    duration,
 		CreatedAt: utility.GetCurrentTime(),
 		// need these for ui display
 		ProjectIDs: projectIDs,
-		Scopes: scopes,
+		Scopes:     scopes,
 	})
 
 	// update the user
@@ -164,7 +185,7 @@ func (a *AuthController) GenerateSyncToken(c echo.Context) error {
 	}
 
 	return c.JSON(http.StatusOK, &models.HttpResponse{
-		Token: *apiKey,
+		Token: prefixedToken,
 		Code:  http.StatusOK,
 	})
 }

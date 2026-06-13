@@ -95,7 +95,8 @@ func (s *GraphQLExecutor) GetProjectDriver(ctx context.Context) (interfaces.Proj
 	}
 	pid := projectID.(string)
 
-	if s.connectionManager.GetConfig() != nil && s.connectionManager.GetConfig().ConnectionRoutingHook != nil {
+	if skipRouting, _ := ctx.Value("skip_connection_routing").(bool); !skipRouting &&
+		s.connectionManager.GetConfig() != nil && s.connectionManager.GetConfig().ConnectionRoutingHook != nil {
 		scopeKey, useScope := s.connectionManager.GetConfig().ConnectionRoutingHook(ctx, pid)
 		if useScope && scopeKey != "" {
 			conn, err := s.connectionManager.GetScopedConnection(ctx, pid, scopeKey)

@@ -44,6 +44,12 @@ func SetTokenClaimsToRouter(ctx echo.Context, tokenClaims *models.TokenClaims) e
 		}
 
 		ctx.Set("read_only", tokenClaims.IsReadOnly)
+
+		if tokenClaims.IsProjectUser ||
+			tokenClaims.TokenType == "user" ||
+			tokenClaims.TokenType == "tenant" {
+			ctx.Set("is_project_user", true)
+		}
 	}
 
 	return nil
