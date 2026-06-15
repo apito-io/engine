@@ -322,6 +322,14 @@ func (t *ApitoTokenService) ApitoTokenHandler(next echo.HandlerFunc) echo.Handle
 				return ctx.JSON(http.StatusForbidden, map[string]interface{}{"message": ae.InvalidToken})
 			}
 
+			if strings.HasPrefix(syncKey, "cli-") || strings.HasPrefix(syncKey, "sdk-") || strings.HasPrefix(syncKey, "mcp-") {
+				ctx.Set("token", syncKey)
+				ctx.Set("sync_token_claims", verifiedToken)
+				if len(verifiedToken.ProjectIDs) > 0 {
+					ctx.Set("project_ids", verifiedToken.ProjectIDs)
+				}
+			}
+
 			t.runPostTokenValidateHook(ctx, verifiedToken)
 
 			projectID = getPrimaryProjectIDFromClaims(verifiedToken)

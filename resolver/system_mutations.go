@@ -3786,6 +3786,9 @@ func (s *GraphQLServer) UpsertModelDataFnFn(p graphql.ResolveParams) (interface{
 		//#todo replace these operation with transaction
 
 		uid := utility.NewID()
+		if param.DocumentID != "" {
+			uid = param.DocumentID
+		}
 
 		doc = &types.DefaultDocumentStructure{
 			ID:   uid,

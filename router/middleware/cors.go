@@ -23,7 +23,7 @@ func CORSMiddleware(cfg *models.Config) echo.MiddlewareFunc {
 
 			c.Response().Header().Set("Access-Control-Max-Age", "86400")
 			c.Response().Header().Set("Access-Control-Allow-Methods", "POST, PATCH, GET, OPTIONS, PUT, DELETE")
-			c.Response().Header().Set("Access-Control-Allow-Headers", "Origin, Content-Type, Content-Length, X-USE-Cookies, X-Apito-Key, X-Apito-Sync-Key, X-Apito-Tenant-ID, X-Connection-Id, X-Fn-Hash, X-Requested-With, Accept-Encoding, X-CSRF-Token, Authorization")
+			c.Response().Header().Set("Access-Control-Allow-Headers", "Origin, Content-Type, Content-Length, X-USE-Cookies, X-Apito-Key, X-Apito-Sync-Key, X-Apito-Project-Id, X-Apito-Tenant-ID, X-Connection-Id, X-Fn-Hash, X-Requested-With, Accept-Encoding, X-CSRF-Token, Authorization")
 			c.Response().Header().Set("Access-Control-Expose-Headers", "Content-Length")
 			c.Response().Header().Set("Access-Control-Allow-Credentials", "true")
 

@@ -2,10 +2,39 @@ package utility
 
 import (
 	"net/http"
+	"strings"
 
 	"github.com/apito-io/engine/models"
 	"github.com/labstack/echo/v4"
 )
+
+const apitoProjectIDHeader = "X-Apito-Project-Id"
+
+func resolveProjectIDFromClaims(ctx echo.Context, tokenClaims *models.TokenClaims) string {
+	if tokenClaims == nil {
+		return ""
+	}
+	if header := strings.TrimSpace(ctx.Request().Header.Get(apitoProjectIDHeader)); header != "" {
+		if tokenClaims.ProjectID != "" {
+			if header == tokenClaims.ProjectID {
+				return header
+			}
+		} else {
+			for _, pid := range tokenClaims.ProjectIDs {
+				if pid == header {
+					return header
+				}
+			}
+		}
+	}
+	if tokenClaims.ProjectID != "" {
+		return tokenClaims.ProjectID
+	}
+	if len(tokenClaims.ProjectIDs) > 0 && tokenClaims.ProjectIDs[0] != "" {
+		return tokenClaims.ProjectIDs[0]
+	}
+	return ""
+}
 
 func SetTokenClaimsToRouter(ctx echo.Context, tokenClaims *models.TokenClaims) error {
 
@@ -19,12 +48,8 @@ func SetTokenClaimsToRouter(ctx echo.Context, tokenClaims *models.TokenClaims) e
 		}
 
 		// rest is set using id token
-		if tokenClaims.ProjectID != "" {
-			ctx.Set("project", tokenClaims.ProjectID)
-		} else if len(tokenClaims.ProjectIDs) > 0 && tokenClaims.ProjectIDs[0] != "" {
-			// Sync tokens may carry project_ids[] without ProjectID.
-			// Keep backward compatibility by setting the primary project to the first item.
-			ctx.Set("project", tokenClaims.ProjectIDs[0])
+		if projectID := resolveProjectIDFromClaims(ctx, tokenClaims); projectID != "" {
+			ctx.Set("project", projectID)
 		}
 
 		if tokenClaims.Role != "" {

@@ -148,7 +148,57 @@ func (s *GraphQLServer) ListProjectsResolverFn(p graphql.ResolveParams) (interfa
 		return nil, err
 	}
 
-	return res.Results, nil
+	results := res.Results
+	if merged, err := s.mergeSyncTokenProjects(p.Context, router, results); err != nil {
+		return nil, err
+	} else if merged != nil {
+		results = merged
+	}
+
+	return results, nil
+}
+
+func (s *GraphQLServer) mergeSyncTokenProjects(ctx context.Context, router echo.Context, results []*models.Project) ([]*models.Project, error) {
+	var tokenProjectIDs []string
+	if raw := router.Get("project_ids"); raw != nil {
+		if ids, ok := raw.([]string); ok {
+			tokenProjectIDs = ids
+		}
+	}
+	if len(tokenProjectIDs) == 0 {
+		if raw := router.Get("sync_token_claims"); raw != nil {
+			if claims, ok := raw.(*models.TokenClaims); ok && len(claims.ProjectIDs) > 0 {
+				tokenProjectIDs = claims.ProjectIDs
+			}
+		}
+	}
+	if len(tokenProjectIDs) == 0 {
+		return results, nil
+	}
+
+	seen := make(map[string]struct{}, len(results)+len(tokenProjectIDs))
+	for _, p := range results {
+		if p != nil && p.ID != "" {
+			seen[p.ID] = struct{}{}
+		}
+	}
+
+	merged := results
+	for _, pid := range tokenProjectIDs {
+		if pid == "" {
+			continue
+		}
+		if _, ok := seen[pid]; ok {
+			continue
+		}
+		proj, err := s.SystemDriver.GetProject(ctx, pid)
+		if err != nil || proj == nil {
+			continue
+		}
+		merged = append(merged, proj)
+		seen[pid] = struct{}{}
+	}
+	return merged, nil
 }
 
 func (s *GraphQLServer) ListAllProjectsResolverFn(p graphql.ResolveParams) (interface{}, error) {
