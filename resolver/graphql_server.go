@@ -463,6 +463,9 @@ func (s *GraphQLServer) refreshProjectAndReCache(ctx context.Context, projectID 
 	if err != nil {
 		return nil, err
 	}
+	if fresh != nil && fresh.Schema != nil {
+		models.NormalizeProjectSchemaConnectionTypes(fresh.Schema)
+	}
 	if _, err := s.ProjectCache.SaveProject(ctx, fresh); err != nil {
 		return nil, err
 	}
@@ -625,6 +628,9 @@ func (s *GraphQLServer) LoadProjectCache(ctx context.Context, projectID string) 
 	}
 
 	if _project != nil {
+		if _project.Schema != nil {
+			models.NormalizeProjectSchemaConnectionTypes(_project.Schema)
+		}
 		if err := s.ApplyNamingV2AfterProjectLoad(ctx, _project); err != nil {
 			return nil, err
 		}

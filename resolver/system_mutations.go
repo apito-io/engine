@@ -3667,6 +3667,7 @@ func (s *GraphQLServer) UpsertModelDataFnFn(p graphql.ResolveParams) (interface{
 	}
 
 	param.Model = modelType
+	param.ProjectSchemaModels = project.Schema.Models
 
 	// Safe extraction: status defaults to "published" when nil or invalid
 	if val, ok := p.Args["status"].(string); ok && val != "" {

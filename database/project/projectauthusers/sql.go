@@ -36,6 +36,13 @@ func prepareAuthUserRow(row *models.ProjectAuthUser) {
 	if strings.TrimSpace(row.Provider) == "" {
 		row.Provider = models.UserProviderLocal
 	}
+	if e := strings.TrimSpace(row.Email); e != "" {
+		row.Email = strings.ToLower(e)
+	}
+	if p := strings.TrimSpace(row.Phone); p != "" {
+		row.Phone = models.NormalizeUserPhoneKey(p)
+	}
+	row.GoogleSub = strings.TrimSpace(row.GoogleSub)
 }
 
 func tenantFilter(q *bun.SelectQuery, tenantID string) *bun.SelectQuery {
@@ -86,6 +93,9 @@ CREATE TABLE IF NOT EXISTS %s (
 			fmt.Sprintf(`CREATE INDEX IF NOT EXISTS idx_users_tenant ON %s (tenant_id)`, table),
 			fmt.Sprintf(`CREATE INDEX IF NOT EXISTS idx_users_email ON %s (LOWER(TRIM(email)))`, table),
 			fmt.Sprintf(`CREATE INDEX IF NOT EXISTS idx_users_google_sub ON %s (google_sub)`, table),
+			fmt.Sprintf(`CREATE UNIQUE INDEX IF NOT EXISTS idx_users_email_unique ON %s (LOWER(TRIM(email))) WHERE TRIM(COALESCE(email, '')) != ''`, table),
+			fmt.Sprintf(`CREATE UNIQUE INDEX IF NOT EXISTS idx_users_phone_unique ON %s (phone) WHERE TRIM(COALESCE(phone, '')) != ''`, table),
+			fmt.Sprintf(`CREATE UNIQUE INDEX IF NOT EXISTS idx_users_google_sub_unique ON %s (google_sub) WHERE TRIM(COALESCE(google_sub, '')) != ''`, table),
 		}
 		for _, q := range indexes {
 			if _, err := db.ExecContext(ctx, q); err != nil {
@@ -109,6 +119,9 @@ CREATE TABLE IF NOT EXISTS %s (
 	created_at DATETIME,
 	updated_at DATETIME,
 	UNIQUE KEY idx_users_tenant_username (tenant_id, username),
+	UNIQUE KEY idx_users_email_unique (email),
+	UNIQUE KEY idx_users_phone_unique (phone),
+	UNIQUE KEY idx_users_google_sub_unique (google_sub),
 	KEY idx_users_tenant (tenant_id),
 	KEY idx_users_email (email),
 	KEY idx_users_google_sub (google_sub)
@@ -139,6 +152,9 @@ CREATE TABLE IF NOT EXISTS %s (
 			fmt.Sprintf(`CREATE INDEX IF NOT EXISTS idx_users_tenant ON %s (tenant_id)`, table),
 			fmt.Sprintf(`CREATE INDEX IF NOT EXISTS idx_users_email ON %s (email)`, table),
 			fmt.Sprintf(`CREATE INDEX IF NOT EXISTS idx_users_google_sub ON %s (google_sub)`, table),
+			fmt.Sprintf(`CREATE UNIQUE INDEX IF NOT EXISTS idx_users_email_unique ON %s (email) WHERE TRIM(COALESCE(email, '')) != ''`, table),
+			fmt.Sprintf(`CREATE UNIQUE INDEX IF NOT EXISTS idx_users_phone_unique ON %s (phone) WHERE TRIM(COALESCE(phone, '')) != ''`, table),
+			fmt.Sprintf(`CREATE UNIQUE INDEX IF NOT EXISTS idx_users_google_sub_unique ON %s (google_sub) WHERE TRIM(COALESCE(google_sub, '')) != ''`, table),
 		}
 		for _, q := range indexes {
 			if _, err := db.ExecContext(ctx, q); err != nil {
@@ -235,7 +251,7 @@ func (s *SQLStore) CreateProjectAuthUser(ctx context.Context, row *models.Projec
 	prepareAuthUserRow(row)
 	_, err := s.DB.NewInsert().Model(row).Exec(ctx)
 	if err != nil {
-		return nil, err
+		return nil, mapAuthUserUniqueViolation(err)
 	}
 	return row, nil
 }
@@ -407,7 +423,7 @@ func (s *SQLStore) UpdateProjectAuthUser(ctx context.Context, row *models.Projec
 		cols = append(cols, "tenant_id")
 	}
 	_, err := s.DB.NewUpdate().Model(row).Column(cols...).Where("id = ?", row.ID).Exec(ctx)
-	return err
+	return mapAuthUserUniqueViolation(err)
 }
 
 func (s *SQLStore) DeleteProjectAuthUser(ctx context.Context, userID string) error {

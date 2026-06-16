@@ -8,7 +8,6 @@ import (
 	"github.com/apito-io/engine/models"
 )
 
-
 func ConnectDisconnectParamBuilder(project *models.Project, uid string, connectionIds map[string]interface{}, modelType *models.ModelType) ([]*models.ConnectDisconnectParam, error) {
 
 	projectID := project.ID

@@ -62,27 +62,10 @@ func (s *GraphQLServer) completeGeneralGoogleLogin(
 	payload *idtoken.Payload,
 ) (map[string]interface{}, error) {
 	sub := strings.TrimSpace(payload.Subject)
-	if sub == "" {
-		return nil, errors.New("google token missing subject")
-	}
-	email := ""
-	if v, ok := payload.Claims["email"].(string); ok {
-		email = strings.TrimSpace(v)
-	}
-	candidateUsers, err := svc.ListByGoogleSubWithFallback("", sub)
-	if err != nil {
-		return nil, err
-	}
-	var user *models.User
-	if len(candidateUsers) == 1 {
-		user = candidateUsers[0]
-	}
-	if len(candidateUsers) > 1 {
-		return nil, errors.New("multiple users matched this google subject")
-	}
-	if user == nil {
+	email := GoogleEmailFromPayload(payload)
+	user, err := svc.ResolveUserForGoogleLogin(sub, email, GoogleEmailVerified(payload), "", "", func() (*models.User, error) {
 		uid := utility.NewID()
-		user = &models.User{
+		newUser := &models.User{
 			ID:        uid,
 			ProjectID: cache.Project.ID,
 			Username:  internalUserUsername(uid),
@@ -92,11 +75,10 @@ func (s *GraphQLServer) completeGeneralGoogleLogin(
 			GoogleSub: sub,
 			Status:    models.UserStatusActive,
 		}
-		created, err := svc.CreateUserRecord(user, "")
-		if err != nil {
-			return nil, fmt.Errorf("create user: %w", err)
-		}
-		user = created
+		return svc.CreateUserRecord(newUser, "")
+	})
+	if err != nil {
+		return nil, err
 	}
 	if user.Status != models.UserStatusActive {
 		return nil, errors.New("user is not active")
@@ -388,7 +370,7 @@ func (s *GraphQLServer) CreateUserResolverFn(p graphql.ResolveParams) (interface
 	if pw == "" {
 		return nil, errors.New("password is required")
 	}
-	emailLower := strings.TrimSpace(strings.ToLower(getArgString(p.Args, "email")))
+	emailLower := NormalizeUserEmail(getArgString(p.Args, "email"))
 	phoneNorm := models.NormalizeUserPhoneKey(strings.TrimSpace(getArgString(p.Args, "phone")))
 	if phoneNorm == "" {
 		return nil, errors.New("phone is required")
@@ -396,6 +378,12 @@ func (s *GraphQLServer) CreateUserResolverFn(p graphql.ResolveParams) (interface
 	uid := utility.NewID()
 	username, err := svc.ResolveCreateUsername(uid, getArgString(p.Args, "username"), "")
 	if err != nil {
+		return nil, err
+	}
+	if err := svc.assertUserPhoneUnique("", phoneNorm, ""); err != nil {
+		return nil, err
+	}
+	if err := svc.assertUserEmailUnique("", emailLower, ""); err != nil {
 		return nil, err
 	}
 	hash, err := bcrypt.GenerateFromPassword([]byte(pw), bcrypt.DefaultCost)
@@ -463,9 +451,15 @@ func (s *GraphQLServer) UpdateUserResolverFn(p graphql.ResolveParams) (interface
 	}
 	if _, has := p.Args["phone"]; has {
 		appUser.Phone = models.NormalizeUserPhoneKey(strings.TrimSpace(getArgString(p.Args, "phone")))
+		if err := svc.assertUserPhoneUnique("", appUser.Phone, appUser.ID); err != nil {
+			return nil, err
+		}
 	}
 	if _, has := p.Args["email"]; has {
-		appUser.Email = strings.TrimSpace(strings.ToLower(getArgString(p.Args, "email")))
+		appUser.Email = NormalizeUserEmail(getArgString(p.Args, "email"))
+		if err := svc.assertUserEmailUnique("", appUser.Email, appUser.ID); err != nil {
+			return nil, err
+		}
 	}
 	if _, has := p.Args["username"]; has {
 		newName := NormalizeUserUsernameArg(getArgString(p.Args, "username"))

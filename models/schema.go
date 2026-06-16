@@ -82,11 +82,30 @@ type ConnectionType struct {
 	KnownAs  string `json:"known_as,omitempty" firestore:"known_as,omitempty" bson:"known_as,omitempty"`
 }
 
+// NormalizeProjectSchemaConnectionTypes maps legacy pro draft "reverse" direction labels to "backward".
+// Connection direction is always forward/backward; reverse_connection_type GraphQL args are cardinalities only.
+func NormalizeProjectSchemaConnectionTypes(schema *ProjectSchema) {
+	if schema == nil {
+		return
+	}
+	for _, m := range schema.Models {
+		if m == nil {
+			continue
+		}
+		for _, c := range m.Connections {
+			if c != nil && c.Type == "reverse" {
+				c.Type = "backward"
+			}
+		}
+	}
+}
+
 // DedupeProjectSchemaFields removes duplicate root-level fields per model (last wins).
 func DedupeProjectSchemaFields(schema *ProjectSchema) {
 	if schema == nil {
 		return
 	}
+	NormalizeProjectSchemaConnectionTypes(schema)
 	for _, m := range schema.Models {
 		if m == nil {
 			continue

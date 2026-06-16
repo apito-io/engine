@@ -32,6 +32,13 @@ func (d *Driver) maybeEnsureRelationDDL(ctx context.Context, param *models.Commo
 	return d.EnsureRelationArtifactsFromSchema(ctx, param.ProjectSchemaModels)
 }
 
+func (d *Driver) maybeEnsureRelationDDLForMutation(ctx context.Context, param *models.CommonSystemParams) error {
+	if d == nil || param == nil || len(param.ConDisParam) == 0 || len(param.ProjectSchemaModels) == 0 {
+		return nil
+	}
+	return d.EnsureRelationArtifactsFromSchema(ctx, param.ProjectSchemaModels)
+}
+
 func (d *Driver) CountDocOfProject(ctx context.Context, param *models.CommonSystemParams) (interface{}, error) {
 	// Must use RootResolverQueryBuilder(..., true): RootConnectionResolverQueryBuilder emits Arango AQL (FOR/FILTER/...), not SQL.
 	if n, ok, err := d.tryCountFromRowCountTable(ctx, param); ok {
@@ -365,6 +372,9 @@ func (d *Driver) ConnectBuilder(ctx context.Context, root *models.CommonSystemPa
 	if root == nil || len(root.ConDisParam) == 0 {
 		return nil
 	}
+	if err := d.maybeEnsureRelationDDLForMutation(ctx, root); err != nil {
+		return err
+	}
 	if locked := d.lockSQLiteWrite(); locked {
 		defer d.unlockSQLiteWrite()
 	}
@@ -373,6 +383,9 @@ func (d *Driver) ConnectBuilder(ctx context.Context, root *models.CommonSystemPa
 			for _, id := range cdp.ActionIDs {
 				nar := connectBuilderConnectNarrative(cdp, id)
 				logConnectBuilderBegin(nar)
+				if cdp.ForwardConnectionType == nil || cdp.BackwardConnectionType == nil {
+					return fmt.Errorf("incomplete relation pair for connect on %s", id)
+				}
 				switch cdp.ConnectionType {
 				case "forward":
 					switch cdp.BackwardConnectionType.Relation {
@@ -478,6 +491,9 @@ func (d *Driver) ConnectBuilder(ctx context.Context, root *models.CommonSystemPa
 func (d *Driver) DisconnectBuilder(ctx context.Context, param *models.CommonSystemParams) error {
 	if param == nil || len(param.ConDisParam) == 0 {
 		return nil
+	}
+	if err := d.maybeEnsureRelationDDLForMutation(ctx, param); err != nil {
+		return err
 	}
 	if locked := d.lockSQLiteWrite(); locked {
 		defer d.unlockSQLiteWrite()

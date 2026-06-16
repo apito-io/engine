@@ -99,3 +99,82 @@ func TestSQLStoreCountProjectAuthUsersByRole(t *testing.T) {
 	require.Equal(t, 2, counts["public"])
 	require.Equal(t, 1, counts["receptionist"])
 }
+
+func TestSQLStoreUniqueEmailPhoneGoogleSub(t *testing.T) {
+	sqldb, err := sql.Open("sqlite", "file:authusersunique?mode=memory&cache=shared")
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = sqldb.Close() })
+
+	db := bun.NewDB(sqldb, sqlitedialect.New())
+	store := &projectauthusers.SQLStore{DB: db}
+	ctx := context.Background()
+
+	require.NoError(t, store.EnsureUsersTable(ctx))
+
+	base := &models.ProjectAuthUser{
+		ID:       "u1",
+		Username: "alice",
+		Email:    "alice@example.com",
+		Phone:    "+15551111",
+		Secret:   "hash",
+		Role:     "none",
+		Provider: models.UserProviderLocal,
+		Status:   models.UserStatusActive,
+	}
+	_, err = store.CreateProjectAuthUser(ctx, base)
+	require.NoError(t, err)
+
+	dupEmail := &models.ProjectAuthUser{
+		ID:       "u2",
+		Username: "bob",
+		Email:    "alice@example.com",
+		Secret:   "hash",
+		Role:     "none",
+		Provider: models.UserProviderLocal,
+		Status:   models.UserStatusActive,
+	}
+	_, err = store.CreateProjectAuthUser(ctx, dupEmail)
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "email already exists")
+
+	dupPhone := &models.ProjectAuthUser{
+		ID:       "u3",
+		Username: "carol",
+		Email:    "carol@example.com",
+		Phone:    "+15551111",
+		Secret:   "hash",
+		Role:     "none",
+		Provider: models.UserProviderLocal,
+		Status:   models.UserStatusActive,
+	}
+	_, err = store.CreateProjectAuthUser(ctx, dupPhone)
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "phone already exists")
+
+	withGoogle := &models.ProjectAuthUser{
+		ID:        "u4",
+		Username:  "dave",
+		Email:     "dave@example.com",
+		GoogleSub: "google-sub-1",
+		Secret:    "hash",
+		Role:      "none",
+		Provider:  models.UserProviderGoogle,
+		Status:    models.UserStatusActive,
+	}
+	_, err = store.CreateProjectAuthUser(ctx, withGoogle)
+	require.NoError(t, err)
+
+	dupGoogle := &models.ProjectAuthUser{
+		ID:        "u5",
+		Username:  "eve",
+		Email:     "eve@example.com",
+		GoogleSub: "google-sub-1",
+		Secret:    "hash",
+		Role:      "none",
+		Provider:  models.UserProviderGoogle,
+		Status:    models.UserStatusActive,
+	}
+	_, err = store.CreateProjectAuthUser(ctx, dupGoogle)
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "google account already linked")
+}
