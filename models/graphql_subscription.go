@@ -19,6 +19,7 @@ type SubscriptionEvent struct {
 const (
 	SystemEventInfo                   = "info"
 	SystemEventSchemaExecutionUpdated = "schema_execution_updated"
+	SystemEventSchemaPublishProgress  = "schema_publish_progress"
 	SystemEventPluginStatusChanged    = "plugin_status_changed"
 	SystemEventProjectCreated         = "project_created"
 	SystemEventProjectUpdated         = "project_updated"
