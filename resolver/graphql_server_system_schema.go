@@ -135,6 +135,26 @@ func (s *GraphQLServer) BuildServerQueriesAndMutations() {
 			})),
 			Resolve: s.RoleUserCountsResolverFn,
 		},
+		"modelDocumentCounts": &graphql.Field{
+			Name: "ModelDocumentCounts",
+			Args: graphql.FieldConfigArgument{
+				"models": &graphql.ArgumentConfig{
+					Type: graphql.NewList(graphql.String),
+				},
+			},
+			Type: graphql.NewList(graphql.NewObject(graphql.ObjectConfig{
+				Name: "ModelDocumentCountItem",
+				Fields: graphql.Fields{
+					"model": &graphql.Field{
+						Type: graphql.NewNonNull(graphql.String),
+					},
+					"count": &graphql.Field{
+						Type: graphql.NewNonNull(graphql.Int),
+					},
+				},
+			})),
+			Resolve: s.ModelDocumentCountsResolverFn,
+		},
 		"getUser": &graphql.Field{
 			Name: "GetLoggedInUser",
 			Args: graphql.FieldConfigArgument{

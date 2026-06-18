@@ -327,6 +327,111 @@ func (s *GraphQLServer) RoleUserCountsResolverFn(p graphql.ResolveParams) (inter
 	return out, nil
 }
 
+func parseGraphQLStringListArg(args map[string]interface{}, key string) []string {
+	raw, ok := args[key]
+	if !ok || raw == nil {
+		return nil
+	}
+	switch v := raw.(type) {
+	case []interface{}:
+		out := make([]string, 0, len(v))
+		for _, item := range v {
+			if s, ok := item.(string); ok {
+				s = strings.TrimSpace(s)
+				if s != "" {
+					out = append(out, s)
+				}
+			}
+		}
+		return out
+	case []string:
+		out := make([]string, 0, len(v))
+		for _, s := range v {
+			s = strings.TrimSpace(s)
+			if s != "" {
+				out = append(out, s)
+			}
+		}
+		return out
+	default:
+		return nil
+	}
+}
+
+func cloneResolveParamsForModelCount(parent graphql.ResolveParams, modelName string) graphql.ResolveParams {
+	child := parent
+	child.Args = make(map[string]interface{}, len(parent.Args)+2)
+	for k, v := range parent.Args {
+		child.Args[k] = v
+	}
+	child.Args["model"] = modelName
+	child.Args["status"] = "all"
+	return child
+}
+
+func (s *GraphQLServer) ModelDocumentCountsResolverFn(p graphql.ResolveParams) (interface{}, error) {
+	s.Lock()
+	defer s.Unlock()
+
+	var (
+		v      = p.Context.Value
+		router = v("router").(echo.Context)
+	)
+
+	cache, err := s.GetApplicationCache(router)
+	if err != nil {
+		return nil, err
+	}
+
+	if cache.Project.Schema == nil {
+		return []map[string]interface{}{}, nil
+	}
+
+	requested := parseGraphQLStringListArg(p.Args, "models")
+	modelNames := requested
+	if len(modelNames) == 0 {
+		for _, m := range cache.Project.Schema.Models {
+			if m == nil || m.SystemGenerated || strings.TrimSpace(m.Name) == "" {
+				continue
+			}
+			modelNames = append(modelNames, m.Name)
+		}
+	}
+	sort.Strings(modelNames)
+
+	driver, err := s.GraphQLExecutor.GetProjectDriver(cache.Ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	out := make([]map[string]interface{}, 0, len(modelNames))
+	for _, modelArg := range modelNames {
+		modelType := resolveProjectModelFromSchema(cache.Project.Schema.Models, modelArg)
+		if modelType == nil {
+			return nil, ae.ModelTypeNotFound
+		}
+
+		countParams := cloneResolveParamsForModelCount(p, modelType.Name)
+		param := s.NewParam(cache.Param)
+		param.Model = modelType
+		param.ResolveParams = &countParams
+		param.ProjectSchemaModels = cache.Project.Schema.Models
+		param.IsSystemRequest = true
+
+		count, err := driver.CountMultiDocumentOfProject(cache.Ctx, param, false)
+		if err != nil {
+			return nil, err
+		}
+
+		out = append(out, map[string]interface{}{
+			"model": modelType.Name,
+			"count": count,
+		})
+	}
+
+	return out, nil
+}
+
 func (s *GraphQLServer) GetProjectResolverFn(p graphql.ResolveParams) (interface{}, error) {
 	var projectID string
 	if val, ok := p.Args["_id"].(string); ok {
