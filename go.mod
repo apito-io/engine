@@ -6,7 +6,7 @@ require (
 	github.com/99designs/gqlgen v0.17.76
 	github.com/JohannesKaufmann/html-to-markdown v1.6.0
 	github.com/RashadAnsari/go-batch/v2 v2.1.0
-	github.com/apito-io/apitoBolt v0.1.2
+	github.com/apito-io/apitoBolt v0.1.2 // indirect
 	github.com/apito-io/oas v1.2.3
 	github.com/apito-io/types v0.1.4
 	github.com/apito-io/wsgraphql v1.5.4
@@ -20,7 +20,7 @@ require (
 	github.com/fatih/camelcase v1.0.0
 	github.com/getsentry/sentry-go v0.34.1
 	github.com/gin-gonic/gin v1.10.1
-	github.com/go-sql-driver/mysql v1.9.3
+	github.com/go-sql-driver/mysql v1.9.3 // indirect
 	github.com/golang-jwt/jwt v3.2.2+incompatible
 	github.com/gorilla/websocket v1.5.3
 	github.com/graph-gophers/dataloader v5.0.0+incompatible
@@ -39,13 +39,10 @@ require (
 	github.com/liangyaopei/structmap v0.0.0-20200911074950-0e2911025a96
 	github.com/machinebox/graphql v0.2.2
 	github.com/microcosm-cc/bluemonday v1.0.27
-	github.com/nats-io/nats-server/v2 v2.14.2
-	github.com/nats-io/nats.go v1.52.0
-	github.com/nitishm/go-rejson/v4 v4.2.0
 	github.com/oklog/ulid/v2 v2.1.0
 	github.com/patrickmn/go-cache v2.1.0+incompatible
-	github.com/pkg/errors v0.9.1
-	github.com/puzpuzpuz/xsync/v3 v3.5.1
+	github.com/pkg/errors v0.9.1 // indirect
+	github.com/puzpuzpuz/xsync/v3 v3.5.1 // indirect
 	github.com/redis/go-redis/v9 v9.12.1
 	github.com/sirupsen/logrus v1.9.3
 	github.com/stretchr/testify v1.11.1
@@ -54,15 +51,15 @@ require (
 	github.com/tomogoma/go-api-guard v0.0.0-20180312041446-a2bad766ec64
 	github.com/tomogoma/go-typed-errors v0.0.0-20181222204503-0532faf740be
 	github.com/uptrace/bun v1.2.15
-	github.com/uptrace/bun/dialect/mysqldialect v1.2.15
-	github.com/uptrace/bun/dialect/pgdialect v1.2.15
+	github.com/uptrace/bun/dialect/mysqldialect v1.2.15 // indirect
+	github.com/uptrace/bun/dialect/pgdialect v1.2.15 // indirect
 	github.com/uptrace/bun/dialect/sqlitedialect v1.2.15
-	github.com/uptrace/bun/driver/pgdriver v1.2.15
+	github.com/uptrace/bun/driver/pgdriver v1.2.15 // indirect
 	github.com/uptrace/bun/driver/sqliteshim v1.2.15
 	github.com/vektah/gqlparser/v2 v2.5.30
 	github.com/yuin/goldmark v1.7.13
-	go.mongodb.org/mongo-driver v1.17.4
-	go.mongodb.org/mongo-driver/v2 v2.2.2
+	go.mongodb.org/mongo-driver v1.17.4 // indirect
+	go.mongodb.org/mongo-driver/v2 v2.2.2 // indirect
 	go.opentelemetry.io/otel v1.37.0
 	go.opentelemetry.io/otel/metric v1.37.0
 	go.opentelemetry.io/otel/trace v1.37.0
@@ -85,7 +82,6 @@ require (
 	github.com/BurntSushi/toml v1.2.1 // indirect
 	github.com/PuerkitoBio/goquery v1.10.3 // indirect
 	github.com/andybalholm/cascadia v1.3.3 // indirect
-	github.com/antithesishq/antithesis-sdk-go v0.7.0-default-no-op // indirect
 	github.com/aws/aws-sdk-go-v2/aws/protocol/eventstream v1.7.10 // indirect
 	github.com/aws/aws-sdk-go-v2/internal/configsources v1.4.23 // indirect
 	github.com/aws/aws-sdk-go-v2/internal/endpoints/v2 v2.7.23 // indirect
@@ -118,8 +114,6 @@ require (
 	github.com/goccy/go-json v0.10.5 // indirect
 	github.com/golang/protobuf v1.5.4 // indirect
 	github.com/golang/snappy v1.0.0 // indirect
-	github.com/gomodule/redigo v2.0.0+incompatible // indirect
-	github.com/google/go-tpm v0.9.8 // indirect
 	github.com/google/s2a-go v0.1.9 // indirect
 	github.com/google/uuid v1.6.0 // indirect
 	github.com/googleapis/enterprise-certificate-proxy v0.3.6 // indirect
@@ -137,12 +131,8 @@ require (
 	github.com/mattn/go-colorable v0.1.14 // indirect
 	github.com/mattn/go-isatty v0.0.20 // indirect
 	github.com/mattn/go-sqlite3 v1.14.28 // indirect
-	github.com/minio/highwayhash v1.0.4 // indirect
 	github.com/modern-go/concurrent v0.0.0-20180306012644-bacd9c7ef1dd // indirect
 	github.com/modern-go/reflect2 v1.0.2 // indirect
-	github.com/nats-io/jwt/v2 v2.8.2 // indirect
-	github.com/nats-io/nkeys v0.4.16 // indirect
-	github.com/nats-io/nuid v1.0.1 // indirect
 	github.com/ncruces/go-strftime v0.1.9 // indirect
 	github.com/oklog/run v1.2.0 // indirect
 	github.com/opentracing/opentracing-go v1.2.0 // indirect
@@ -187,3 +177,7 @@ require (
 	modernc.org/sqlite v1.38.0 // indirect
 	olympos.io/encoding/edn v0.0.0-20201019073823-d3554ca0b0a3 // indirect
 )
+
+require gitlab.com/apito.io/open_driver v0.0.0
+
+replace gitlab.com/apito.io/open_driver => ../../open_driver

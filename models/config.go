@@ -98,13 +98,13 @@ type Config struct {
 	TokenTTL string `env:"TOKEN_TTL" env-default:"60"`
 
 	// Platform free-cloud object storage (R2/S3-compatible). Used when project storage_settings.use_free_cloud_storage=true.
-	FreeCloudDefaultS3AccessKey     string  `env:"FREE_CLOUD_DEFAULT_S3_ACCESS_KEY" env-default:""`
-	FreeCloudDefaultS3SecretKey     string  `env:"FREE_CLOUD_DEFAULT_S3_SECRET_KEY" env-default:""`
-	FreeCloudDefaultS3Endpoint      string  `env:"FREE_CLOUD_DEFAULT_S3_ENDPOINT" env-default:""`
-	FreeCloudDefaultS3BucketName    string  `env:"FREE_CLOUD_DEFAULT_S3_BUCKET_NAME" env-default:""`
-	FreeCloudDefaultS3PublicBaseURL string  `env:"FREE_CLOUD_DEFAULT_S3_PUBLIC_BASE_URL" env-default:""`
-	FreeCloudDefaultS3ForcePathStyle bool   `env:"FREE_CLOUD_DEFAULT_S3_FORCE_PATH_STYLE" env-default:"true"`
-	FreeCloudStorageLimitGB         float64 `env:"FREE_CLOUD_STORAGE_LIMIT_GB" env-default:"0.5"`
+	FreeCloudDefaultS3AccessKey      string  `env:"FREE_CLOUD_DEFAULT_S3_ACCESS_KEY" env-default:""`
+	FreeCloudDefaultS3SecretKey      string  `env:"FREE_CLOUD_DEFAULT_S3_SECRET_KEY" env-default:""`
+	FreeCloudDefaultS3Endpoint       string  `env:"FREE_CLOUD_DEFAULT_S3_ENDPOINT" env-default:""`
+	FreeCloudDefaultS3BucketName     string  `env:"FREE_CLOUD_DEFAULT_S3_BUCKET_NAME" env-default:""`
+	FreeCloudDefaultS3PublicBaseURL  string  `env:"FREE_CLOUD_DEFAULT_S3_PUBLIC_BASE_URL" env-default:""`
+	FreeCloudDefaultS3ForcePathStyle bool    `env:"FREE_CLOUD_DEFAULT_S3_FORCE_PATH_STYLE" env-default:"true"`
+	FreeCloudStorageLimitGB          float64 `env:"FREE_CLOUD_STORAGE_LIMIT_GB" env-default:"0.5"`
 
 	// Resend API key for transactional email (team invites, etc.).
 	ResendAPIKey string `env:"RESEND_API_KEY" env-default:""`
@@ -112,8 +112,20 @@ type Config struct {
 	// Admin password reset: secret required to call POST /admin/reset-password (e.g. set in ~/.apito/bin/.env)
 	AdminResetSecret string `env:"APITO_ADMIN_RESET_SECRET" env-default:""`
 
-	// Optional driver factory for dependency injection. If nil, built-in defaults are used.
-	DriverFactory interface{} `env:"-"` // Will be type-asserted to DatabaseDriverFactory
+	// Optional driver factory for dependency injection. Required at runtime.
+	DriverFactory interface{} `env:"-"` // type-asserted to interfaces.DatabaseDriverFactory
+
+	// RealtimeBusFactory creates the realtime fan-out bus (NATS, memory, cloudflare stub, etc.).
+	RealtimeBusFactory interface{} `env:"-"` // interfaces.RealtimeBusFactory
+
+	// CacheFactory creates the project/app cache driver.
+	CacheFactory interface{} `env:"-"` // interfaces.CacheFactory
+
+	// KVFactory creates the key-value service driver.
+	KVFactory interface{} `env:"-"` // interfaces.KVFactory
+
+	// PluginHost loads and supervises third-party plugins.
+	PluginHost interface{} `env:"-"` // interfaces.PluginHost
 
 	// DatabaseCheckWrapper optionally wraps the system database check HTTP handler.
 	// Type: func(auth any) echo.HandlerFunc (router type-asserts; avoids importing echo here).
@@ -141,6 +153,12 @@ type Config struct {
 
 	// DDLPostCreateHook is called after a model table/collection is created; can add columns or indexes.
 	DDLPostCreateHook func(ctx context.Context, project *Project, model *ModelType, dbHandle interface{}) error `env:"-"`
+
+	// PreCreateModelHook lets extensions mutate ModelType before create-model DDL (pro: tenant/common flags).
+	PreCreateModelHook func(model *ModelType, args map[string]interface{}) `env:"-"`
+
+	// ApplyModelUpdateHook lets extensions mutate ModelType during updateModel; return true when Ext changed.
+	ApplyModelUpdateHook func(model *ModelType, args map[string]interface{}) bool `env:"-"`
 
 	// PostDocumentInsertHook is called after a document is successfully inserted.
 	PostDocumentInsertHook func(ctx context.Context, params *CommonSystemParams, docID string) error `env:"-"`

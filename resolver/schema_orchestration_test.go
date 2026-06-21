@@ -8,8 +8,8 @@ import (
 	"testing"
 
 	_const "github.com/apito-io/engine/const"
-	projectsql "github.com/apito-io/engine/database/project/sqlite"
-	"github.com/apito-io/engine/database/project/sqlcommon"
+	projectsql "gitlab.com/apito.io/open_driver/project/sqlite"
+	"gitlab.com/apito.io/open_driver/project/sqlcommon"
 	"github.com/apito-io/engine/interfaces"
 	"github.com/apito-io/engine/models"
 	schemasvc "github.com/apito-io/engine/services/schema"

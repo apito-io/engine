@@ -5,7 +5,7 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/apito-io/engine/database/cache/memory"
+	"gitlab.com/apito.io/open_driver/cache/memory"
 	"github.com/apito-io/engine/models"
 )
 

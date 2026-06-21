@@ -10,7 +10,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/apito-io/engine/database/project"
+	"gitlab.com/apito.io/open_driver/project"
 	"github.com/apito-io/engine/interfaces"
 	"github.com/apito-io/engine/models"
 	"github.com/apito-io/engine/telemetry"

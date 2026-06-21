@@ -157,5 +157,4 @@ type ProjectDBInterface interface {
 	CountProjectAuthUsersByRole(ctx context.Context, tenantID string) (map[string]int, error)
 	UpdateProjectAuthUser(ctx context.Context, user *models.ProjectAuthUser) error
 	DeleteProjectAuthUser(ctx context.Context, userID string) error
-
 }

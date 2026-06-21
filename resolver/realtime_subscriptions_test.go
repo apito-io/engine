@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/apito-io/engine/database/realtime/memory"
+	"gitlab.com/apito.io/open_driver/realtime/memory"
 	"github.com/apito-io/engine/models"
 	"github.com/tailor-platform/graphql"
 )

@@ -94,38 +94,23 @@ func InitRouter(cfg *models.Config) (*echo.Echo, error) {
 	server.BuildServerQueriesAndMutations()*/
 
 	fmt.Println(" ---> loading local plugins <--- ")
-	// load the plugin
-	err = server.LoadPlugins(ctx)
+	host, err := database.ResolvePluginHost(cfg)
 	if err != nil {
+		return nil, err
+	}
+	concreteServer := server.GetConcreteServer().(*resolver.GraphQLServer)
+	if err = host.Load(ctx, concreteServer); err != nil {
 		fmt.Printf("Error loading plugins: %v\n", err)
-		// Don't return error to allow server to continue
 	}
 
 	fmt.Println(" ---> waiting for plugins to finish loading <--- ")
-	// Wait for all plugins to finish loading (they run in goroutines)
 	server.WaitForPluginsToLoad()
 
 	fmt.Println(" ---> initializing plugin health monitor <--- ")
-	// Create and start the plugin monitor
-	pluginMonitor := resolver.NewPluginMonitor(server.GetConcreteServer().(*resolver.GraphQLServer))
-
-	// Register all loaded HashiCorp plugins for monitoring
-	for _, pluginID := range server.GetHashiCorpPluginIDs() {
-		pluginMonitor.RegisterPlugin(pluginID)
-		fmt.Printf("🔍 [PLUGIN-MONITOR] Registered plugin for monitoring: %s\n", pluginID)
-	}
-
-	// Start monitoring in a separate goroutine
-	go func() {
-		pluginMonitor.StartMonitoring(ctx)
-	}()
-
-	// Store the monitor in the server for later access (optional)
-	server.SetPluginMonitor(pluginMonitor)
+	host.StartMonitoring(ctx, concreteServer)
 
 	fmt.Println(" ---> initializing connection pool monitor <--- ")
 	// Create and start connection pool monitoring
-	concreteServer := server.GetConcreteServer().(*resolver.GraphQLServer)
 	connectionManager := concreteServer.GetConnectionManager()
 	if connectionManager != nil {
 		connectionManagerRef = connectionManager

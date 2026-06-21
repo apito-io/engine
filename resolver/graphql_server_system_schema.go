@@ -1067,6 +1067,10 @@ func (s *GraphQLServer) BuildServerQueriesAndMutations() {
 				"single_record": &graphql.ArgumentConfig{
 					Type: graphql.Boolean,
 				},
+				"is_common_model": &graphql.ArgumentConfig{
+					Type:        graphql.Boolean,
+					Description: "SaaS: project-wide model without tenant_id scoping",
+				},
 			},
 			Resolve: s.AddModelToProjectResolverFn,
 		},
@@ -1096,6 +1100,10 @@ func (s *GraphQLServer) BuildServerQueriesAndMutations() {
 				},
 				"single_page_model": &graphql.ArgumentConfig{
 					Type: graphql.Boolean,
+				},
+				"is_common_model": &graphql.ArgumentConfig{
+					Type:        graphql.Boolean,
+					Description: "SaaS: project-wide model without tenant_id scoping",
 				},
 			},
 			Resolve: s.UpdateModelResolverFn,

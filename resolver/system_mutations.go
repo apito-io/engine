@@ -9,7 +9,7 @@ import (
 	"time"
 
 	_const "github.com/apito-io/engine/const"
-	projdriver "github.com/apito-io/engine/database/project"
+	projdriver "gitlab.com/apito.io/open_driver/project"
 	ae "github.com/apito-io/engine/err"
 	"github.com/apito-io/engine/interfaces"
 	"github.com/apito-io/engine/models"
@@ -1124,6 +1124,9 @@ func (s *GraphQLServer) AddModelToProjectResolverFn(p graphql.ResolveParams) (in
 		Name:       modelName,
 		SinglePage: singleRecord,
 	}
+	if s.Cfg != nil && s.Cfg.PreCreateModelHook != nil {
+		s.Cfg.PreCreateModelHook(model, p.Args)
+	}
 
 	return s.tryStageSchemaMutation(cache, project, models.SchemaOpTypeCreateModel, graphqlArgsMap(p), func() (interface{}, error) {
 		param := s.NewParam(cache.Param)
@@ -1308,11 +1311,16 @@ func (s *GraphQLServer) UpdateModelResolverFn(p graphql.ResolveParams) (interfac
 	case "delete":
 		opType = models.SchemaOpTypeDeleteModel
 	}
+	if _type == "update" {
+		if _, ok := p.Args["is_common_model"].(bool); ok {
+			return s.updateModel(cache, project, modelName, p.Args)
+		}
+	}
 	return s.tryStageSchemaMutation(cache, project, opType, graphqlArgsMap(p), func() (interface{}, error) {
 		var resp interface{}
 		switch _type {
 		case "update":
-			resp, err = s.updateModel(cache, project, modelName)
+			resp, err = s.updateModel(cache, project, modelName, p.Args)
 			if err != nil {
 				return nil, err
 			}
@@ -1359,7 +1367,7 @@ func (s *GraphQLServer) UpdateModelResolverFn(p graphql.ResolveParams) (interfac
 	})
 }
 
-func (s *GraphQLServer) updateModel(cache *models.ApplicationCache, project *models.Project, modelName string) (*models.ModelType, error) {
+func (s *GraphQLServer) updateModel(cache *models.ApplicationCache, project *models.Project, modelName string, args map[string]interface{}) (*models.ModelType, error) {
 
 	if modelName == "" {
 		return nil, errors.New(ae.MODEL_NAME_REQUIRED)
@@ -1369,15 +1377,46 @@ func (s *GraphQLServer) updateModel(cache *models.ApplicationCache, project *mod
 
 	if project.Schema == nil {
 		return nil, errors.New("please create a model first")
-	} else {
-		for _, ct := range project.Schema.Models {
-			if ct.Name == modelName {
-				updatedModel = ct
-				break
-			}
+	}
+	for _, ct := range project.Schema.Models {
+		if ct.Name == modelName {
+			updatedModel = ct
+			break
 		}
 	}
+	if updatedModel == nil {
+		return nil, ae.ModelTypeNotFound
+	}
 
+	changed := false
+	if s.Cfg != nil && s.Cfg.ApplyModelUpdateHook != nil {
+		changed = s.Cfg.ApplyModelUpdateHook(updatedModel, args)
+	}
+	if !changed {
+		return updatedModel, nil
+	}
+
+	err := s.runSchemaChange(cache.Ctx, schemasvc.RunInput{
+		Ctx:           cache.Ctx,
+		Project:       project,
+		OperationType: models.SchemaOpTypeUpdateModel,
+		Request:       args,
+		BaseDriver:    nil,
+		SkipBaseDDL:   true,
+		ApplyDDL: func(interfaces.ProjectDBInterface) error {
+			return nil
+		},
+		PersistSystem: func() error {
+			return s.SystemDriver.UpdateProject(cache.Ctx, project, false)
+		},
+		RefreshCache: func() error {
+			_, refreshErr := s.refreshProjectAndReCache(cache.Ctx, project.ID)
+			return refreshErr
+		},
+	})
+	if err != nil {
+		return nil, err
+	}
 	return updatedModel, nil
 }
 

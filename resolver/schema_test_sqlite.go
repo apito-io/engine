@@ -5,7 +5,7 @@ import (
 	"testing"
 
 	_const "github.com/apito-io/engine/const"
-	coresqlite "github.com/apito-io/engine/database/project/sqlite"
+	coresqlite "gitlab.com/apito.io/open_driver/project/sqlite"
 	"github.com/apito-io/engine/interfaces"
 	"github.com/apito-io/engine/models"
 	"github.com/uptrace/bun"
