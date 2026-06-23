@@ -15,7 +15,6 @@ import (
 	"github.com/apito-io/engine/interfaces"
 	"github.com/apito-io/engine/models"
 	"github.com/golang-jwt/jwt"
-	"github.com/redis/go-redis/v9"
 	"golang.org/x/net/context"
 )
 
@@ -497,7 +496,7 @@ func (s *JWTService) GetTokenSession(ctx context.Context, email string) (string,
 	key := fmt.Sprintf("apito_session:%s", email)
 	val, err := s.kvService.GetValue(ctx, key)
 	if err != nil {
-		if err.Error() == "key not found" || err.Error() == "key expired" || errors.Is(err, redis.Nil) {
+		if isKVKeyMissing(err) {
 			return "", nil
 		} else {
 			return "", err
@@ -611,6 +610,14 @@ func (s *JWTService) getRemainingValidity(timestamp interface{}) int {
 }
 
 func getPrivateKey(path string) *rsa.PrivateKey {
+	if pem := strings.TrimSpace(jwtPrivateKeyPEM()); pem != "" {
+		rsaPri, err := jwt.ParseRSAPrivateKeyFromPEM([]byte(pem))
+		if err != nil {
+			fmt.Printf("Could not parse JWT_PRIVATE_KEY PEM: %s\n", err.Error())
+			return nil
+		}
+		return rsaPri
+	}
 	privateKeyFile, err := ioutil.ReadFile(path)
 	if err != nil {
 		msg := fmt.Sprintf("Could not read private file from path %s", path)
@@ -627,6 +634,14 @@ func getPrivateKey(path string) *rsa.PrivateKey {
 }
 
 func getPublicKey(path string) *rsa.PublicKey {
+	if pem := strings.TrimSpace(jwtPublicKeyPEM()); pem != "" {
+		rsaPub, err := jwt.ParseRSAPublicKeyFromPEM([]byte(pem))
+		if err != nil {
+			fmt.Printf("Could not parse JWT_PUBLIC_KEY PEM: %s\n", err.Error())
+			return nil
+		}
+		return rsaPub
+	}
 	publicKeyFile, err := ioutil.ReadFile(path)
 	if err != nil {
 		msg := fmt.Sprintf("Could not read public file from path %s", path)

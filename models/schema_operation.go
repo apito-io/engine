@@ -2,8 +2,6 @@ package models
 
 import (
 	"encoding/json"
-
-	"github.com/uptrace/bun"
 )
 
 // Schema operation ledger statuses.
@@ -51,7 +49,7 @@ type SchemaOperationStep struct {
 
 // SchemaOperation is the persisted saga log for a schema mutation.
 type SchemaOperation struct {
-	bun.BaseModel `bun:"table:schema_operations,alias:schema_op"`
+	ORMBase `bun:"table:schema_operations,alias:schema_op"`
 
 	ID              string `bun:"id,pk,type:uuid"`
 	ProjectID       string `bun:"project_id,type:uuid,notnull"`

@@ -1,3 +1,5 @@
+//go:build !cloudflare
+
 // Package controller provides HTTP handlers for plugin management operations
 package controller
 

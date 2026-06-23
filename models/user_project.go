@@ -2,7 +2,6 @@ package models
 
 import (
 	"github.com/apito-io/types/protobuff"
-	"github.com/uptrace/bun"
 )
 
 type MetaField struct {
@@ -73,7 +72,7 @@ type SystemUser struct {
 }
 
 type ProjectSettings struct {
-	bun.BaseModel `bun:"table:project_settings"`
+	ORMBase `bun:"table:project_settings"`
 
 	ProjectID             string   `bun:"type:uuid,pk" json:"project_id,omitempty" firestore:"project_id,omitempty" bson:"_id,omitempty"`
 	Locals                []string `bun:"type:json,nullzero" json:"locals,omitempty" firestore:"locals,omitempty" bson:"locals,omitempty"`

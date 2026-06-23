@@ -1,3 +1,5 @@
+//go:build !cloudflare
+
 package storage
 
 import (
@@ -80,14 +82,6 @@ func NewProjectS3Storage(project *models.Project, cfg *models.Config) (*ProjectS
 	}, nil
 }
 
-// BuildObjectKey returns the canonical storage key: {project_id}/{file_type}/{uuid}{ext}.
-func BuildObjectKey(projectID, fileType, fileID, ext string) string {
-	ext = strings.TrimSpace(ext)
-	if ext != "" && !strings.HasPrefix(ext, ".") {
-		ext = "." + ext
-	}
-	return fmt.Sprintf("%s/%s/%s%s", projectID, fileType, fileID, ext)
-}
 
 // PublicURL builds the object URL from PublicBaseURL or endpoint/bucket/key.
 func (s *ProjectS3Storage) PublicURL(key string) string {

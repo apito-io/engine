@@ -1,3 +1,5 @@
+//go:build !cloudflare
+
 package models
 
 import (
@@ -25,9 +27,3 @@ type HashiCorpPluginCache struct {
 	PluginConfigurations *protobuff.PluginDetails
 	RPCClient            hcplugin.ClientProtocol
 }
-
-/*type LoadedPlugin struct {
-	// application specific plugin & function
-	LocalPluginCache   map[string]*LocalPluginCache
-	FunctionCache map[string]*FunctionCache
-}*/

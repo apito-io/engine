@@ -1,3 +1,5 @@
+//go:build !cloudflare
+
 package telemetry
 
 import (

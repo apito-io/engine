@@ -1,3 +1,5 @@
+//go:build !cloudflare
+
 package router
 
 import (
@@ -62,8 +64,7 @@ func InitRouter(cfg *models.Config) (*echo.Echo, error) {
 		return c.String(http.StatusOK, c.Param("token"))
 	})
 
-	//router.Use(middleware.Static("files/storage"))
-	router.Static("/static/media", "files/storage")
+	registerMediaRoutes(router)
 
 	/*
 		cacheDriver, err := badger.GetBadgerDriver(cfg)

@@ -13,7 +13,6 @@ import (
 
 	"github.com/apito-io/engine/models"
 	"github.com/apito-io/engine/utility"
-	"github.com/getsentry/sentry-go"
 	"golang.org/x/crypto/bcrypt"
 )
 
@@ -140,8 +139,7 @@ func (s *GraphQLServer) runWebHook(event string, hook *models.Webhook, payload i
 	jsonStr, _ := json.Marshal(hookPost)
 	req, err := http.NewRequest("POST", hook.URL, bytes.NewBuffer(jsonStr))
 	if err != nil {
-		sentry.CaptureException(err)
-		sentry.Flush(time.Second * 2)
+		utility.CaptureInternalServerError(err, nil)
 		return err
 	}
 	//req.Header.Set("X-Custom-Header", "myvalue")
@@ -153,8 +151,7 @@ func (s *GraphQLServer) runWebHook(event string, hook *models.Webhook, payload i
 	}
 	resp, err := client.Do(req)
 	if err != nil {
-		sentry.CaptureException(err)
-		sentry.Flush(time.Second * 2)
+		utility.CaptureInternalServerError(err, nil)
 		return err
 	}
 	defer resp.Body.Close()
@@ -163,8 +160,7 @@ func (s *GraphQLServer) runWebHook(event string, hook *models.Webhook, payload i
 	fmt.Println("response Headers:", resp.Header)
 	body, err := ioutil.ReadAll(resp.Body)
 	if err != nil {
-		sentry.CaptureException(err)
-		sentry.Flush(time.Second * 2)
+		utility.CaptureInternalServerError(err, nil)
 		return err
 	}
 	fmt.Println("response Body:", string(body))
@@ -180,8 +176,7 @@ func (s *GraphQLServer) triggerFunction(ctx context.Context, f *models.ApitoFunc
 	_, _, err := s.HandleApitoFunction(paramCtx, cache, f.Name, data)
 	if err != nil {
 		fmt.Println(err.Error())
-		sentry.CaptureException(err)
-		sentry.Flush(time.Second * 2)
+		utility.CaptureInternalServerError(err, nil)
 	}
 	//return result, nil
 }

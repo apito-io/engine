@@ -1,8 +1,11 @@
+//go:build !cloudflare
+
 package utility
 
 import (
-	"github.com/getsentry/sentry-go"
 	"time"
+
+	"github.com/getsentry/sentry-go"
 )
 
 func CaptureInternalServerError(err error, scopes map[string]interface{}) error {

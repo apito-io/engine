@@ -3,8 +3,6 @@ package models
 import (
 	"strings"
 	"time"
-
-	"github.com/uptrace/bun"
 )
 
 // Project end-user accounts (application auth). Not SystemUser (console operators).
@@ -26,7 +24,7 @@ func NormalizeUserPhoneKey(s string) string {
 
 // User is a project-scoped application end-user (legacy system DB: project_users; target store: project DB users).
 type User struct {
-	bun.BaseModel `bun:"table:project_users,alias:pu"`
+	ORMBase `bun:"table:project_users,alias:pu"`
 
 	ID        string `bun:"id,pk" json:"id" bson:"_id,omitempty"`
 	ProjectID string `bun:"project_id,notnull" json:"project_id" bson:"project_id,omitempty"`

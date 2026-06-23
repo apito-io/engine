@@ -18,7 +18,6 @@ import (
 	"github.com/apito-io/engine/resolver"
 	"github.com/apito-io/engine/telemetry"
 	"github.com/apito-io/engine/scaler"
-	"github.com/getsentry/sentry-go"
 	"github.com/gorilla/websocket"
 	"github.com/labstack/echo/v4"
 	"github.com/tailor-platform/graphql"
@@ -854,14 +853,5 @@ func (g *GraphCtrl) PublicSubscriptionWrapHandler(c echo.Context) error {
 }
 
 func CaptureInternalServerError(err error, scopes map[string]interface{}) error {
-	sentry.WithScope(func(scope *sentry.Scope) {
-		if len(scopes) > 0 {
-			for k, v := range scopes {
-				scope.SetExtra(k, v)
-			}
-		}
-		sentry.CaptureException(err)
-	})
-	sentry.Flush(time.Second * 2)
-	return err
+	return utility.CaptureInternalServerError(err, scopes)
 }

@@ -11,13 +11,29 @@ import (
 func CORSMiddleware(cfg *models.Config) echo.MiddlewareFunc {
 	return func(next echo.HandlerFunc) echo.HandlerFunc {
 		return func(c echo.Context) (err error) {
+			path := c.Request().URL.Path
+			if path == "" {
+				path = c.Request().RequestURI
+				if i := strings.Index(path, "?"); i >= 0 {
+					path = path[:i]
+				}
+			}
 
-			path := c.Request().RequestURI
 			useTokenFlag := c.Request().Header.Get("X-Use-Cookies")
-			accessHeaderRequest := c.Request().Header.Get("Access-Control-Request-Headers")
-			if strings.HasPrefix(path, "/system/") || strings.HasPrefix(path, "/auth/") || useTokenFlag == "true" || strings.Contains(accessHeaderRequest, "x-use-cookies") { // for all system related calls enforce CORS
-				c.Response().Header().Set("Access-Control-Allow-Origin", cfg.CORSOrigin)
-			} else { // for public calls ignore it
+			accessHeaderRequest := strings.ToLower(c.Request().Header.Get("Access-Control-Request-Headers"))
+			needsCredentialedCORS := strings.HasPrefix(path, "/system/") ||
+				strings.HasPrefix(path, "/auth/") ||
+				useTokenFlag == "true" ||
+				strings.Contains(accessHeaderRequest, "x-use-cookies")
+
+			if needsCredentialedCORS {
+				origin := strings.TrimSpace(cfg.CORSOrigin)
+				if origin == "" {
+					origin = c.Request().Header.Get("Origin")
+				}
+				c.Response().Header().Set("Access-Control-Allow-Origin", origin)
+				c.Response().Header().Set("Access-Control-Allow-Credentials", "true")
+			} else {
 				c.Response().Header().Set("Access-Control-Allow-Origin", "*")
 			}
 
@@ -25,11 +41,9 @@ func CORSMiddleware(cfg *models.Config) echo.MiddlewareFunc {
 			c.Response().Header().Set("Access-Control-Allow-Methods", "POST, PATCH, GET, OPTIONS, PUT, DELETE")
 			c.Response().Header().Set("Access-Control-Allow-Headers", "Origin, Content-Type, Content-Length, X-USE-Cookies, X-Apito-Key, X-Apito-Sync-Key, X-Apito-Project-Id, X-Apito-Tenant-ID, X-Connection-Id, X-Fn-Hash, X-Requested-With, Accept-Encoding, X-CSRF-Token, Authorization")
 			c.Response().Header().Set("Access-Control-Expose-Headers", "Content-Length")
-			c.Response().Header().Set("Access-Control-Allow-Credentials", "true")
 
 			if c.Request().Method == "OPTIONS" {
-				//c.Response().Header().Set(echo.HeaderAllow, "OPTIONS")
-				c.Response().Writer.WriteHeader(http.StatusOK)
+				return c.NoContent(http.StatusNoContent)
 			}
 			return next(c)
 		}

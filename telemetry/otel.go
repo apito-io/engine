@@ -1,4 +1,5 @@
-// Package telemetry provides OpenTelemetry metric helpers for the Apito engine.
+//go:build !cloudflare
+
 // Open-core stays Prometheus-client-free; register a MeterProvider at process startup to export metrics (exporter choice is deployment-specific).
 package telemetry
 

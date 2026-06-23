@@ -1,3 +1,5 @@
+//go:build !cloudflare
+
 package controller
 
 import (

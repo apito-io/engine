@@ -3,8 +3,6 @@ package models
 import (
 	"strings"
 	"time"
-
-	"github.com/uptrace/bun"
 )
 
 const (
@@ -15,7 +13,7 @@ const (
 // ProjectAuthUser is an app end-user row stored in the project database (table: users).
 // Project scope is implied by the database connection; tenant_id is used for SaaS shared-DB isolation.
 type ProjectAuthUser struct {
-	bun.BaseModel `bun:"table:users,alias:u"`
+	ORMBase `bun:"table:users,alias:u"`
 
 	ID        string `bun:"id,pk" json:"id"`
 	TenantID  string `bun:"tenant_id,nullzero" json:"tenant_id,omitempty"`

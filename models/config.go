@@ -105,6 +105,8 @@ type Config struct {
 	FreeCloudDefaultS3PublicBaseURL  string  `env:"FREE_CLOUD_DEFAULT_S3_PUBLIC_BASE_URL" env-default:""`
 	FreeCloudDefaultS3ForcePathStyle bool    `env:"FREE_CLOUD_DEFAULT_S3_FORCE_PATH_STYLE" env-default:"true"`
 	FreeCloudStorageLimitGB          float64 `env:"FREE_CLOUD_STORAGE_LIMIT_GB" env-default:"0.5"`
+	// CloudflareR2Bound is set at Worker boot when MEDIA_R2 binding initializes (not from env).
+	CloudflareR2Bound bool `env:"-"`
 
 	// Resend API key for transactional email (team invites, etc.).
 	ResendAPIKey string `env:"RESEND_API_KEY" env-default:""`

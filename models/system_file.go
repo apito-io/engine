@@ -6,7 +6,6 @@ import (
 	"mime"
 	"strings"
 
-	"github.com/uptrace/bun"
 )
 
 const (
@@ -24,7 +23,7 @@ const (
 
 // ProjectFile is file metadata stored in the project database (table: files).
 type ProjectFile struct {
-	bun.BaseModel `bun:"table:files,alias:pf"`
+	ORMBase `bun:"table:files,alias:pf"`
 
 	ID            string `bun:"id,type:uuid,pk" json:"id,omitempty" firestore:"id,omitempty" bson:"_id,omitempty"`
 	ProjectID     string `bun:"project_id,type:uuid,nullzero" json:"project_id,omitempty" firestore:"project_id,omitempty" bson:"project_id,omitempty"`
