@@ -2,6 +2,7 @@ package resolver
 
 import (
 	"context"
+	"errors"
 	"testing"
 
 	"github.com/apito-io/engine/models"
@@ -31,6 +32,58 @@ func TestProjectUserServiceCountUsersByRoleFallback(t *testing.T) {
 	}
 	if counts["public"] != 3 {
 		t.Fatalf("expected 3 public users, got %#v", counts)
+	}
+}
+
+type failingAuthUserStore struct {
+	err error
+}
+
+func (f *failingAuthUserStore) EnsureUsersTable(context.Context) error { return nil }
+func (f *failingAuthUserStore) CreateProjectAuthUser(context.Context, *models.ProjectAuthUser) (*models.ProjectAuthUser, error) {
+	return nil, nil
+}
+func (f *failingAuthUserStore) GetProjectAuthUser(context.Context, string) (*models.ProjectAuthUser, error) {
+	return nil, nil
+}
+func (f *failingAuthUserStore) GetProjectAuthUserByUsername(context.Context, string) (*models.ProjectAuthUser, error) {
+	return nil, nil
+}
+func (f *failingAuthUserStore) ListProjectAuthUsersByEmail(context.Context, string, string) ([]*models.ProjectAuthUser, error) {
+	return nil, nil
+}
+func (f *failingAuthUserStore) ListProjectAuthUsersByPhone(context.Context, string, string) ([]*models.ProjectAuthUser, error) {
+	return nil, nil
+}
+func (f *failingAuthUserStore) ListProjectAuthUsersByGoogleSub(context.Context, string, string) ([]*models.ProjectAuthUser, error) {
+	return nil, nil
+}
+func (f *failingAuthUserStore) SearchProjectAuthUsers(context.Context, string, int, int) ([]*models.ProjectAuthUser, int, error) {
+	return nil, 0, nil
+}
+func (f *failingAuthUserStore) CountProjectAuthUsersByRole(context.Context, string) (map[string]int, error) {
+	return nil, f.err
+}
+func (f *failingAuthUserStore) UpdateProjectAuthUser(context.Context, *models.ProjectAuthUser) error {
+	return nil
+}
+func (f *failingAuthUserStore) DeleteProjectAuthUser(context.Context, string) error { return nil }
+
+func TestProjectUserServiceCountUsersByRoleStoreErrorFallback(t *testing.T) {
+	svc := &ProjectUserService{
+		ctx:       context.Background(),
+		projectID: "p1",
+		store:     &failingAuthUserStore{err: errors.New("tenant db unavailable")},
+		sys: &countingSystemDriver{
+			counts: map[string]int{"admin": 2},
+		},
+	}
+	counts, err := svc.CountUsersByRole()
+	if err != nil {
+		t.Fatalf("CountUsersByRole: %v", err)
+	}
+	if counts["admin"] != 2 {
+		t.Fatalf("expected system fallback counts, got %#v", counts)
 	}
 }
 

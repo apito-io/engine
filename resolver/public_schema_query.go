@@ -181,6 +181,7 @@ func (s *GraphQLServer) CountResolverFn(p graphql.ResolveParams) (interface{}, e
 	param := s.NewParam(cache.Param)
 	param.Model = modelType
 	param.ResolveParams = &pp
+	param.ProjectSchemaModels = cache.Project.Schema.Models
 	param.OnlyReturnCount = true
 
 	driver, err := s.GraphQLExecutor.GetProjectDriver(dbCtx)
@@ -244,6 +245,7 @@ func (s *GraphQLServer) AggregateResolverFn(p graphql.ResolveParams) (interface{
 	param := s.NewParam(cache.Param)
 	param.Model = modelType
 	param.ResolveParams = &pp
+	param.ProjectSchemaModels = cache.Project.Schema.Models
 	param.IsAggregateQuery = true
 
 	// this is must be here for aggregate query

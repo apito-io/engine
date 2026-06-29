@@ -146,10 +146,34 @@ func BuildWhereRelationConditionArgument(name string, connections []*models.Conn
 	for _, connection := range connections {
 		// only do it for has_one, has_many, many_to_many relation
 		if len(whereArgs[connection.Model]) > 0 {
+			relationFields := graphql.InputObjectConfigFieldMap{}
+			for k, v := range whereArgs[connection.Model] {
+				relationFields[k] = v
+			}
+			relationFields["_id"] = &graphql.InputObjectFieldConfig{
+				Type: graphql.NewInputObject(graphql.InputObjectConfig{
+					Name:        strings.ToUpper(name + "_" + connection.Model + "_Relation_ID_Filter_Condition"),
+					Description: "Filter related documents by id.",
+					Fields: graphql.InputObjectConfigFieldMap{
+						"eq": &graphql.InputObjectFieldConfig{
+							Type: graphql.String,
+						},
+						"ne": &graphql.InputObjectFieldConfig{
+							Type: graphql.String,
+						},
+						"in": &graphql.InputObjectFieldConfig{
+							Type: graphql.NewList(graphql.String),
+						},
+						"not_in": &graphql.InputObjectFieldConfig{
+							Type: graphql.NewList(graphql.String),
+						},
+					},
+				}),
+			}
 			fields[connection.Model] = &graphql.InputObjectFieldConfig{
 				Type: graphql.NewInputObject(graphql.InputObjectConfig{
 					Name:   strings.ToUpper(name + "_" + connection.Model + "_Where_Relation_Filter_Condition"),
-					Fields: whereArgs[connection.Model],
+					Fields: relationFields,
 				}),
 			}
 		}

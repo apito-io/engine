@@ -120,21 +120,6 @@ func (s *GraphQLServer) BuildServerQueriesAndMutations() {
 			}),
 			Resolve: s.ListRoleScopesResolverFn,
 		},
-		"roleUserCounts": &graphql.Field{
-			Name: "RoleUserCounts",
-			Type: graphql.NewList(graphql.NewObject(graphql.ObjectConfig{
-				Name: "RoleUserCountItem",
-				Fields: graphql.Fields{
-					"role": &graphql.Field{
-						Type: graphql.NewNonNull(graphql.String),
-					},
-					"count": &graphql.Field{
-						Type: graphql.NewNonNull(graphql.Int),
-					},
-				},
-			})),
-			Resolve: s.RoleUserCountsResolverFn,
-		},
 		"modelDocumentCounts": &graphql.Field{
 			Name: "ModelDocumentCounts",
 			Args: graphql.FieldConfigArgument{

@@ -249,12 +249,10 @@ func (svc *ProjectUserService) searchWithFallback(tenantID string, limit, offset
 func (svc *ProjectUserService) countByRoleWithFallback(tenantID string) (map[string]int, error) {
 	if svc.store != nil {
 		counts, err := svc.store.CountProjectAuthUsersByRole(svc.ctx, tenantID)
-		if err != nil && !errors.Is(err, ae.ErrProjectAuthUsersUnsupported) {
-			return nil, err
-		}
-		if len(counts) > 0 {
+		if err == nil && len(counts) > 0 {
 			return counts, nil
 		}
+		// Fall back to system project_users when store is unsupported or tenant DB fails.
 	}
 	if svc.sys == nil {
 		return map[string]int{}, nil

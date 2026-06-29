@@ -2320,13 +2320,19 @@ func (s *GraphQLServer) UpsertFieldToModelResolverFn(p graphql.ResolveParams) (i
 	if val, ok := p.Args["is_update"].(bool); ok {
 		isUpdate = val
 	}
+
 	// now search for fields
 	fieldInfo, err := s.searchAndOperateOnFields(&modelType.Fields, &models.ValidIdentifier{
 		Identifier:  identifier,
 		ParentField: parentField,
 	}, nil, nil)
 	if err != nil {
-		return nil, err
+		if parentField != "" && s.schemaVersioningActive() && errors.Is(err, ae.ErrParentFieldNotFound) {
+			err = nil
+			fieldInfo = nil
+		} else {
+			return nil, err
+		}
 	}
 
 	if !isUpdate && fieldInfo != nil {
@@ -3189,7 +3195,7 @@ func (s *GraphQLServer) searchAndOperateOnFields(fields *[]*models.FieldInfo, ex
 		}
 		parentField := varSearch(*fields)
 		if parentField == nil {
-			return nil, errors.New("parent field not found")
+			return nil, ae.ErrParentFieldNotFound
 		}
 		// Now search in parent's subfields for the identifier
 		for _, sub := range parentField.SubFieldInfo {

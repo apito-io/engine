@@ -34,6 +34,9 @@ const MODEL_IS_REQUIRED = "model is required"
 
 var ModelTypeNotFound = fmt.Errorf("model type not found")
 
+// ErrParentFieldNotFound is returned when upsertFieldToModel cannot resolve parent_field on the live schema.
+var ErrParentFieldNotFound = errors.New("parent field not found")
+
 const NEW_MODEL_NAME_REQUIRED = "new model name is required"
 
 // third party

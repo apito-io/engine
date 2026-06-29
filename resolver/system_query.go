@@ -291,42 +291,6 @@ func (s *GraphQLServer) GetCurrentProjectResolverFn(p graphql.ResolveParams) (in
 	return project, nil
 }
 
-func (s *GraphQLServer) RoleUserCountsResolverFn(p graphql.ResolveParams) (interface{}, error) {
-	var (
-		v      = p.Context.Value
-		router = v("router").(echo.Context)
-	)
-
-	cache, err := s.GetApplicationCache(router)
-	if err != nil {
-		return nil, err
-	}
-
-	svc, err := s.ProjectUserService(cache, cache.Ctx)
-	if err != nil {
-		return nil, err
-	}
-	counts, err := svc.CountUsersByRole()
-	if err != nil {
-		return nil, err
-	}
-
-	roles := make([]string, 0, len(counts))
-	for role := range counts {
-		roles = append(roles, role)
-	}
-	sort.Strings(roles)
-
-	out := make([]map[string]interface{}, 0, len(roles))
-	for _, role := range roles {
-		out = append(out, map[string]interface{}{
-			"role":  role,
-			"count": counts[role],
-		})
-	}
-	return out, nil
-}
-
 func parseGraphQLStringListArg(args map[string]interface{}, key string) []string {
 	raw, ok := args[key]
 	if !ok || raw == nil {
