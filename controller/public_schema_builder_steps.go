@@ -22,6 +22,9 @@ func collectFilteredModelsForPublicSchema(
 
 	if cache.IncomingRequest == nil {
 		for _, model := range project.Schema.Models {
+			if models.ModelIsProjectAuthUserModel(model) {
+				continue
+			}
 			modelName := model.Name
 			givenPermissions, e := utility.BuildCRUDPermissions(modelName, role)
 			if e != nil {
@@ -38,6 +41,9 @@ func collectFilteredModelsForPublicSchema(
 			operationType = filter.OperationType
 			for _, _fm := range filter.FilteredModels {
 				for _, model := range project.Schema.Models {
+					if models.ModelIsProjectAuthUserModel(model) {
+						continue
+					}
 					if _fm.Name == model.Name {
 						modelName := model.Name
 						givenPermissions, e := utility.BuildCRUDPermissions(modelName, role)

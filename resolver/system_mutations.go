@@ -9,7 +9,6 @@ import (
 	"time"
 
 	_const "github.com/apito-io/engine/const"
-	projdriver "gitlab.com/apito.io/open_driver/project"
 	ae "github.com/apito-io/engine/err"
 	"github.com/apito-io/engine/interfaces"
 	"github.com/apito-io/engine/models"
@@ -22,6 +21,7 @@ import (
 	"github.com/apito-io/types/protobuff"
 	"github.com/labstack/echo/v4"
 	"github.com/tailor-platform/graphql"
+	projdriver "gitlab.com/apito.io/open_driver/project"
 )
 
 func (s *GraphQLServer) GenerateProjectTokenResolverFn(p graphql.ResolveParams) (interface{}, error) {
@@ -1594,6 +1594,9 @@ func (s *GraphQLServer) deleteModel(cache *models.ApplicationCache, project *mod
 
 	if modelName == "user" {
 		return nil, errors.New("can not delete User Model. If you dont want it then remove User Addons")
+	}
+	if models.ModelNameIsReservedProjectAuthUser(modelName) {
+		return nil, errors.New("can not delete the application users model")
 	}
 
 	driver, err := s.getSchemaBaseProjectDriver(cache.Ctx)
@@ -3289,6 +3292,10 @@ func (s *GraphQLServer) searchAndOperateOnFields(fields *[]*models.FieldInfo, ex
 
 func (s *GraphQLServer) deleteRelationField(ctx context.Context, project *models.Project, modelType *models.ModelType, identifier, knownAs string) (*models.ConnectionType, *models.ConnectionType, error) {
 
+	if project != nil && project.Schema != nil {
+		models.EnsureProjectAuthUserModelInSchema(project.Schema)
+	}
+
 	// struct the connection type before removing from schema
 	var fromConnectionType *models.ConnectionType
 	// delete the forward relation
@@ -3425,6 +3432,14 @@ func (s *GraphQLServer) DeleteConnectionFromModelResolverFn(p graphql.ResolvePar
 		return nil, errors.New("model Not Found")
 	}
 
+	authUsersPersisted := false
+	for _, m := range project.Schema.Models {
+		if m != nil && models.ModelIsProjectAuthUserModel(m) {
+			authUsersPersisted = true
+			break
+		}
+	}
+
 	return s.tryStageSchemaMutation(cache, project, models.SchemaOpTypeDeleteConnection, graphqlArgsMap(p), func() (interface{}, error) {
 		driver, err := s.GraphQLExecutor.GetProjectDriver(cache.Ctx)
 		if err != nil {
@@ -3454,7 +3469,7 @@ func (s *GraphQLServer) DeleteConnectionFromModelResolverFn(p graphql.ResolvePar
 		if err := s.SystemDriver.UpsertModelType(cache.Ctx, project.ID, fromModelType); err != nil {
 			return nil, err
 		}
-		if toModelType != nil {
+		if toModelType != nil && (!models.ModelIsProjectAuthUserModel(toModelType) || authUsersPersisted) {
 			if err := s.SystemDriver.UpsertModelType(cache.Ctx, project.ID, toModelType); err != nil {
 				return nil, err
 			}

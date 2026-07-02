@@ -465,6 +465,7 @@ func (s *GraphQLServer) refreshProjectAndReCache(ctx context.Context, projectID 
 	}
 	if fresh != nil && fresh.Schema != nil {
 		models.NormalizeProjectSchemaConnectionTypes(fresh.Schema)
+		applyRuntimeSchemaAugments(fresh)
 	}
 	if _, err := s.ProjectCache.SaveProject(ctx, fresh); err != nil {
 		return nil, err
@@ -630,6 +631,7 @@ func (s *GraphQLServer) LoadProjectCache(ctx context.Context, projectID string) 
 	if _project != nil {
 		if _project.Schema != nil {
 			models.NormalizeProjectSchemaConnectionTypes(_project.Schema)
+			applyRuntimeSchemaAugments(_project)
 		}
 		if err := s.ApplyNamingV2AfterProjectLoad(ctx, _project); err != nil {
 			return nil, err
@@ -637,6 +639,14 @@ func (s *GraphQLServer) LoadProjectCache(ctx context.Context, projectID string) 
 	}
 
 	return _project, nil
+}
+
+// applyRuntimeSchemaAugments patches in-memory project schema with system models that are not persisted.
+func applyRuntimeSchemaAugments(project *models.Project) {
+	if project == nil || project.Schema == nil {
+		return
+	}
+	models.EnsureProjectAuthUserModelInSchema(project.Schema)
 }
 
 func isArangoProjectEngine(engine string) bool {

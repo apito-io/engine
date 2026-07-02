@@ -39,6 +39,8 @@ func TestCanonicalizeModelName(t *testing.T) {
 		{"BankAccounts", "bank_account", false},
 		{"tag", "tag", false},
 		{"category", "category", false},
+		{"users", "users", false},
+		{"Users", "users", false},
 		{"", "", true},
 	}
 	for _, tc := range cases {
@@ -182,5 +184,17 @@ func TestNamingVectorsJSON(t *testing.T) {
 				}
 			}
 		}
+	}
+}
+
+func TestRelationFilterGraphQLKey(t *testing.T) {
+	if got := RelationFilterGraphQLKey("users", "owner"); got != "owner" {
+		t.Fatalf("known_as: got %q want owner", got)
+	}
+	if got := RelationFilterGraphQLKey("users", ""); got != "users" {
+		t.Fatalf("users model: got %q want users", got)
+	}
+	if got := RelationFilterGraphQLKey("food_category", ""); got != "foodCategory" {
+		t.Fatalf("food_category: got %q want foodCategory", got)
 	}
 }

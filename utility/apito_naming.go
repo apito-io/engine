@@ -31,6 +31,7 @@ var (
 	// singularKeepAsIs are last-segment words that must not be passed through inflection.Singular.
 	singularKeepAsIs = map[string]struct{}{
 		"news": {}, "data": {}, "media": {}, "analytics": {}, "series": {}, "species": {},
+		"users": {}, // project auth user table / hidden schema model id (must not become reserved "user")
 	}
 )
 
@@ -365,4 +366,14 @@ func SyntheticSystemRelationFieldIdentifier(modelID, knownAs string) string {
 		return fmt.Sprintf("system_%s_as_%s_id", mSeg, PhysicalSQLTableName(knownAs))
 	}
 	return fmt.Sprintf("system_%s_id", mSeg)
+}
+
+// RelationFilterGraphQLKey is the public GraphQL key for relation list filters and nested
+// relation fields. When known_as is set it is the field alias (e.g. owner); otherwise the
+// lowerCamel singular model name (e.g. foodCategory).
+func RelationFilterGraphQLKey(modelName, knownAs string) string {
+	if strings.TrimSpace(knownAs) != "" {
+		return knownAs
+	}
+	return SingularResourceName(modelName)
 }

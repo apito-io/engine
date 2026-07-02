@@ -163,6 +163,15 @@ func (s *SchemaObjects) GetModelTypeObject(fieldInfoObj, connectionTypeObj *grap
 			"single_page_uuid": &graphql.Field{Type: graphql.String},
 			"has_connections":  &graphql.Field{Type: graphql.Boolean},
 			"enable_revision":  &graphql.Field{Type: graphql.Boolean},
+			"is_project_auth_user_model": &graphql.Field{
+				Type: graphql.Boolean,
+				Resolve: func(p graphql.ResolveParams) (interface{}, error) {
+					if m, ok := p.Source.(*models.ModelType); ok {
+						return models.ModelIsProjectAuthUserModel(m), nil
+					}
+					return false, nil
+				},
+			},
 			"revision_filter": &graphql.Field{Type: graphql.NewList(graphql.NewObject(graphql.ObjectConfig{
 				Name: "RevisionFilter",
 				Fields: graphql.Fields{

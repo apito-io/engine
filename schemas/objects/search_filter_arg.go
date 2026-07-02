@@ -144,6 +144,10 @@ func BuildWhereRelationConditionArgument(name string, connections []*models.Conn
 	fields := graphql.InputObjectConfigFieldMap{}
 
 	for _, connection := range connections {
+		if connection == nil {
+			continue
+		}
+		relKey := utility.RelationFilterGraphQLKey(connection.Model, connection.KnownAs)
 		// only do it for has_one, has_many, many_to_many relation
 		if len(whereArgs[connection.Model]) > 0 {
 			relationFields := graphql.InputObjectConfigFieldMap{}
@@ -152,7 +156,7 @@ func BuildWhereRelationConditionArgument(name string, connections []*models.Conn
 			}
 			relationFields["_id"] = &graphql.InputObjectFieldConfig{
 				Type: graphql.NewInputObject(graphql.InputObjectConfig{
-					Name:        strings.ToUpper(name + "_" + connection.Model + "_Relation_ID_Filter_Condition"),
+					Name:        strings.ToUpper(name + "_" + relKey + "_Relation_ID_Filter_Condition"),
 					Description: "Filter related documents by id.",
 					Fields: graphql.InputObjectConfigFieldMap{
 						"eq": &graphql.InputObjectFieldConfig{
@@ -170,9 +174,9 @@ func BuildWhereRelationConditionArgument(name string, connections []*models.Conn
 					},
 				}),
 			}
-			fields[connection.Model] = &graphql.InputObjectFieldConfig{
+			fields[relKey] = &graphql.InputObjectFieldConfig{
 				Type: graphql.NewInputObject(graphql.InputObjectConfig{
-					Name:   strings.ToUpper(name + "_" + connection.Model + "_Where_Relation_Filter_Condition"),
+					Name:   strings.ToUpper(name + "_" + relKey + "_Where_Relation_Filter_Condition"),
 					Fields: relationFields,
 				}),
 			}
