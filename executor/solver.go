@@ -792,9 +792,24 @@ func (s *GraphQLExecutor) HandlePayloadFormatting(ctx context.Context, param *mo
 		
 		case _const.ListField:
 
+			normalizeListSlice := func(v interface{}) ([]interface{}, bool) {
+				if v == nil {
+					return nil, false
+				}
+				rv := reflect.ValueOf(v)
+				if rv.Kind() != reflect.Slice {
+					return nil, false
+				}
+				out := make([]interface{}, rv.Len())
+				for i := 0; i < rv.Len(); i++ {
+					out[i] = rv.Index(i).Interface()
+				}
+				return out, true
+			}
+
 			if f.Validation != nil && f.Validation.FixedListElements == nil { // dynamic string
-				if userInput, ok := inputPayload[f.Identifier].([]interface{}); ok {
-					if len(userInput) == 0 { // if the user input is empty, set the db payload to nil
+				if userInput, ok := normalizeListSlice(inputPayload[f.Identifier]); ok {
+					if len(userInput) == 0 {
 						dbPayload[identifier] = nil
 					} else {
 						dbPayload[identifier] = userInput
@@ -823,7 +838,7 @@ func (s *GraphQLExecutor) HandlePayloadFormatting(ctx context.Context, param *mo
 					}
 				}
 			} else {
-				if val, ok := inputPayload[f.Identifier].([]interface{}); ok {
+				if val, ok := normalizeListSlice(inputPayload[f.Identifier]); ok {
 					dbPayload[identifier] = val
 				}
 			}
