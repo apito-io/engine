@@ -1,0 +1,16 @@
+---
+alwaysApply: true
+---
+
+# Knowledge base — open-core
+
+This repo is part of the **apito** ecosystem inside a submodule monorepo.
+
+Read before coding:
+1. `.knowledge/README.md` — this repo's purpose, architecture, decisions.
+2. `.memory/CURRENT.md` and `.memory/HANDOFF.md` — current working state.
+3. The monorepo root `.knowledge/README.md`, `.knowledge/ABOUT_ME.md`, `.knowledge/WORKFLOW.md` — global rules & the AI contract.
+
+`.knowledge/` = durable truth; `.memory/` = ephemeral working state.
+At session end, update `.memory/` (CURRENT, HANDOFF, CHANGELOG_AI) per the root WORKFLOW.md.
+Never hand-edit generated code; never commit secrets/builds/node_modules.
