@@ -1,6 +1,7 @@
 package controller
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"io"
@@ -183,10 +184,12 @@ func (fc *FilesController) Upload(c echo.Context) error {
 	}
 	defer src.Close()
 
-	contentType := upload.Header.Get("Content-Type")
-	if contentType == "" {
-		contentType = "application/octet-stream"
+	body, err := io.ReadAll(src)
+	if err != nil {
+		return fc.jsonError(c, http.StatusBadRequest, "could not read uploaded file")
 	}
+
+	contentType, ext := models.ResolveUploadMIME(upload.Filename, upload.Header.Get("Content-Type"), body)
 	if fileType == "" {
 		fileType = models.InferFileTypeFromMIME(contentType)
 	}
@@ -194,10 +197,6 @@ func (fc *FilesController) Upload(c echo.Context) error {
 		return fc.jsonError(c, http.StatusBadRequest, err.Error())
 	}
 
-	ext := strings.TrimPrefix(strings.ToLower(filepath.Ext(upload.Filename)), ".")
-	if ext == "" {
-		ext = models.FileExtensionFromMIME(contentType)
-	}
 	fileID := utility.NewID()
 	storageKey := storage.BuildObjectKey(cache.Project.ID, fileType, fileID, ext)
 
@@ -206,7 +205,7 @@ func (fc *FilesController) Upload(c echo.Context) error {
 		return fc.jsonError(c, http.StatusBadRequest, err.Error())
 	}
 
-	publicURL, err := objStore.Upload(dbCtx, storageKey, src, contentType, upload.Size)
+	publicURL, err := objStore.Upload(dbCtx, storageKey, bytes.NewReader(body), contentType, upload.Size)
 	if err != nil {
 		return fc.jsonError(c, http.StatusInternalServerError, "upload to storage failed")
 	}
@@ -218,6 +217,9 @@ func (fc *FilesController) Upload(c echo.Context) error {
 	}
 	baseName := strings.TrimSuffix(filepath.Base(upload.Filename), filepath.Ext(upload.Filename))
 	baseName = sanitizeFileBaseName(baseName)
+	if models.IsGenericUploadBaseName(baseName) && ext != "" {
+		baseName = "file"
+	}
 
 	record := &models.ProjectFile{
 		ID:            fileID,

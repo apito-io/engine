@@ -144,10 +144,10 @@ func TestFilesControllerUploadBlobFilenameUsesMIMEExtension(t *testing.T) {
 	w := multipart.NewWriter(body)
 	h := make(textproto.MIMEHeader)
 	h.Set("Content-Disposition", `form-data; name="file"; filename="blob"`)
-	h.Set("Content-Type", "image/png")
+	h.Set("Content-Type", "application/octet-stream")
 	part, err := w.CreatePart(h)
 	require.NoError(t, err)
-	_, err = part.Write([]byte{0x89, 0x50, 0x4e, 0x47})
+	_, err = part.Write([]byte{0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a})
 	require.NoError(t, err)
 	require.NoError(t, w.Close())
 
@@ -174,6 +174,8 @@ func TestFilesControllerUploadBlobFilenameUsesMIMEExtension(t *testing.T) {
 	require.Equal(t, http.StatusOK, rec.Code)
 	require.Len(t, db.files, 1)
 	require.Equal(t, "png", db.files[0].FileExtension)
+	require.Equal(t, "image/png", db.files[0].ContentType)
+	require.Equal(t, "file", db.files[0].FileName)
 	require.True(t, strings.HasSuffix(db.files[0].URL, ".png"))
 	require.True(t, strings.HasSuffix(uploader.uploaded[0], "proj-1/media/"+db.files[0].ID+".png"))
 }
