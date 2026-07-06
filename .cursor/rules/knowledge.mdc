@@ -1,5 +1,7 @@
 ---
-alwaysApply: true
+description: Knowledge entry point for open-core — read .knowledge/README.md before coding in apito/pkg/open-core
+globs: apito/pkg/open-core/**
+alwaysApply: false
 ---
 
 # Knowledge base — open-core
