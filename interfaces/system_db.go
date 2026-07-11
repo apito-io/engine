@@ -55,7 +55,7 @@ type ApitoSystemDB interface {
 	GetUser(ctx context.Context, projectID, userID string) (*models.User, error)
 	UpdateUser(ctx context.Context, user *models.User) error
 	DeleteUser(ctx context.Context, projectID, userID string) error
-	SearchProjectUsers(ctx context.Context, projectID string, limit, offset int) ([]*models.User, int, error)
+	SearchProjectUsers(ctx context.Context, projectID, q string, limit, offset int) ([]*models.User, int, error)
 	CountProjectUsersByRole(ctx context.Context, projectID string) (map[string]int, error)
 	GetUserByUsername(ctx context.Context, projectID, username string) (*models.User, error)
 	ListUsersByEmail(ctx context.Context, projectID, email string) ([]*models.User, error)

@@ -55,6 +55,7 @@ func (s *GraphQLServer) RegisterUserSchema() {
 			"project_id": &graphql.ArgumentConfig{Type: graphql.NewNonNull(graphql.String)},
 			"limit":      &graphql.ArgumentConfig{Type: graphql.Int},
 			"offset":     &graphql.ArgumentConfig{Type: graphql.Int},
+			"q":          &graphql.ArgumentConfig{Type: graphql.String},
 		},
 		Resolve: s.SearchUsersResolverFn,
 	}

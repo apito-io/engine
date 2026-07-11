@@ -439,9 +439,9 @@ func (w *projectDBMetrics) ListProjectAuthUsersByGoogleSub(ctx context.Context, 
 	return v, err
 }
 
-func (w *projectDBMetrics) SearchProjectAuthUsers(ctx context.Context, tenantID string, limit, offset int) ([]*models.ProjectAuthUser, int, error) {
+func (w *projectDBMetrics) SearchProjectAuthUsers(ctx context.Context, tenantID, q string, limit, offset int) ([]*models.ProjectAuthUser, int, error) {
 	start := time.Now()
-	v, c, err := w.inner.SearchProjectAuthUsers(ctx, tenantID, limit, offset)
+	v, c, err := w.inner.SearchProjectAuthUsers(ctx, tenantID, q, limit, offset)
 	RecordDBOperation(ctx, w.cfg, w.engine, "list", err, time.Since(start))
 	return v, c, err
 }

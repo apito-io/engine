@@ -153,7 +153,7 @@ type ProjectDBInterface interface {
 	ListProjectAuthUsersByEmail(ctx context.Context, tenantID, email string) ([]*models.ProjectAuthUser, error)
 	ListProjectAuthUsersByPhone(ctx context.Context, tenantID, phone string) ([]*models.ProjectAuthUser, error)
 	ListProjectAuthUsersByGoogleSub(ctx context.Context, tenantID, googleSub string) ([]*models.ProjectAuthUser, error)
-	SearchProjectAuthUsers(ctx context.Context, tenantID string, limit, offset int) ([]*models.ProjectAuthUser, int, error)
+	SearchProjectAuthUsers(ctx context.Context, tenantID, q string, limit, offset int) ([]*models.ProjectAuthUser, int, error)
 	CountProjectAuthUsersByRole(ctx context.Context, tenantID string) (map[string]int, error)
 	UpdateProjectAuthUser(ctx context.Context, user *models.ProjectAuthUser) error
 	DeleteProjectAuthUser(ctx context.Context, userID string) error

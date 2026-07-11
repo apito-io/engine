@@ -18,7 +18,7 @@ type projectAuthUserStore interface {
 	ListProjectAuthUsersByEmail(ctx context.Context, tenantID, email string) ([]*models.ProjectAuthUser, error)
 	ListProjectAuthUsersByPhone(ctx context.Context, tenantID, phone string) ([]*models.ProjectAuthUser, error)
 	ListProjectAuthUsersByGoogleSub(ctx context.Context, tenantID, googleSub string) ([]*models.ProjectAuthUser, error)
-	SearchProjectAuthUsers(ctx context.Context, tenantID string, limit, offset int) ([]*models.ProjectAuthUser, int, error)
+	SearchProjectAuthUsers(ctx context.Context, tenantID, q string, limit, offset int) ([]*models.ProjectAuthUser, int, error)
 	CountProjectAuthUsersByRole(ctx context.Context, tenantID string) (map[string]int, error)
 	UpdateProjectAuthUser(ctx context.Context, user *models.ProjectAuthUser) error
 	DeleteProjectAuthUser(ctx context.Context, userID string) error
@@ -223,9 +223,9 @@ func (svc *ProjectUserService) listByGoogleSubWithFallback(tenantID, googleSub s
 	return rows, nil
 }
 
-func (svc *ProjectUserService) searchWithFallback(tenantID string, limit, offset int) ([]*models.User, int, error) {
+func (svc *ProjectUserService) searchWithFallback(tenantID, q string, limit, offset int) ([]*models.User, int, error) {
 	if svc.store != nil {
-		rows, count, err := svc.store.SearchProjectAuthUsers(svc.ctx, tenantID, limit, offset)
+		rows, count, err := svc.store.SearchProjectAuthUsers(svc.ctx, tenantID, q, limit, offset)
 		if err != nil && !errors.Is(err, ae.ErrProjectAuthUsersUnsupported) {
 			return nil, 0, err
 		}
@@ -236,7 +236,7 @@ func (svc *ProjectUserService) searchWithFallback(tenantID string, limit, offset
 	if svc.sys == nil {
 		return nil, 0, nil
 	}
-	rows, count, err := svc.sys.SearchProjectUsers(svc.ctx, svc.projectID, limit, offset)
+	rows, count, err := svc.sys.SearchProjectUsers(svc.ctx, svc.projectID, q, limit, offset)
 	if err != nil {
 		return nil, 0, err
 	}
@@ -351,8 +351,8 @@ func (svc *ProjectUserService) deleteUser(userID string) error {
 	return svc.sys.DeleteUser(svc.ctx, svc.projectID, userID)
 }
 
-func (svc *ProjectUserService) SearchWithFallback(tenantID string, limit, offset int) ([]*models.User, int, error) {
-	return svc.searchWithFallback(tenantID, limit, offset)
+func (svc *ProjectUserService) SearchWithFallback(tenantID, q string, limit, offset int) ([]*models.User, int, error) {
+	return svc.searchWithFallback(tenantID, q, limit, offset)
 }
 
 func (svc *ProjectUserService) ListByEmailWithFallback(tenantID, email string) ([]*models.User, error) {

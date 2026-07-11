@@ -113,7 +113,7 @@ func (t *trackingSystemDriver) GetUser(context.Context, string, string) (*models
 }
 func (t *trackingSystemDriver) UpdateUser(context.Context, *models.User) error { return nil }
 func (t *trackingSystemDriver) DeleteUser(context.Context, string, string) error { return nil }
-func (t *trackingSystemDriver) SearchProjectUsers(context.Context, string, int, int) ([]*models.User, int, error) {
+func (t *trackingSystemDriver) SearchProjectUsers(context.Context, string, string, int, int) ([]*models.User, int, error) {
 	return nil, 0, nil
 }
 func (t *trackingSystemDriver) CountProjectUsersByRole(context.Context, string) (map[string]int, error) {

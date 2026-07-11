@@ -169,7 +169,8 @@ func (s *GraphQLServer) SearchUsersResolverFn(p graphql.ResolveParams) (interfac
 	if offset < 0 {
 		offset = 0
 	}
-	rows, count, err := svc.SearchWithFallback("", limit, offset)
+	searchQ := strings.TrimSpace(getArgString(p.Args, "q"))
+	rows, count, err := svc.SearchWithFallback("", searchQ, limit, offset)
 	if err != nil {
 		return nil, err
 	}
