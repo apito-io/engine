@@ -258,9 +258,9 @@ type Config struct {
 	RoleAgnosticSchemaCache bool `env:"ROLE_AGNOSTIC_SCHEMA_CACHE" env-default:"false"`
 
 	// AdjustPublicSchemaForRequestHook runs after collectFilteredModelsForPublicSchema and may
-	// mutate permissions and filteredModels (e.g. tenant-scoped public API shape). When set,
-	// the compiled public schema cache fingerprint includes the effective API permission map.
-	AdjustPublicSchemaForRequestHook func(ctx context.Context, cache *ApplicationCache, project *Project, permissions map[string]*APIPermission, filteredModels []*PublicSchemaModelFilter) error `env:"-"`
+	// mutate permissions and filteredModels (e.g. remove SaaS tenant control-plane model roots).
+	// When set, the compiled public schema cache fingerprint includes the effective API permission map.
+	AdjustPublicSchemaForRequestHook func(ctx context.Context, cache *ApplicationCache, project *Project, permissions map[string]*APIPermission, filteredModels *[]*PublicSchemaModelFilter) error `env:"-"`
 
 	// SchemaBuildTelemetry emits OTel spans around publicSchemaBuilder when true.
 	SchemaBuildTelemetry bool `env:"SCHEMA_BUILD_TELEMETRY" env-default:"true"`

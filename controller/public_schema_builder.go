@@ -63,7 +63,7 @@ func (g *GraphCtrl) publicSchemaBuilder(ctx context.Context, cache *models.Appli
 	}
 
 	if g.cfg != nil && g.cfg.AdjustPublicSchemaForRequestHook != nil {
-		if err := g.cfg.AdjustPublicSchemaForRequestHook(ctx, cache, project, permissions, filteredModels); err != nil {
+		if err := g.cfg.AdjustPublicSchemaForRequestHook(ctx, cache, project, permissions, &filteredModels); err != nil {
 			buildErr = err
 			recordSchemaBuildOutcome(ctx, g.cfg, "error")
 			return nil, err

@@ -22,7 +22,7 @@ func collectFilteredModelsForPublicSchema(
 
 	if cache.IncomingRequest == nil {
 		for _, model := range project.Schema.Models {
-			if models.ModelIsProjectAuthUserModel(model) {
+			if models.ModelIsProjectAuthUserModel(model) || models.ModelIsSaaSTenantControlPlaneModel(model) {
 				continue
 			}
 			modelName := model.Name
@@ -41,7 +41,7 @@ func collectFilteredModelsForPublicSchema(
 			operationType = filter.OperationType
 			for _, _fm := range filter.FilteredModels {
 				for _, model := range project.Schema.Models {
-					if models.ModelIsProjectAuthUserModel(model) {
+					if models.ModelIsProjectAuthUserModel(model) || models.ModelIsSaaSTenantControlPlaneModel(model) {
 						continue
 					}
 					if _fm.Name == model.Name {

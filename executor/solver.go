@@ -521,7 +521,7 @@ func (s *GraphQLExecutor) SolvePublicMutation(ctx context.Context, resolverName 
 			case "own":
 				if doc.Type == "user" && param.Role.IsProjectUser && param.UserID != doc.ID {
 					return nil, errors.New("you are not authorized to edit this document")
-				} else if doc.Meta.CreatedBy.IsProjectUser && doc.Meta.CreatedBy.ID != param.UserID {
+				} else if doc.Meta != nil && doc.Meta.CreatedBy != nil && doc.Meta.CreatedBy.IsProjectUser && doc.Meta.CreatedBy.ID != param.UserID {
 					return nil, errors.New("you are not authorized to edit this document")
 				}
 			}
@@ -544,7 +544,13 @@ func (s *GraphQLExecutor) SolvePublicMutation(ctx context.Context, resolverName 
 		}
 
 		// update the meta
+		if doc.Meta == nil {
+			doc.Meta = &types.MetaField{}
+		}
 		doc.Meta.UpdatedAt = utility.GetCurrentTime()
+		if doc.Meta.LastModifiedBy == nil {
+			doc.Meta.LastModifiedBy = &types.SystemUser{}
+		}
 		doc.Meta.LastModifiedBy.ID = param.UserID
 		doc.Meta.LastModifiedBy.IsProjectUser = param.Role.IsProjectUser
 

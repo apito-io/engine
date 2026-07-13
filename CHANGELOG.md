@@ -2,6 +2,14 @@
 
 Notable changes to **open-core** only. Release tags use `v1.x` (for example `v1.5.4`, `v1.6.0`).
 
+## [1.7.11] — 2026-07-13
+
+### API / behaviour
+
+- **`ModelIsSaaSTenantControlPlaneModel`** — classifies the reserved SaaS tenant model (`system_tenant_model` / `is_tenant_model` ext keys) so public schema collection skips it; catalog lifecycle stays on system GraphQL.
+- **`AdjustPublicSchemaForRequestHook`** — last parameter is now `*[]*PublicSchemaModelFilter` so pro hooks can remove models in place (breaking for hook implementors).
+- **Mutation meta nil-safety** — public update/delete `own` scope and meta stamping guard nil `doc.Meta` / `CreatedBy` / `LastModifiedBy`.
+
 ## [1.6.0] — 2026-04-20
 
 ### Summary
