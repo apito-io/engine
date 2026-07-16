@@ -333,6 +333,18 @@ func cloneResolveParamsForModelCount(parent graphql.ResolveParams, modelName str
 	return child
 }
 
+// isMissingDatastoreTableErr reports driver errors when the physical model table was never created
+// (schema published in system DB but project DB not migrated yet). Used by sidebar count badges only.
+func isMissingDatastoreTableErr(err error) bool {
+	if err == nil {
+		return false
+	}
+	msg := strings.ToLower(err.Error())
+	return strings.Contains(msg, "no such table") ||
+		strings.Contains(msg, "does not exist") ||
+		strings.Contains(msg, "doesn't exist")
+}
+
 func (s *GraphQLServer) ModelDocumentCountsResolverFn(p graphql.ResolveParams) (interface{}, error) {
 	s.Lock()
 	defer s.Unlock()
@@ -384,7 +396,11 @@ func (s *GraphQLServer) ModelDocumentCountsResolverFn(p graphql.ResolveParams) (
 
 		count, err := driver.CountMultiDocumentOfProject(cache.Ctx, param, false)
 		if err != nil {
-			return nil, err
+			if isMissingDatastoreTableErr(err) {
+				count = 0
+			} else {
+				return nil, err
+			}
 		}
 
 		out = append(out, map[string]interface{}{
