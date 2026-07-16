@@ -2,6 +2,12 @@
 
 Notable changes to **open-core** only. Release tags use `v1.x` (for example `v1.5.4`, `v1.6.0`).
 
+## [1.7.12] — 2026-07-16
+
+### Packaging
+
+- **Dockerfile** — Alpine runtime stage installs `deno` for Apito Logic functions (`runtime: deno`, in-process LocalTransport). No API / GraphQL contract changes.
+
 ## [1.7.11] — 2026-07-13
 
 ### API / behaviour

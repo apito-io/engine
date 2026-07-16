@@ -43,10 +43,12 @@ RUN --mount=type=cache,target=/go/mod \
 # Runtime stage - minimal Alpine image
 FROM alpine:3.19
 
-# Install runtime dependencies
+# Install runtime dependencies.
+# Deno is required for Apito Logic functions with runtime: deno (in-process LocalTransport).
 RUN apk add --update --no-cache \
     ca-certificates \
     tzdata \
+    deno \
     && rm -rf /var/cache/apk/*
 
 # Create non-root user for security
