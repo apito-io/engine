@@ -8,6 +8,10 @@ Notable changes to **open-core** only. Release tags use `v1.x` (for example `v1.
 
 - **Dockerfile** — Alpine runtime stage installs `deno` for Apito Logic functions (`runtime: deno`, in-process LocalTransport). No API / GraphQL contract changes.
 
+### Fixes
+
+- **`modelDocumentCounts`** — missing physical tables (`no such table` / does not exist) return `count: 0` instead of failing the sidebar query.
+
 ## [1.7.11] — 2026-07-13
 
 ### API / behaviour
