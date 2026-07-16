@@ -20,6 +20,7 @@ import (
 	"github.com/apito-io/engine/database/realtime"
 	"gitlab.com/apito.io/open_driver/system"
 	"github.com/apito-io/engine/executor"
+	apifn "github.com/apito-io/engine/functions"
 	"github.com/apito-io/engine/interfaces"
 	"github.com/apito-io/engine/models"
 	dl "github.com/apito-io/engine/resolver/dataloader"
@@ -131,6 +132,9 @@ type GraphQLServer struct {
 	RealtimeBus         interfaces.RealtimeBus
 	KVService           interfaces.KeyValueServiceInterface
 
+	// FunctionRuntime dispatches Apito Functions (deno/wasm). Nil disables platform functions.
+	FunctionRuntime *apifn.RuntimeManager
+
 	PluginManagerSwapper *hotswap.PluginManagerSwapper
 
 	MicroServiceClient *sync.Map
@@ -178,6 +182,35 @@ func BuildGraphQL(ctx context.Context, cfg *models.Config, extensionRouter *echo
 
 		MicroServiceClient: &sync.Map{},
 	}
+
+	// Apito Functions: Deno primary + wazero secondary behind a runtime-neutral manager.
+	artifactRoot := ""
+	if cfg != nil && cfg.DefaultDatabaseDir != "" {
+		artifactRoot = cfg.DefaultDatabaseDir + "/function-artifacts"
+	}
+	store, _ := apifn.NewFilesystemArtifactStore(artifactRoot)
+	gateway := apifn.NewEngineDataGateway()
+	batch := apifn.NewMemoryBatchExecutor()
+	apifn.RegisterCoreDataOps(gateway, batch)
+	globalConc := 16
+	if cfg != nil && cfg.FunctionGlobalConcurrency > 0 {
+		globalConc = cfg.FunctionGlobalConcurrency
+	}
+	var limitsProvider apifn.FunctionLimitsProvider = apifn.DefaultLimitsProvider{}
+	if cfg != nil && cfg.FunctionLimitsHook != nil {
+		limitsProvider = apifn.HookLimitsProvider{Hook: cfg.FunctionLimitsHook}
+	}
+	srv.FunctionRuntime = apifn.NewRuntimeManager(
+		[]apifn.RuntimeProvider{
+			selectDenoProvider(),
+			apifn.NewWazeroRuntimeProvider(ctx),
+		},
+		apifn.WithTransport(apifn.NewLocalTransport()),
+		apifn.WithLimitsProvider(limitsProvider),
+		apifn.WithDataGateway(gateway),
+		apifn.WithArtifactStore(store),
+		apifn.WithGlobalConcurrency(globalConc),
+	)
 
 	// Initialize SystemQueries and SystemMutations as empty maps to prevent nil panic
 	srv.SystemQueries = make(graphql.Fields)

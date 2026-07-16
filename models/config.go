@@ -248,6 +248,26 @@ type Config struct {
 	// MaxModelsPerProject caps models processed by publicSchemaBuilder (0 = no limit).
 	MaxModelsPerProject int `env:"MAX_MODELS_PER_PROJECT" env-default:"0"`
 
+	// SQLite / connection pool tunables (SaaS capacity).
+	// SQLITE_CACHE_SIZE_KB is the PRAGMA cache_size magnitude in KiB (negative form applied).
+	SQLiteCacheSizeKB int `env:"SQLITE_CACHE_SIZE_KB" env-default:"20000"`
+	// SQLITE_MMAP_BYTES caps mmap_size on local SQLite files.
+	SQLiteMmapBytes int64 `env:"SQLITE_MMAP_BYTES" env-default:"134217728"`
+	// MAX_HOT_CONNECTIONS caps ConnectionManager pooled project/tenant drivers (0 = engine default 1000).
+	MaxHotConnections int `env:"MAX_HOT_CONNECTIONS" env-default:"0"`
+	// CONN_TTL_MINUTES is the ConnectionManager entry TTL in minutes (0 = engine default 120).
+	ConnTTLMinutes int `env:"CONN_TTL_MINUTES" env-default:"0"`
+
+	// FunctionRuntimeMode: local (in-process worker via LocalTransport) or nats (distributed).
+	FunctionRuntimeMode string `env:"FUNCTION_RUNTIME_MODE" env-default:"local"`
+	// FunctionGlobalConcurrency caps concurrent Apito Function invocations process-wide.
+	FunctionGlobalConcurrency int `env:"FUNCTION_GLOBAL_CONCURRENCY" env-default:"16"`
+	// FunctionCallableAuthMode: secret (X-Fn-Hash must match RestAPISecretURLKey) or disabled.
+	FunctionCallableAuthMode string `env:"FUNCTION_CALLABLE_AUTH_MODE" env-default:"secret"`
+
+	// FunctionLimitsHook lets pro supply plan/tier quotas for Apito Functions.
+	FunctionLimitsHook func(ctx context.Context, projectID string, fn *ApitoFunction) (memoryBytes int64, timeoutMs int64, maxConcurrency int, err error) `env:"-"`
+
 	// EnableCompiledSchemaCache caches pre-connection GraphQL shape (fingerprint: project + role + schema).
 	EnableCompiledSchemaCache bool `env:"ENABLE_COMPILED_SCHEMA_CACHE" env-default:"false"`
 

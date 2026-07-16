@@ -79,6 +79,18 @@ type ProjectDependedSettings struct {
 
 // NewConnectionManager creates a new connection manager
 func NewConnectionManager(cfg *models.Config, maxConns int, systemDB interfaces.ApitoSystemDB) *ConnectionManager {
+	if cfg != nil && cfg.MaxHotConnections > 0 {
+		maxConns = cfg.MaxHotConnections
+	}
+	ttl := 2 * time.Hour
+	cleanup := 30 * time.Minute
+	if cfg != nil && cfg.ConnTTLMinutes > 0 {
+		ttl = time.Duration(cfg.ConnTTLMinutes) * time.Minute
+		cleanup = ttl / 4
+		if cleanup < time.Minute {
+			cleanup = time.Minute
+		}
+	}
 	cm := &ConnectionManager{
 		cfg:                     cfg,
 		maxConnections:          maxConns,
@@ -89,7 +101,7 @@ func NewConnectionManager(cfg *models.Config, maxConns int, systemDB interfaces.
 	}
 
 	// Create cache with OnEvicted callback to properly track and close connections
-	cm.activeConns = cache.New(2*time.Hour, 30*time.Minute)
+	cm.activeConns = cache.New(ttl, cleanup)
 	cm.activeConns.OnEvicted(func(connKey string, item interface{}) {
 		cm.handleEviction(connKey, item)
 	})

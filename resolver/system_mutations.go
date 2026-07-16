@@ -1823,19 +1823,63 @@ func (s *GraphQLServer) UpsertFunctionToProjectResolverFn(p graphql.ResolveParam
 		for k, v := range val {
 			switch k {
 			case "runtime":
-				function.RuntimeConfig.Runtime = v.(string)
-				break
+				rt, _ := v.(string)
+				if !models.IsValidFunctionRuntime(rt) {
+					return nil, fmt.Errorf("unsupported function runtime %q (use deno, wasm, or hashicorp)", rt)
+				}
+				function.RuntimeConfig.Runtime = rt
 			case "memory":
-				function.RuntimeConfig.Memory = int64(v.(int))
-				break
+				switch n := v.(type) {
+				case int:
+					function.RuntimeConfig.Memory = int64(n)
+				case int64:
+					function.RuntimeConfig.Memory = n
+				case float64:
+					function.RuntimeConfig.Memory = int64(n)
+				}
 			case "handler":
-				function.RuntimeConfig.Handler = v.(string)
-				break
+				function.RuntimeConfig.Handler, _ = v.(string)
 			case "time_out":
-				function.RuntimeConfig.TimeOut = int64(v.(int))
-				break
+				switch n := v.(type) {
+				case int:
+					function.RuntimeConfig.TimeOut = int64(n)
+				case int64:
+					function.RuntimeConfig.TimeOut = n
+				case float64:
+					function.RuntimeConfig.TimeOut = int64(n)
+				}
 			}
 		}
+	}
+
+	if val, ok := p.Args["language"].(string); ok && val != "" {
+		function.Language = val
+	}
+	if val, ok := p.Args["binary_url"].(string); ok && val != "" {
+		function.BinaryURL = val
+	}
+	if val, ok := p.Args["source"].(string); ok {
+		function.Source = val
+	}
+	if val, ok := p.Args["trigger_type"].(string); ok && val != "" {
+		function.TriggerType = val
+	}
+	if vals, ok := p.Args["capabilities"].([]interface{}); ok {
+		var caps []string
+		for _, c := range vals {
+			if s, ok := c.(string); ok && s != "" {
+				caps = append(caps, s)
+			}
+		}
+		function.Capabilities = caps
+	}
+
+	function.ProjectID = project.ID
+	if function.ID == "" {
+		function.ID = utility.NewID()
+	}
+	if function.TriggerType == "" {
+		function.TriggerType = models.FunctionTriggerCallable
 	}
 
 	/*switch function.FunctionProviderType {
@@ -1968,6 +2012,9 @@ func (s *GraphQLServer) UpsertFunctionToProjectResolverFn(p graphql.ResolveParam
 			return nil, err
 		}
 	}
+
+	// Invalidate project GraphQL cache so new/updated functions appear in the public schema.
+	_ = s.ExpireGraphQLProjectCache(cache.Ctx, project.ID)
 
 	return function, nil
 }

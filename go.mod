@@ -143,6 +143,7 @@ require (
 	github.com/remyoudompheng/bigfft v0.0.0-20230129092748-24d4a6f8daec // indirect
 	github.com/smartystreets/assertions v1.0.0 // indirect
 	github.com/sosodev/duration v1.3.1 // indirect
+	github.com/tetratelabs/wazero v1.9.0 // indirect
 	github.com/tmthrgd/go-hex v0.0.0-20190904060850-447a3041c3bc // indirect
 	github.com/tomogoma/generator v0.0.0-20171014125632-4398aab4dd41 // indirect
 	github.com/twitchyliquid64/golang-asm v0.15.1 // indirect
@@ -180,4 +181,4 @@ require (
 
 require gitlab.com/apito.io/open_driver v0.0.0
 
-replace gitlab.com/apito.io/open_driver => ../../open_driver
+replace gitlab.com/apito.io/open_driver => ../open_driver

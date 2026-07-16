@@ -14,6 +14,7 @@ import (
 
 	"github.com/apito-io/wsgraphql/v1"
 	"github.com/apito-io/wsgraphql/v1/compat/gorillaws"
+	apifn "github.com/apito-io/engine/functions"
 	"github.com/apito-io/engine/models"
 	"github.com/apito-io/engine/resolver"
 	"github.com/apito-io/engine/telemetry"
@@ -262,12 +263,45 @@ func (g *GraphCtrl) FunctionExecute(c echo.Context) error {
 		})
 	}
 
-	//#todo check if the hash is matched with the function hash
-	secretValue := c.Get("function_hash")
-	fmt.Println(secretValue)
+	fn := apifn.FindFunctionByName(project, fnName)
+	if fn == nil {
+		return c.JSON(http.StatusNotFound, &models.HttpResponse{
+			Message: "function not found",
+			Code:    http.StatusNotFound,
+		})
+	}
+	if !apifn.AllowCallableRuntime(fn) {
+		return c.JSON(http.StatusForbidden, &models.HttpResponse{
+			Message: "function runtime not callable via REST",
+			Code:    http.StatusForbidden,
+		})
+	}
 
-	// inject project id to context value
-	//ctx = context.WithValue(ctx, "project_id", projectId)
+	authMode := "secret"
+	if g.cfg != nil && g.cfg.FunctionCallableAuthMode != "" {
+		authMode = g.cfg.FunctionCallableAuthMode
+	}
+	if authMode == "disabled" {
+		return c.JSON(http.StatusForbidden, &models.HttpResponse{
+			Message: "callable REST /function is disabled",
+			Code:    http.StatusForbidden,
+		})
+	}
+	provided, _ := c.Get("function_hash").(string)
+	if err := apifn.VerifyFunctionSecret(fn, provided); err != nil {
+		return c.JSON(http.StatusUnauthorized, &models.HttpResponse{
+			Message: err.Error(),
+			Code:    http.StatusUnauthorized,
+		})
+	}
+
+	// Deno/wasm platform functions require a configured runtime manager.
+	if fn.IsApitoFunctionsRuntime() && g.gqlServer.FunctionRuntime == nil {
+		return c.JSON(http.StatusServiceUnavailable, &models.HttpResponse{
+			Message: "function runtime not configured",
+			Code:    http.StatusServiceUnavailable,
+		})
+	}
 
 	fnStart := time.Now()
 	resp, _fn, err := g.gqlServer.HandleApitoFunction(ctx, &models.ApplicationCache{
@@ -286,14 +320,12 @@ func (g *GraphCtrl) FunctionExecute(c echo.Context) error {
 		})
 	}
 
-	switch _fn.Response.Model {
-	case "JSON":
+	if _fn.Response != nil && _fn.Response.Model == "JSON" {
 		return c.JSON(http.StatusOK, map[string]interface{}{
 			"JSON": resp,
 		})
-	default:
-		return c.JSON(http.StatusOK, resp)
 	}
+	return c.JSON(http.StatusOK, resp)
 }
 
 func (g *GraphCtrl) RestToGraphQL(c echo.Context) error {

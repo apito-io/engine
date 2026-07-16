@@ -855,7 +855,9 @@ func (st *publicSchemaBuildState) mergeFunctionAndPluginFields() (*models.Applic
 		(cache.GraphqlRequest != nil && cache.GraphqlRequest.OperationName == "IntrospectionQuery") ||
 		len(schemaRole.LogicExecutions) > 0 {
 		for _, fn := range filteredFunctions {
-			if fn.FunctionProviderID != "" && !strings.HasPrefix(fn.Name, "plg_") {
+			// Skip HashiCorp/provider-linked functions unless they are plugin schema fields (plg_*)
+			// or Apito Functions platform runtimes (deno/wasm) which are first-class public fields.
+			if fn.FunctionProviderID != "" && !strings.HasPrefix(fn.Name, "plg_") && !fn.IsApitoFunctionsRuntime() {
 				continue
 			}
 

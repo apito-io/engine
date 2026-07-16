@@ -8,6 +8,11 @@ Notable changes to **open-core** only. Release tags use `v1.x` (for example `v1.
 
 - **Dockerfile** — Alpine runtime stage installs `deno` for Apito Logic functions (`runtime: deno`, in-process LocalTransport). No API / GraphQL contract changes.
 
+### Apito Functions (foundation)
+
+- **`functions/`** — RuntimeManager, Deno/wazero providers, LocalTransport, callable auth, data gateway/batch stubs, lifecycle models.
+- **GraphQL** — `upsertFunctionToProject` + `source`/`trigger_type`; public schema invoke routing for deno/wasm; `FunctionRuntimeManager` init.
+
 ### Fixes
 
 - **`modelDocumentCounts`** — missing physical tables (`no such table` / does not exist) return `count: 0` instead of failing the sidebar query.

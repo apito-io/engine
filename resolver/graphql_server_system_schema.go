@@ -1174,6 +1174,21 @@ func (s *GraphQLServer) BuildServerQueriesAndMutations() {
 						},
 					}),
 				},
+				"language": &graphql.ArgumentConfig{
+					Type: graphql.String,
+				},
+				"binary_url": &graphql.ArgumentConfig{
+					Type: graphql.String,
+				},
+				"source": &graphql.ArgumentConfig{
+					Type: graphql.String,
+				},
+				"trigger_type": &graphql.ArgumentConfig{
+					Type: graphql.String,
+				},
+				"capabilities": &graphql.ArgumentConfig{
+					Type: graphql.NewList(graphql.String),
+				},
 			},
 			Resolve: s.UpsertFunctionToProjectResolverFn,
 		},

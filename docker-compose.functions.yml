@@ -1,0 +1,43 @@
+# Recommended one-command open-core profile: engine + apito-fn-worker on a private network.
+# Usage (from open-core or engine deploy root after images are built):
+#   docker compose -f docker-compose.functions.yml up
+services:
+  engine:
+    image: ${APITO_ENGINE_IMAGE:-apito-engine:local}
+    environment:
+      FUNCTION_RUNTIME_MODE: nats
+      REALTIME_ENGINE: nats
+      REALTIME_NATS_URL: nats://nats:4222
+      REALTIME_NATS_PORT: "4222"
+      FUNCTION_CALLABLE_AUTH_MODE: secret
+      SQLITE_CACHE_SIZE_KB: "8000"
+      SQLITE_MMAP_BYTES: "67108864"
+      MAX_HOT_CONNECTIONS: "300"
+      CONN_TTL_MINUTES: "60"
+    ports:
+      - "5050:5050"
+    volumes:
+      - apito-data:/data/apito-db
+    depends_on:
+      - nats
+      - fn-worker
+
+  fn-worker:
+    image: ${APITO_FN_WORKER_IMAGE:-apito-fn-worker:local}
+    environment:
+      REALTIME_NATS_URL: nats://nats:4222
+      FUNCTION_ARTIFACT_DIR: /artifacts
+    volumes:
+      - fn-artifacts:/artifacts
+    depends_on:
+      - nats
+
+  nats:
+    image: nats:2.10-alpine
+    command: ["-js", "-m", "8222"]
+    ports:
+      - "4222:4222"
+
+volumes:
+  apito-data:
+  fn-artifacts:

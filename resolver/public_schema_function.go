@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	_const "github.com/apito-io/engine/const"
+	"github.com/apito-io/engine/functions"
 	"github.com/apito-io/engine/interfaces"
 	"github.com/apito-io/engine/models"
 	"github.com/apito-io/engine/utility"
@@ -19,13 +20,17 @@ func (s *GraphQLServer) HandleApitoFunction(ctx context.Context, cache *models.A
 
 	param := s.NewParam(cache.Param)
 	project := cache.Project
+	if project == nil || project.Schema == nil {
+		return nil, nil, errors.New("function Not Found, Something is Wrong")
+	}
 
 	var _function *models.ApitoFunction
 	for _, f := range project.Schema.Functions {
-		if f.Name == fnName && f.FunctionProviderID != "" {
-			_function = f
-			break
+		if f == nil || f.Name != fnName {
+			continue
 		}
+		_function = f
+		break
 	}
 
 	if _function == nil {
@@ -33,83 +38,115 @@ func (s *GraphQLServer) HandleApitoFunction(ctx context.Context, cache *models.A
 	}
 
 	var _payload interface{}
+	reqModel := ""
+	if _function.Request != nil {
+		reqModel = _function.Request.Model
+	}
 
-	switch _function.Request.Model {
-	case "JSON":
+	switch reqModel {
+	case "JSON", "":
 		if val, ok := args["payload"].(map[string]interface{}); ok && len(val) > 0 {
 			_payload = val
+		} else if _function.Request != nil && _function.Request.OptionalPayload {
+			_payload = map[string]interface{}{}
+		} else if reqModel == "" {
+			_payload = map[string]interface{}{}
 		} else {
 			return nil, nil, errors.New("payload is required")
 		}
-		// inject user id if available
 		if param.UserID != "" {
-			_payload.(map[string]interface{})["user_id"] = param.UserID
+			if m, ok := _payload.(map[string]interface{}); ok {
+				m["user_id"] = param.UserID
+			}
 		}
 	default:
 		doc, ok := args["payload"].(*types.DefaultDocumentStructure)
 		if !ok {
-			return nil, nil, errors.New("invalid payload type")
-		}
-		_payload = doc
-
-		// inject user id if available
-		if param.UserID != "" {
-			doc.Data["user_id"] = param.UserID
+			// Allow map payloads for non-JSON models when callers pass raw maps
+			if val, ok := args["payload"].(map[string]interface{}); ok {
+				_payload = val
+			} else {
+				return nil, nil, errors.New("invalid payload type")
+			}
+		} else {
+			_payload = doc
+			if param.UserID != "" {
+				doc.Data["user_id"] = param.UserID
+			}
 		}
 	}
 
-	if strings.HasPrefix(_function.FunctionProviderID, "hc-") {
+	runtime := _function.EffectiveRuntime()
 
+	// Apito Functions platform (deno / wasm)
+	if _function.IsApitoFunctionsRuntime() {
+		if s.FunctionRuntime == nil {
+			return nil, nil, fmt.Errorf("function runtime manager not configured for runtime %q", runtime)
+		}
+		reqMap, _ := _payload.(map[string]interface{})
+		if reqMap == nil {
+			reqMap = map[string]interface{}{"payload": _payload}
+		}
+		tenantID := ""
+		if param != nil && param.Ext != nil {
+			if v, ok := param.Ext["tenant_id"].(string); ok {
+				tenantID = v
+			}
+		}
+		role := ""
+		if param != nil && param.Role != nil {
+			role = param.Role.ID
+		}
+		env := functions.BuildEnvelope(_function, project.ID, tenantID, param.UserID, role, reqMap, utility.NewID())
+		result, err := s.FunctionRuntime.Invoke(ctx, env)
+		if err != nil {
+			return nil, nil, err
+		}
+		if result == nil || !result.OK {
+			msg := "function execution failed"
+			if result != nil && result.Error != "" {
+				msg = result.Error
+			}
+			return nil, nil, errors.New(msg)
+		}
+		return result.Response, _function, nil
+	}
+
+	// Legacy HashiCorp path
+	if strings.HasPrefix(_function.FunctionProviderID, "hc-") || runtime == models.FunctionRuntimeHashicorp {
+		if _function.FunctionProviderID == "" {
+			return nil, nil, fmt.Errorf("hashicorp function missing function_provider_id")
+		}
 		var _plugin *hcplugin.Client
-
-		// HashiCorp plugin
 		if val, ok := s.HashiCorpPluginCache[_function.FunctionProviderID]; ok && val != nil {
 			_plugin = val.Client
-			//_configuration = val.PluginConfigurations
 		} else {
 			return nil, nil, fmt.Errorf("%s plugin Not loaded, reinstall the plugin", _function.FunctionProviderID)
 		}
 
-		var result interface{}
-
-		// Get the RPC client first
 		rpcClient, err := _plugin.Client()
 		if err != nil {
 			return nil, nil, fmt.Errorf("failed to get RPC client for HashiCorp plugin: %v", err)
 		}
-
-		// Get the function plugin RPC client
 		raw, err := rpcClient.Dispense(_const.FunctionPluginRPCName)
 		if err != nil {
 			return nil, nil, fmt.Errorf("failed to dispense HashiCorp function plugin: %v", err)
 		}
-
 		functionPlugin, ok := raw.(interfaces.HashiCorpPluginInterface)
 		if !ok {
 			return nil, nil, fmt.Errorf("HashiCorp plugin does not implement FunctionPluginInterface")
 		}
 
-		fmt.Println(fmt.Sprintf(`------ Loading %s HashiCorp Function Plugin -------`, _function.Name))
-
-		// inject schema in the context
 		ctx = context.WithValue(ctx, "project_schema", project.Schema)
-		// inject project id to context value
 		ctx = context.WithValue(ctx, "project_id", project.ID)
-
-		// For HashiCorp plugins, for now we skip injectable services injection
-		// to avoid serialization issues. This will be implemented properly with gRPC later
-		result, err = functionPlugin.Execute(ctx, _payload)
+		result, err := functionPlugin.Execute(ctx, _payload)
 		if err != nil {
 			return nil, nil, err
 		}
-
 		return result, _function, nil
-
-	} else {
-
-		// Local plugin function execution removed - use HashiCorp plugins instead
-		return nil, nil, fmt.Errorf("Local plugin function provider %s no longer supported. Use HashiCorp plugins instead", _function.FunctionProviderID)
 	}
+
+	return nil, nil, fmt.Errorf("unsupported function runtime %q for %s (set runtime_config.runtime to deno, wasm, or use hc-* provider)", runtime, _function.Name)
 }
 
 func (s *GraphQLServer) ApitoFunctionResolverFn(p graphql.ResolveParams) (interface{}, error) {
@@ -139,11 +176,7 @@ func (s *GraphQLServer) ApitoFunctionResolverFn(p graphql.ResolveParams) (interf
 				"JSON": resp,
 			}, err
 		default:
-			if _fn.Response.IsArray {
-				return resp, err
-			} else {
-				return resp, err
-			}
+			return resp, err
 		}
 	default:
 		switch _fn.Response.Model {
@@ -154,103 +187,12 @@ func (s *GraphQLServer) ApitoFunctionResolverFn(p graphql.ResolveParams) (interf
 		default:
 			if _fn.Response.IsArray {
 				return resp, err
-			} else {
-				return map[string]interface{}{
-					"data": map[string]interface{}{
-						_fn.Name: resp,
-					},
-				}, err
 			}
+			return map[string]interface{}{
+				"data": map[string]interface{}{
+					_fn.Name: resp,
+				},
+			}, err
 		}
 	}
 }
-
-/*
-func (s *GraphQLServer) ApitoFunctionResolverFn(p graphql.ResolveParams) (interface{}, error) {
-
-	var cred *protobuff.ThirdPartyCredential
-	if val, ok := s.PluginConfigurations["aws"]; ok {
-		cred = val.Credentials
-	} else {
-		return nil, errors.New("AWS Credentials are not Set")
-	}
-
-	for _, f := range s.ProjectRawSchemas.Functions {
-		if f.Name == p.Info.FieldName && f.FunctionConnected {
-
-			sess, err := session.NewSession(&aws.Config{
-				Region:      aws.String(f.ProviderConfig.Region),
-				Credentials: credentials.NewStaticCredentials(cred.AccessKey, cred.SecretKey, ""),
-			})
-			if err != nil {
-				return nil, err
-			}
-			_, err = sess.Config.Credentials.Get()
-			if err != nil {
-				return nil, err
-			}
-
-			var data = make(map[string]interface{})
-			switch f.Request.Model {
-			case "JSON":
-				for k, v := range p.Args["payload"].(map[string]interface{}) {
-					data[k] = v
-				}
-				break
-			default:
-				data = p.Args["payload"].(map[string]interface{})
-			}
-
-			if len(data) == 0 {
-				return nil, errors.New("No Request Payload is Found")
-			}
-
-			payload, err := json.Marshal(map[string]interface{}{
-				"payload": data, // user request payload
-				"meta": map[string]interface{}{
-					"user_id": s.Param.UserId,
-					"role":    s.Param.Role,
-				},
-			})
-
-			svc := lambda.New(sess)
-			input := &lambda.InvokeInput{
-				FunctionName:   aws.String(f.ProviderConfig.RemoteFunctionName),
-				Payload:        payload,
-				InvocationType: aws.String("RequestResponse"),
-				LogType:        aws.String("Tail"),
-				//Qualifier:      aws.String("current"),
-			}
-
-			invokeResponse, err := svc.Invoke(input)
-			if err != nil {
-				return nil, err
-			}
-
-			var result map[string]interface{}
-			err = json.Unmarshal(invokeResponse.Payload, &result)
-			if err != nil {
-				return nil, err
-			}
-
-			if err, ok := result["errorMessage"].(string); ok {
-				return nil, errors.New("Lambda Execution Error : " + err)
-			}
-
-			switch f.Response.Model {
-			case "JSON":
-				return map[string]interface{}{
-					"JSON": result,
-				}, nil
-			default:
-				return result, nil
-			}
-		}
-	}
-
-	return map[string]interface{}{
-		"JSON": map[string]interface{}{
-			"msg": "Function Not Connected to any Cloud Provider",
-		},
-	}, nil
-}*/
