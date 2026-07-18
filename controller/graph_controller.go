@@ -295,6 +295,26 @@ func (g *GraphCtrl) FunctionExecute(c echo.Context) error {
 		})
 	}
 
+	// SaaS live callables: require verified app-user JWT (Pro hook). Non-SaaS keeps hash-only.
+	if g.cfg != nil && g.cfg.FunctionCallableAuthHook != nil {
+		if err := g.cfg.FunctionCallableAuthHook(c, project); err != nil {
+			if he, ok := err.(*echo.HTTPError); ok {
+				msg := "unauthorized"
+				if he.Message != nil {
+					msg = fmt.Sprint(he.Message)
+				}
+				return c.JSON(he.Code, &models.HttpResponse{
+					Message: msg,
+					Code:    uint32(he.Code),
+				})
+			}
+			return c.JSON(http.StatusUnauthorized, &models.HttpResponse{
+				Message: err.Error(),
+				Code:    http.StatusUnauthorized,
+			})
+		}
+	}
+
 	// Deno/wasm platform functions require a configured runtime manager.
 	if fn.IsApitoFunctionsRuntime() && g.gqlServer.FunctionRuntime == nil {
 		return c.JSON(http.StatusServiceUnavailable, &models.HttpResponse{
@@ -304,19 +324,84 @@ func (g *GraphCtrl) FunctionExecute(c echo.Context) error {
 	}
 
 	fnStart := time.Now()
-	resp, _fn, err := g.gqlServer.HandleApitoFunction(ctx, &models.ApplicationCache{
+	param := &models.CommonSystemParams{
+		ProjectID: projectId,
+		Ext:       map[string]interface{}{},
+	}
+	if uid, ok := c.Get("user").(string); ok && strings.TrimSpace(uid) != "" {
+		param.UserID = strings.TrimSpace(uid)
+	}
+	if roleID, ok := c.Get("role").(string); ok && strings.TrimSpace(roleID) != "" {
+		param.Role = &models.Role{ID: strings.TrimSpace(roleID)}
+	}
+	dbCtx := context.WithValue(ctx, "project_id", projectId)
+
+	// For non-SaaS (or when no callable-auth hook ran), allow X-Apito-Tenant-ID as before.
+	// SaaS live path already stamped tenant from JWT claims; do not trust header as source of truth.
+	headerTenant := strings.TrimSpace(c.Request().Header.Get("X-Apito-Tenant-ID"))
+	saasCallable := g.cfg != nil && g.cfg.FunctionCallableAuthHook != nil && c.Get("is_project_user") == true
+	if !saasCallable && headerTenant != "" {
+		param.Ext["tenant_id"] = headerTenant
+		c.Set("tenant_id", headerTenant)
+	} else if tid, ok := c.Get("tenant_id").(string); ok && strings.TrimSpace(tid) != "" {
+		param.Ext["tenant_id"] = strings.TrimSpace(tid)
+	}
+
+	if g.gqlServer.Cfg != nil && g.gqlServer.Cfg.BuildSystemParamHook != nil {
+		g.gqlServer.Cfg.BuildSystemParamHook(dbCtx, project, param)
+	}
+	cache := &models.ApplicationCache{
 		Project: project,
-		Param: &models.CommonSystemParams{
-			ProjectID: projectId,
-		},
-	}, fnName, map[string]interface{}{
+		Param:   param,
+		Ctx:     dbCtx,
+	}
+	if g.gqlServer.Cfg != nil && g.gqlServer.Cfg.PostApplicationCacheHook != nil {
+		if hook, ok := g.gqlServer.Cfg.PostApplicationCacheHook.(func(echo.Context, *models.ApplicationCache)); ok {
+			hook(c, cache)
+		}
+	}
+
+	// Validate + inject typed tenant routing keys before invoke.
+	explicitForPolicy := ""
+	if !saasCallable {
+		explicitForPolicy = headerTenant
+	}
+	if _, err := g.gqlServer.ApplyFunctionTenantScope(cache.Ctx, cache, models.FunctionTenantScopeLive, explicitForPolicy); err != nil {
+		code := http.StatusBadRequest
+		msg := err.Error()
+		if te, ok := apifn.AsTenantScopeError(err); ok {
+			msg = te.Error()
+			switch te.Code {
+			case apifn.TenantScopeForbidden:
+				code = http.StatusForbidden
+			case apifn.TenantRequired:
+				code = http.StatusForbidden
+			case apifn.TenantNotFound, apifn.TenantNotActive, apifn.TenantDBNotReady:
+				code = http.StatusBadRequest
+			}
+		}
+		return c.JSON(code, &models.HttpResponse{
+			Message: msg,
+			Code:    uint32(code),
+		})
+	}
+
+	resp, _fn, err := g.gqlServer.HandleApitoFunction(cache.Ctx, cache, fnName, map[string]interface{}{
 		"payload": req,
 	})
 	telemetry.RecordFunctionExecute(ctx, g.cfg, fnName, err, time.Since(fnStart))
 	if err != nil {
-		return c.JSON(http.StatusBadRequest, &models.HttpResponse{
-			Message: err.Error(),
-			Code:    http.StatusBadRequest,
+		code := http.StatusBadRequest
+		msg := err.Error()
+		if te, ok := apifn.AsTenantScopeError(err); ok {
+			msg = te.Error()
+			if te.Code == apifn.TenantScopeForbidden || te.Code == apifn.TenantRequired {
+				code = http.StatusForbidden
+			}
+		}
+		return c.JSON(code, &models.HttpResponse{
+			Message: msg,
+			Code:    uint32(code),
 		})
 	}
 

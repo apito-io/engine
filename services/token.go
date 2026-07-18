@@ -233,6 +233,49 @@ func (t *ApitoTokenService) ApitoPublicFunctionRouteHandler(next echo.HandlerFun
 	}
 }
 
+// ValidateAppUserFunctionBearer validates Authorization Bearer as an app end-user
+// token for live SaaS /function calls. Rejects missing auth, sync/admin tokens
+// (cli-/mcp-/sdk-), and non-project-user API keys.
+func (t *ApitoTokenService) ValidateAppUserFunctionBearer(ctx echo.Context) (*models.TokenClaims, error) {
+	if t == nil {
+		return nil, errors.New("token service unavailable")
+	}
+	token, err := tokenFromBearer(ctx.Request())
+	if err != nil || token == nil || strings.TrimSpace(*token) == "" {
+		return nil, errors.New("missing or invalid Authorization Bearer (app-user JWT required)")
+	}
+	raw := strings.TrimSpace(*token)
+
+	if strings.HasPrefix(raw, "cli-") || strings.HasPrefix(raw, "sdk-") || strings.HasPrefix(raw, "mcp-") {
+		return nil, errors.New("sync/admin tokens cannot invoke live SaaS functions; use an app-user JWT")
+	}
+
+	var verified *models.TokenClaims
+	if strings.HasPrefix(raw, "ak_") {
+		verified, err = t.apiKeyManager.ValidateAndSetContext(ctx, raw)
+		if err != nil {
+			return nil, errors.New("invalid app-user token")
+		}
+		if !verified.IsProjectUser && verified.TokenType != "user" && verified.TokenType != "tenant" {
+			return nil, errors.New("project API keys cannot invoke live SaaS functions; use an app-user JWT")
+		}
+	} else {
+		verified, err = t.blankaService.ValidateAndSetContext(ctx, raw)
+		if err != nil {
+			return nil, errors.New("invalid app-user token")
+		}
+		if !verified.IsProjectUser && verified.TokenType != "user" && verified.TokenType != "tenant" {
+			return nil, errors.New("console/admin tokens cannot invoke live SaaS functions; use an app-user JWT")
+		}
+	}
+
+	t.runPostTokenValidateHook(ctx, verified)
+	_ = utility.SetTokenClaimsToRouter(ctx, verified)
+	ctx.Set("token", raw)
+	ctx.Set("is_project_user", true)
+	return verified, nil
+}
+
 func (t *ApitoTokenService) ApitoTokenHandler(next echo.HandlerFunc) echo.HandlerFunc {
 	return func(ctx echo.Context) error {
 

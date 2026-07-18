@@ -87,17 +87,26 @@ func (s *GraphQLServer) HandleApitoFunction(ctx context.Context, cache *models.A
 		if reqMap == nil {
 			reqMap = map[string]interface{}{"payload": _payload}
 		}
-		tenantID := ""
-		if param != nil && param.Ext != nil {
-			if v, ok := param.Ext["tenant_id"].(string); ok {
-				tenantID = v
-			}
+		tenantID, err := s.applyFunctionTenantScope(ctx, cache, models.FunctionTenantScopeLive, "")
+		if err != nil {
+			return nil, nil, err
 		}
 		role := ""
 		if param != nil && param.Role != nil {
 			role = param.Role.ID
 		}
 		env := functions.BuildEnvelope(_function, project.ID, tenantID, param.UserID, role, reqMap, utility.NewID())
+		// Live execution uses active revision artifact when present; draft Source is for edit/test.
+		if s.FunctionRuntime != nil {
+			env.Source = functions.ResolveActiveSource(ctx, s.FunctionRuntime.Artifacts(), _function)
+		}
+		if env.Source == "" {
+			env.Source = _function.Source
+		}
+		if err := s.registerFunctionInvocation(ctx, cache, env); err != nil {
+			return nil, nil, err
+		}
+		defer functions.GlobalInvocationRegistry.Unregister(env.InvocationID)
 		result, err := s.FunctionRuntime.Invoke(ctx, env)
 		if err != nil {
 			return nil, nil, err

@@ -581,6 +581,63 @@ func (s *GraphQLServer) BuildServerQueriesAndMutations() {
 			Type:    graphql.NewList(privateSchemaObjects.CloudFunctionObject),
 			Resolve: s.ProjectFunctionsInfoResolverFn,
 		},
+		"listFunctionRevisions": &graphql.Field{
+			Name: "ListFunctionRevisions",
+			Type: graphql.NewList(graphql.NewObject(graphql.ObjectConfig{
+				Name: "FunctionRevisionType",
+				Fields: graphql.Fields{
+					"id":            &graphql.Field{Type: graphql.String},
+					"project_id":    &graphql.Field{Type: graphql.String},
+					"name":          &graphql.Field{Type: graphql.String},
+					"revision":      &graphql.Field{Type: graphql.Float},
+					"runtime":       &graphql.Field{Type: graphql.String},
+					"language":      &graphql.Field{Type: graphql.String},
+					"source":        &graphql.Field{Type: graphql.String},
+					"artifact_key":  &graphql.Field{Type: graphql.String},
+					"artifact_hash": &graphql.Field{Type: graphql.String},
+					"abi_version":   &graphql.Field{Type: graphql.String},
+					"capabilities":  &graphql.Field{Type: graphql.NewList(graphql.String)},
+					"created_by":    &graphql.Field{Type: graphql.String},
+					"created_at":    &graphql.Field{Type: graphql.String},
+				},
+			})),
+			Args: graphql.FieldConfigArgument{
+				"name": &graphql.ArgumentConfig{
+					Type: graphql.NewNonNull(graphql.String),
+				},
+				"limit": &graphql.ArgumentConfig{
+					Type: graphql.Int,
+				},
+			},
+			Resolve: s.ListFunctionRevisionsResolverFn,
+		},
+		"listFunctionDeployments": &graphql.Field{
+			Name: "ListFunctionDeployments",
+			Type: graphql.NewList(graphql.NewObject(graphql.ObjectConfig{
+				Name: "FunctionDeploymentType",
+				Fields: graphql.Fields{
+					"id":          &graphql.Field{Type: graphql.String},
+					"project_id":  &graphql.Field{Type: graphql.String},
+					"name":        &graphql.Field{Type: graphql.String},
+					"revision_id": &graphql.Field{Type: graphql.String},
+					"build_id":    &graphql.Field{Type: graphql.String},
+					"environment": &graphql.Field{Type: graphql.String},
+					"status":      &graphql.Field{Type: graphql.String},
+					"deployed_by": &graphql.Field{Type: graphql.String},
+					"rollback_of": &graphql.Field{Type: graphql.String},
+					"created_at":  &graphql.Field{Type: graphql.String},
+				},
+			})),
+			Args: graphql.FieldConfigArgument{
+				"name": &graphql.ArgumentConfig{
+					Type: graphql.NewNonNull(graphql.String),
+				},
+				"limit": &graphql.ArgumentConfig{
+					Type: graphql.Int,
+				},
+			},
+			Resolve: s.ListFunctionDeploymentsResolverFn,
+		},
 		"listExecutableFunctions": &graphql.Field{
 			Name: "ListExecutableFunctions",
 			Type: graphql.NewObject(graphql.ObjectConfig{
@@ -1246,6 +1303,115 @@ func (s *GraphQLServer) BuildServerQueriesAndMutations() {
 				},
 			},
 			Resolve: s.DeleteFunctionResolverFn,
+		},
+		"deployFunctionToProject": &graphql.Field{
+			Name: "DeployFunctionToProject",
+			Type: graphql.NewObject(graphql.ObjectConfig{
+				Name: "DeployFunctionToProjectResponse",
+				Fields: graphql.Fields{
+					"function":   &graphql.Field{Type: privateSchemaObjects.CloudFunctionObject},
+					"revision":   &graphql.Field{Type: graphql.NewObject(graphql.ObjectConfig{
+						Name: "DeployFunctionRevisionType",
+						Fields: graphql.Fields{
+							"id":            &graphql.Field{Type: graphql.String},
+							"revision":      &graphql.Field{Type: graphql.Float},
+							"artifact_key":  &graphql.Field{Type: graphql.String},
+							"artifact_hash": &graphql.Field{Type: graphql.String},
+							"created_at":    &graphql.Field{Type: graphql.String},
+						},
+					})},
+					"deployment": &graphql.Field{Type: graphql.NewObject(graphql.ObjectConfig{
+						Name: "DeployFunctionDeploymentType",
+						Fields: graphql.Fields{
+							"id":          &graphql.Field{Type: graphql.String},
+							"revision_id": &graphql.Field{Type: graphql.String},
+							"status":      &graphql.Field{Type: graphql.String},
+							"created_at":  &graphql.Field{Type: graphql.String},
+						},
+					})},
+				},
+			}),
+			Args: graphql.FieldConfigArgument{
+				"name": &graphql.ArgumentConfig{
+					Type: graphql.NewNonNull(graphql.String),
+				},
+				"source": &graphql.ArgumentConfig{
+					Type: graphql.String,
+				},
+			},
+			Resolve: s.DeployFunctionToProjectResolverFn,
+		},
+		"rollbackFunctionDeployment": &graphql.Field{
+			Name: "RollbackFunctionDeployment",
+			Type: graphql.NewObject(graphql.ObjectConfig{
+				Name: "RollbackFunctionDeploymentResponse",
+				Fields: graphql.Fields{
+					"function": &graphql.Field{Type: privateSchemaObjects.CloudFunctionObject},
+					"revision": &graphql.Field{Type: graphql.NewObject(graphql.ObjectConfig{
+						Name: "RollbackFunctionRevisionType",
+						Fields: graphql.Fields{
+							"id":           &graphql.Field{Type: graphql.String},
+							"artifact_key": &graphql.Field{Type: graphql.String},
+							"created_at":   &graphql.Field{Type: graphql.String},
+						},
+					})},
+					"deployment": &graphql.Field{Type: graphql.NewObject(graphql.ObjectConfig{
+						Name: "RollbackFunctionDeploymentType",
+						Fields: graphql.Fields{
+							"id":          &graphql.Field{Type: graphql.String},
+							"revision_id": &graphql.Field{Type: graphql.String},
+							"status":      &graphql.Field{Type: graphql.String},
+							"rollback_of": &graphql.Field{Type: graphql.String},
+							"created_at":  &graphql.Field{Type: graphql.String},
+						},
+					})},
+				},
+			}),
+			Args: graphql.FieldConfigArgument{
+				"name": &graphql.ArgumentConfig{
+					Type: graphql.NewNonNull(graphql.String),
+				},
+				"revision_id": &graphql.ArgumentConfig{
+					Type: graphql.NewNonNull(graphql.String),
+				},
+			},
+			Resolve: s.RollbackFunctionDeploymentResolverFn,
+		},
+		"testFunctionDraft": &graphql.Field{
+			Name: "TestFunctionDraft",
+			Type: graphql.NewObject(graphql.ObjectConfig{
+				Name: "TestFunctionDraftResponse",
+				Fields: graphql.Fields{
+					"ok":            &graphql.Field{Type: graphql.Boolean},
+					"response":      &graphql.Field{Type: scaler.ScalarJSON},
+					"error":         &graphql.Field{Type: graphql.String},
+					"error_class":   &graphql.Field{Type: graphql.String},
+					"duration_ms":   &graphql.Field{Type: graphql.Int},
+					"invocation_id": &graphql.Field{Type: graphql.String},
+					"logs": &graphql.Field{Type: graphql.NewList(graphql.NewObject(graphql.ObjectConfig{
+						Name: "TestFunctionDraftLogEntry",
+						Fields: graphql.Fields{
+							"level":   &graphql.Field{Type: graphql.String},
+							"message": &graphql.Field{Type: graphql.String},
+						},
+					}))},
+				},
+			}),
+			Args: graphql.FieldConfigArgument{
+				"name": &graphql.ArgumentConfig{
+					Type: graphql.NewNonNull(graphql.String),
+				},
+				"source": &graphql.ArgumentConfig{
+					Type: graphql.String,
+				},
+				"payload": &graphql.ArgumentConfig{
+					Type: scaler.ScalarJSON,
+				},
+				"tenant_id": &graphql.ArgumentConfig{
+					Type: graphql.String,
+				},
+			},
+			Resolve: s.TestFunctionDraftResolverFn,
 		},
 		"deleteRoleFromProject": &graphql.Field{
 			Name: "DeleteApitoFunction",

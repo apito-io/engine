@@ -202,7 +202,7 @@ func BuildGraphQL(ctx context.Context, cfg *models.Config, extensionRouter *echo
 	}
 	srv.FunctionRuntime = apifn.NewRuntimeManager(
 		[]apifn.RuntimeProvider{
-			selectDenoProvider(),
+			selectDenoProvider(gateway),
 			apifn.NewWazeroRuntimeProvider(ctx),
 		},
 		apifn.WithTransport(apifn.NewLocalTransport()),
@@ -211,6 +211,7 @@ func BuildGraphQL(ctx context.Context, cfg *models.Config, extensionRouter *echo
 		apifn.WithArtifactStore(store),
 		apifn.WithGlobalConcurrency(globalConc),
 	)
+	srv.WireFunctionDataGateway()
 
 	// Initialize SystemQueries and SystemMutations as empty maps to prevent nil panic
 	srv.SystemQueries = make(graphql.Fields)

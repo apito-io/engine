@@ -31,6 +31,27 @@ func requireProjectAdmin(cache *models.ApplicationCache) error {
 	return errors.New("admin role required")
 }
 
+// requireFunctionManage gates function list/upsert/delete/test/deploy/history/rollback.
+// Today: owner/admin or project_admin. Centralized so a future logic.manage team
+// permission can be added without touching each resolver.
+func requireFunctionManage(cache *models.ApplicationCache) error {
+	if cache == nil || cache.Param == nil || cache.Param.Role == nil {
+		return errors.New("function management requires project admin")
+	}
+	role := cache.Param.Role
+	id := strings.ToLower(strings.TrimSpace(role.ID))
+	if role.IsAdmin || id == "admin" || id == "owner" || id == "project_admin" {
+		return nil
+	}
+	// Future seam: if role.Permissions contains "logic.manage", allow.
+	return errors.New("function management requires project admin")
+}
+
+// RequireFunctionManage is the exported form of requireFunctionManage.
+func RequireFunctionManage(cache *models.ApplicationCache) error {
+	return requireFunctionManage(cache)
+}
+
 // GetArgString reads a string GraphQL argument.
 func GetArgString(args map[string]interface{}, key string) string {
 	return getArgString(args, key)

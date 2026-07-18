@@ -268,6 +268,26 @@ type Config struct {
 	// FunctionLimitsHook lets pro supply plan/tier quotas for Apito Functions.
 	FunctionLimitsHook func(ctx context.Context, projectID string, fn *ApitoFunction) (memoryBytes int64, timeoutMs int64, maxConcurrency int, err error) `env:"-"`
 
+	// FunctionTenantScopeMode selects draft-test vs live callable tenant policy.
+	// Values: "draft_test" | "live" (see FunctionTenantScope* constants below).
+
+	// FunctionTenantScopeHook resolves and validates tenant scope for function
+	// invocation without importing Pro types into open-core. It must inject
+	// routing keys onto cache.Ctx (typed Pro keys) and cache.Param.Ext so
+	// ConnectionRoutingHook and row filters share one validated scope.
+	// Returns the resolved tenant id (may be empty for non-SaaS / shared-DB).
+	FunctionTenantScopeHook func(
+		ctx context.Context,
+		cache *ApplicationCache,
+		mode FunctionTenantScopeMode,
+		explicitTenantID string,
+	) (tenantID string, err error) `env:"-"`
+
+	// FunctionCallableAuthHook runs on REST /function for SaaS projects before
+	// invoke. Pro uses it to require a verified app-user Bearer JWT (in addition
+	// to X-Fn-Hash). Non-SaaS may leave this nil (hash-only remains valid).
+	FunctionCallableAuthHook func(c echo.Context, project *Project) error `env:"-"`
+
 	// EnableCompiledSchemaCache caches pre-connection GraphQL shape (fingerprint: project + role + schema).
 	EnableCompiledSchemaCache bool `env:"ENABLE_COMPILED_SCHEMA_CACHE" env-default:"false"`
 
@@ -299,3 +319,11 @@ type Config struct {
 	// OTELExporterOTLPEndpoint optional OTLP HTTP endpoint for traces. Empty disables OTLP trace export for builds that wire a TracerProvider.
 	OTELExporterOTLPEndpoint string `env:"OTEL_EXPORTER_OTLP_ENDPOINT" env-default:""`
 }
+
+// FunctionTenantScopeMode selects draft-test vs live callable tenant policy.
+type FunctionTenantScopeMode string
+
+const (
+	FunctionTenantScopeDraftTest FunctionTenantScopeMode = "draft_test"
+	FunctionTenantScopeLive      FunctionTenantScopeMode = "live"
+)

@@ -1506,6 +1506,14 @@ func (s *GraphQLServer) ProjectFunctionsInfoResolverFn(p graphql.ResolveParams) 
 		router = v("router").(echo.Context)
 	)
 
+	cache, err := s.GetApplicationCache(router)
+	if err != nil {
+		return nil, err
+	}
+	if err := requireFunctionManage(cache); err != nil {
+		return nil, err
+	}
+
 	param, err := s.buildCommonSystemParam(router)
 	if err != nil {
 		return nil, err

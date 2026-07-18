@@ -1680,6 +1680,9 @@ func (s *GraphQLServer) UpsertFunctionToProjectResolverFn(p graphql.ResolveParam
 	if err != nil {
 		return nil, err
 	}
+	if err := requireFunctionManage(cache); err != nil {
+		return nil, err
+	}
 
 	project := cache.Project
 
@@ -2186,6 +2189,9 @@ func (s *GraphQLServer) DeleteFunctionResolverFn(p graphql.ResolveParams) (inter
 
 	cache, err := s.GetApplicationCache(router)
 	if err != nil {
+		return nil, err
+	}
+	if err := requireFunctionManage(cache); err != nil {
 		return nil, err
 	}
 

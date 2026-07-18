@@ -2,6 +2,16 @@
 
 Notable changes to **open-core** only. Release tags use `v1.x` (for example `v1.5.4`, `v1.6.0`).
 
+## [1.7.13] — 2026-07-18
+
+### Apito Functions (tenant-safe SaaS + lifecycle)
+
+- **Tenant scope** — `FunctionTenantScopeHook` / `FunctionCallableAuthHook`; stable codes `TENANT_REQUIRED`, `TENANT_NOT_FOUND`, `TENANT_NOT_ACTIVE`, `TENANT_SCOPE_FORBIDDEN`, `TENANT_DB_NOT_READY`.
+- **Draft test** — `testFunctionDraft` validates tenant before Deno/SQL; typed Pro routing keys (no plain-string `tenant_id` context miss).
+- **Live SaaS REST** — `/function` requires app-user Bearer JWT + `X-Fn-Hash`; tenant from claims only.
+- **Authz** — `requireFunctionManage` on list/upsert/delete/test/deploy/history/rollback.
+- **Lifecycle GraphQL** — deploy/rollback/revisions/deployments; Deno gateway read ops + embedded SDK bridge.
+
 ## [1.7.12] — 2026-07-16
 
 ### Packaging
