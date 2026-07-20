@@ -4,6 +4,15 @@ Not git history — the *reasoning* behind changes. Newest on top.
 Format per entry: date, **Changed**, **Why**, **Affected**.
 
 ---
+## 2026-07-20 — v1.7.14 active_revision_hash for function sync
+- **Changed:** Non-persisted `ActiveRevisionHash` on ApitoFunction; GraphQL
+  `active_revision_hash`; `projectFunctionsInfo` enriches from active revision
+  artifact hash. CHANGELOG `[1.7.14]`.
+- **Why:** CLI `sync --type functions` live-parity / deploy diffs need dest hash
+  vs `sha256(source)` without N+1 revision lists.
+- **Affected:** `models/apito_function.go`, `schemas/objects/object_models.go`,
+  `resolver/system_query.go`, tests. Tag: `v1.7.14`.
+
 ## 2026-07-16 — v1.7.12 Deno in OSS Docker image
 - **Changed:** Runtime stage `apk add deno`; CHANGELOG `[1.7.12]`.
 - **Why:** Parity with Studio/engine images so self-host OSS can run Logic `runtime: deno`.

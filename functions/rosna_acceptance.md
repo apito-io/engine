@@ -1,6 +1,6 @@
 # Rosna acceptance sequence (Apito Functions)
 
-Real services under `udbhabon/rosna-astro/src/server/rosna/`:
+Real services under `udbhabon/rosna/rosna-astro/src/server/rosna/`:
 
 1. pure compute hello / timeout / error
 2. caller-scoped read-only (`getSingleResource`)

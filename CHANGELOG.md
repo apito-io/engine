@@ -2,6 +2,14 @@
 
 Notable changes to **open-core** only. Release tags use `v1.x` (for example `v1.5.4`, `v1.6.0`).
 
+## [Unreleased]
+
+## [1.7.14] — 2026-07-20
+
+### Apito Functions
+
+- **`active_revision_hash`** — CloudFunction GraphQL field; `projectFunctionsInfo` enriches from the active revision’s `artifact_hash` (SHA-256 of deployed source) for CLI sync live-parity diffs. Not persisted on the function row.
+
 ## [1.7.13] — 2026-07-18
 
 ### Apito Functions (tenant-safe SaaS + lifecycle)

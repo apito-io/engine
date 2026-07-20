@@ -59,6 +59,10 @@ type ApitoFunction struct {
 	// ActiveRevisionID points at the currently deployed FunctionRevision.
 	ActiveRevisionID string `bun:",nullzero" json:"active_revision_id,omitempty" firestore:"active_revision_id,omitempty" bson:"active_revision_id,omitempty"`
 
+	// ActiveRevisionHash is the artifact_hash of the active revision (SHA-256 of
+	// deployed source). Not persisted — enriched at read time for sync/list UIs.
+	ActiveRevisionHash string `bun:"-" json:"active_revision_hash,omitempty" firestore:"-" bson:"-"`
+
 	// Capabilities is a JSON list of capability strings (data.read:model, http, …).
 	Capabilities []string `bun:"type:json,nullzero" json:"capabilities,omitempty" firestore:"capabilities,omitempty" bson:"capabilities,omitempty"`
 

@@ -10,6 +10,7 @@ import (
 
 	"github.com/apito-io/engine/database/helper"
 	ae "github.com/apito-io/engine/err"
+	"github.com/apito-io/engine/interfaces"
 	"github.com/apito-io/engine/models"
 	pluginService "github.com/apito-io/engine/services/plugin"
 	"github.com/apito-io/engine/utility"
@@ -1523,7 +1524,26 @@ func (s *GraphQLServer) ProjectFunctionsInfoResolverFn(p graphql.ResolveParams) 
 	if err != nil {
 		return nil, err
 	}
+	enrichActiveRevisionHashes(p.Context, s.lifecycleStore(), cache.Project.ID, res.Results)
 	return res.Results, nil
+}
+
+// enrichActiveRevisionHashes fills ActiveRevisionHash from the lifecycle store
+// for functions that have an ActiveRevisionID. Missing store/revision leaves hash empty.
+func enrichActiveRevisionHashes(ctx context.Context, store interfaces.FunctionLifecycleStore, projectID string, fns []*models.ApitoFunction) {
+	if store == nil || projectID == "" || len(fns) == 0 {
+		return
+	}
+	for _, fn := range fns {
+		if fn == nil || fn.ActiveRevisionID == "" {
+			continue
+		}
+		rev, err := store.GetRevision(ctx, projectID, fn.ActiveRevisionID)
+		if err != nil || rev == nil {
+			continue
+		}
+		fn.ActiveRevisionHash = rev.ArtifactHash
+	}
 }
 
 func (s *GraphQLServer) ListExecutableFunctionsResolverFn(p graphql.ResolveParams) (interface{}, error) {
