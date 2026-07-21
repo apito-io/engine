@@ -4,6 +4,12 @@ Notable changes to **open-core** only. Release tags use `v1.x` (for example `v1.
 
 ## [Unreleased]
 
+## [1.8.1] — 2026-07-22
+
+### Fixed
+
+- **Parent field lookup** — `searchAndOperateOnFields` prefers the shallowest match for `parent_field` before nested groups with the same identifier (e.g. `class.sections` vs `class.divisions.sections`). Stops schema sync from adding nested fields onto the wrong parent when identifiers collide.
+
 ## [1.8.0] — 2026-07-21
 
 ### Breaking — Unified `apt_` access tokens + fail-closed project scope

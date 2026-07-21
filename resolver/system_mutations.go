@@ -3281,7 +3281,10 @@ func (s *GraphQLServer) searchAndOperateOnFields(fields *[]*models.FieldInfo, ex
 		return nil, nil
 	}
 
-	// If parentIdentifier is provided, search for the parent field (deeply), then search its subfields for the identifier
+	// If parentIdentifier is provided, find the parent field then search its
+	// subfields. Prefer the shallowest match (root before nested) so a top-level
+	// repeated group is not shadowed by a nested group with the same identifier
+	// (e.g. class.sections vs class.divisions.sections).
 	if existingField.ParentField != "" {
 		var varSearch func(fs []*models.FieldInfo) *models.FieldInfo
 		varSearch = func(fs []*models.FieldInfo) *models.FieldInfo {
@@ -3289,6 +3292,8 @@ func (s *GraphQLServer) searchAndOperateOnFields(fields *[]*models.FieldInfo, ex
 				if f.Identifier == existingField.ParentField {
 					return f
 				}
+			}
+			for _, f := range fs {
 				if len(f.SubFieldInfo) > 0 {
 					if found := varSearch(f.SubFieldInfo); found != nil {
 						return found
