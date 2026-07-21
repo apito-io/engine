@@ -57,8 +57,11 @@ type SystemUser struct {
 
 	IsPaymentDue bool `json:"is_payment_due,omitempty" firestore:"is_payment_due,omitempty" bson:"is_payment_due,omitempty"`
 
-	// Stored as JSON in SQL (nested document); not a separate sync_token table (avoids invalid has-many FK).
+	// Legacy sync tokens (cli-/sdk-/mcp-). Cleared on apt_ mint; no longer issued or validated.
 	SyncTokens []*SyncToken `bun:"type:jsonb,nullzero" json:"sync_tokens,omitempty" firestore:"sync_tokens,omitempty" bson:"sync_tokens,omitempty"`
+
+	// AccessTokens are opaque apt_ automation credentials (hashed secrets only).
+	AccessTokens []*AccessTokenRecord `bun:"type:jsonb,nullzero" json:"access_tokens,omitempty" firestore:"access_tokens,omitempty" bson:"access_tokens,omitempty"`
 
 	DefaultTeamID         string        `bun:"default_team_id,type:uuid" json:"default_team_id,omitempty" firestore:"default_team_id,omitempty" bson:"default_team_id,omitempty"`
 	DefaultOrganizationID string        `bun:"default_org_id,type:uuid" json:"default_org_id,omitempty" firestore:"default_org_id,omitempty" bson:"default_org_id,omitempty"`

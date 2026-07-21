@@ -48,6 +48,9 @@ func (s *GraphQLServer) DeployFunctionToProjectResolverFn(p graphql.ResolveParam
 	if err != nil {
 		return nil, err
 	}
+	if err := requireAccessCapability(router, CapFunctionsDeploy); err != nil {
+		return nil, err
+	}
 	if err := requireFunctionManage(cache); err != nil {
 		return nil, err
 	}
@@ -113,6 +116,9 @@ func (s *GraphQLServer) RollbackFunctionDeploymentResolverFn(p graphql.ResolvePa
 	)
 	cache, err := s.GetApplicationCache(router)
 	if err != nil {
+		return nil, err
+	}
+	if err := requireAccessCapability(router, CapFunctionsDeploy); err != nil {
 		return nil, err
 	}
 	if err := requireFunctionManage(cache); err != nil {
@@ -191,6 +197,9 @@ func (s *GraphQLServer) TestFunctionDraftResolverFn(p graphql.ResolveParams) (in
 	)
 	cache, err := s.GetApplicationCache(router)
 	if err != nil {
+		return nil, err
+	}
+	if err := requireAccessCapability(router, CapFunctionsTest); err != nil {
 		return nil, err
 	}
 	if err := requireFunctionManage(cache); err != nil {

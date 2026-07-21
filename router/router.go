@@ -187,6 +187,16 @@ func InitRouter(cfg *models.Config) (*echo.Echo, error) {
 			syncRoutes.POST("/project", authCtrl.SyncProject)
 		}
 
+		accessTokenRoutes := systemRoutes.Group("/access-tokens")
+		{
+			accessTokenRoutes.GET("", authCtrl.ListAccessTokens)
+			accessTokenRoutes.POST("", authCtrl.CreateAccessToken)
+			accessTokenRoutes.POST("/revoke", authCtrl.RevokeAccessToken)
+			accessTokenRoutes.POST("/rotate", authCtrl.RotateAccessToken)
+			accessTokenRoutes.GET("/catalog", authCtrl.ListAccessTokenCatalog)
+			accessTokenRoutes.GET("/administrable-projects", authCtrl.ListAdministrableProjects)
+		}
+
 		systemUser := systemRoutes.Group("/user")
 		{
 			systemUser.GET("/profile", authCtrl.GetProfile)

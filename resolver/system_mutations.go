@@ -30,6 +30,9 @@ func (s *GraphQLServer) GenerateProjectTokenResolverFn(p graphql.ResolveParams) 
 		v      = p.Context.Value
 		router = v("router").(echo.Context)
 	)
+	if err := requireAccessCapability(router, CapProjectsWrite); err != nil {
+		return nil, err
+	}
 
 	s.injectMetaData("GenerateApiTokenResolverFn", router)
 
@@ -119,6 +122,9 @@ func (s *GraphQLServer) DeleteProjectTokenResolverFn(p graphql.ResolveParams) (i
 		v      = p.Context.Value
 		router = v("router").(echo.Context)
 	)
+	if err := requireAccessCapability(router, CapProjectsWrite); err != nil {
+		return nil, err
+	}
 
 	s.injectMetaData("DeleteApiTokenResolverFn", router)
 
@@ -444,6 +450,9 @@ func (s *GraphQLServer) UpdateProjectResolverFn(p graphql.ResolveParams) (interf
 		v      = p.Context.Value
 		router = v("router").(echo.Context)
 	)
+	if err := requireAccessCapability(router, CapProjectsWrite); err != nil {
+		return nil, err
+	}
 
 	s.injectMetaData("UpdateProjectResolverFn", router)
 
@@ -873,6 +882,9 @@ func (s *GraphQLServer) RemoveProjectSpecificPluginResolverFn(p graphql.ResolveP
 		v      = p.Context.Value
 		router = v("router").(echo.Context)
 	)
+	if err := requireAccessCapability(router, CapPluginsWrite); err != nil {
+		return nil, err
+	}
 
 	s.injectMetaData("DeletePluginResolverFn", router)
 
@@ -913,6 +925,9 @@ func (s *GraphQLServer) UpsertPluginResolverFn(p graphql.ResolveParams) (interfa
 		v      = p.Context.Value
 		router = v("router").(echo.Context)
 	)
+	if err := requireAccessCapability(router, CapPluginsWrite); err != nil {
+		return nil, err
+	}
 
 	s.injectMetaData("UpsertPluginResolverFn", router)
 
@@ -1087,6 +1102,9 @@ func (s *GraphQLServer) AddModelToProjectResolverFn(p graphql.ResolveParams) (in
 		v      = p.Context.Value
 		router = v("router").(echo.Context)
 	)
+	if err := requireAccessCapability(router, CapSchemaWrite); err != nil {
+		return nil, err
+	}
 
 	s.injectMetaData("AddModelToProjectResolverFn", router)
 
@@ -1199,6 +1217,9 @@ func (s *GraphQLServer) RunModelMigrationsResolverFn(p graphql.ResolveParams) (i
 		v      = p.Context.Value
 		router = v("router").(echo.Context)
 	)
+	if err := requireAccessCapability(router, CapSchemaPublish); err != nil {
+		return nil, err
+	}
 
 	s.injectMetaData("RunModelMigrationsResolverFn", router)
 
@@ -1267,6 +1288,9 @@ func (s *GraphQLServer) UpdateModelResolverFn(p graphql.ResolveParams) (interfac
 		v      = p.Context.Value
 		router = v("router").(echo.Context)
 	)
+	if err := requireAccessCapability(router, CapSchemaWrite); err != nil {
+		return nil, err
+	}
 
 	s.injectMetaData("UpdateModelResolverFn", router)
 
@@ -1683,6 +1707,9 @@ func (s *GraphQLServer) UpsertFunctionToProjectResolverFn(p graphql.ResolveParam
 	if err := requireFunctionManage(cache); err != nil {
 		return nil, err
 	}
+	if err := requireAccessCapability(router, CapFunctionsWrite); err != nil {
+		return nil, err
+	}
 
 	project := cache.Project
 
@@ -2028,6 +2055,9 @@ func (s *GraphQLServer) UpsertRoleToProjectResolverFn(p graphql.ResolveParams) (
 		v      = p.Context.Value
 		router = v("router").(echo.Context)
 	)
+	if err := requireAccessCapability(router, CapRolesWrite); err != nil {
+		return nil, err
+	}
 
 	s.injectMetaData("UpsertRoleToProjectResolverFn", router)
 
@@ -2125,6 +2155,9 @@ func (s *GraphQLServer) DuplicateRoleInProjectResolverFn(p graphql.ResolveParams
 		v      = p.Context.Value
 		router = v("router").(echo.Context)
 	)
+	if err := requireAccessCapability(router, CapRolesWrite); err != nil {
+		return nil, err
+	}
 
 	s.injectMetaData("DuplicateRoleInProjectResolverFn", router)
 
@@ -2191,6 +2224,9 @@ func (s *GraphQLServer) DeleteFunctionResolverFn(p graphql.ResolveParams) (inter
 	if err != nil {
 		return nil, err
 	}
+	if err := requireAccessCapability(router, CapFunctionsDelete); err != nil {
+		return nil, err
+	}
 	if err := requireFunctionManage(cache); err != nil {
 		return nil, err
 	}
@@ -2243,6 +2279,9 @@ func (s *GraphQLServer) DeleteRoleResolverFn(p graphql.ResolveParams) (interface
 		v      = p.Context.Value
 		router = v("router").(echo.Context)
 	)
+	if err := requireAccessCapability(router, CapRolesWrite); err != nil {
+		return nil, err
+	}
 
 	s.injectMetaData("DeleteRoleResolverFn", router)
 
@@ -2305,6 +2344,9 @@ func (s *GraphQLServer) UpsertFieldToModelResolverFn(p graphql.ResolveParams) (i
 		v      = p.Context.Value
 		router = v("router").(echo.Context)
 	)
+	if err := requireAccessCapability(router, CapSchemaWrite); err != nil {
+		return nil, err
+	}
 
 	s.injectMetaData("UpsertFieldToModelResolverFn", router)
 
@@ -2586,6 +2628,9 @@ func (s *GraphQLServer) RearrangeFieldOfModelResolverFn(p graphql.ResolveParams)
 		v      = p.Context.Value
 		router = v("router").(echo.Context)
 	)
+	if err := requireAccessCapability(router, CapSchemaWrite); err != nil {
+		return nil, err
+	}
 
 	cache, err := s.GetApplicationCache(router)
 	if err != nil {
@@ -2882,6 +2927,9 @@ func (s *GraphQLServer) ModelFieldOperationResolverFn(p graphql.ResolveParams) (
 		v      = p.Context.Value
 		router = v("router").(echo.Context)
 	)
+	if err := requireAccessCapability(router, CapSchemaWrite); err != nil {
+		return nil, err
+	}
 
 	s.injectMetaData("ModelFieldOperationResolverFn", router)
 
@@ -3430,6 +3478,9 @@ func (s *GraphQLServer) DeleteConnectionFromModelResolverFn(p graphql.ResolvePar
 		v      = p.Context.Value
 		router = v("router").(echo.Context)
 	)
+	if err := requireAccessCapability(router, CapSchemaWrite); err != nil {
+		return nil, err
+	}
 
 	s.injectMetaData("DeleteConnectionFromModelResolverFn", router)
 
@@ -3542,6 +3593,9 @@ func (s *GraphQLServer) CreateConnectionTypeResolverFn(p graphql.ResolveParams) 
 		v      = p.Context.Value
 		router = v("router").(echo.Context)
 	)
+	if err := requireAccessCapability(router, CapSchemaWrite); err != nil {
+		return nil, err
+	}
 
 	s.injectMetaData("CreateConnectionTypeResolverFn", router)
 

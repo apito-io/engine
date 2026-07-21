@@ -4,6 +4,19 @@ Notable changes to **open-core** only. Release tags use `v1.x` (for example `v1.
 
 ## [Unreleased]
 
+## [1.8.0] — 2026-07-21
+
+### Breaking — Unified `apt_` access tokens + fail-closed project scope
+
+- **Access tokens** — `apt_` principals authenticate via `Authorization: Bearer` + `X-Use-Cookies: false`. Legacy `cli-`/`sdk-`/`mcp-` sync-key prefixes are rejected (`TOKEN_FORMAT_RETIRED`). Token create/list/revoke/rotate stays on Console session only.
+- **Project header** — canonical scope header is `X-Apito-Project-Id` only. Access-token principals never inherit `ProjectID` from a sole grant; missing/invalid project scope fails closed.
+- **Capabilities** — data GraphQL, secured REST/files, and schema/role/plugin/function/tenant resolvers enforce access-token capability gates; pro tenant resolvers included.
+- **Session override** — cookie Console sessions may still use `applySessionProjectOverride` for multi-project UIs; `apt_` principals do not.
+
+### Added
+
+- Access-token models/service/policy, capability registry, and matrix tests under `services/` + `authz/`.
+
 ## [1.7.14] — 2026-07-20
 
 ### Apito Functions

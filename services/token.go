@@ -25,16 +25,24 @@ import (
 )
 
 type ApitoTokenService struct {
-	cfg            *models.Config
-	systemDB       interfaces.ApitoSystemDB
-	apiKeyManager  *ProjectKeyManager
-	syncKeyManager *BrankaTokenOptimized
-	blankaService  *BrankaToken
-	authService    AuthServiceInterface
-	Batch          *goBatch.Batch[models.ProjectApiTracking]
+	cfg                *models.Config
+	systemDB           interfaces.ApitoSystemDB
+	apiKeyManager      *ProjectKeyManager
+	accessTokenService *AccessTokenService
+	blankaService      *BrankaToken
+	authService        AuthServiceInterface
+	Batch              *goBatch.Batch[models.ProjectApiTracking]
 	// Removed dbWriteLock - channels are thread-safe
 	ctx    context.Context
 	cancel context.CancelFunc
+}
+
+// AccessTokens returns the apt_ token service (may be nil if not constructed).
+func (t *ApitoTokenService) AccessTokens() *AccessTokenService {
+	if t == nil {
+		return nil
+	}
+	return t.accessTokenService
 }
 
 func getPrimaryProjectIDFromClaims(claims *models.TokenClaims) string {
@@ -50,6 +58,48 @@ func getPrimaryProjectIDFromClaims(claims *models.TokenClaims) string {
 	return ""
 }
 
+func projectIDFromRequestHeader(ctx echo.Context) string {
+	if ctx == nil || ctx.Request() == nil {
+		return ""
+	}
+	return strings.TrimSpace(ctx.Request().Header.Get(models.ApitoProjectIDHeader))
+}
+
+// applySessionProjectOverride lets a console session scope GraphQL/REST to another
+// project the user can administer (via X-Apito-Project-Id). Needed for multi-project
+// UIs like access-token tenant pickers without switching the active project cookie.
+func (t *ApitoTokenService) applySessionProjectOverride(ctx echo.Context, claims *models.TokenClaims) {
+	if t == nil || ctx == nil || claims == nil || t.systemDB == nil {
+		return
+	}
+	headerProject := projectIDFromRequestHeader(ctx)
+	if headerProject == "" {
+		return
+	}
+	if strings.TrimSpace(claims.ProjectID) == headerProject {
+		return
+	}
+	for _, pid := range claims.ProjectIDs {
+		if pid == headerProject {
+			claims.ProjectID = headerProject
+			ctx.Set("project", headerProject)
+			ctx.Set("project_id", headerProject)
+			return
+		}
+	}
+	userID := strings.TrimSpace(claims.UserID)
+	if userID == "" {
+		return
+	}
+	pwr, err := t.systemDB.CheckProjectWithRoles(ctx.Request().Context(), userID, headerProject)
+	if err != nil || pwr == nil || !IsAdministrableRole(pwr.Role) {
+		return
+	}
+	claims.ProjectID = headerProject
+	ctx.Set("project", headerProject)
+	ctx.Set("project_id", headerProject)
+}
+
 func (t *ApitoTokenService) runPostTokenValidateHook(ctx echo.Context, claims *models.TokenClaims) {
 	if t == nil || t.cfg == nil || claims == nil || t.cfg.PostTokenValidateHook == nil {
 		return
@@ -57,6 +107,43 @@ func (t *ApitoTokenService) runPostTokenValidateHook(ctx echo.Context, claims *m
 	start := time.Now()
 	t.cfg.PostTokenValidateHook(ctx, claims)
 	telemetry.RecordSessionValidate(ctx.Request().Context(), t.cfg, "ok", time.Since(start))
+}
+
+// applyAccessTokenScope authorizes the canonical project and tenant headers for
+// an apt_ principal. Project-scoped operations fail later in GetApplicationCache
+// when the project header is omitted; tenant scope always requires a project.
+func (t *ApitoTokenService) applyAccessTokenScope(
+	ctx echo.Context,
+	claims *models.TokenClaims,
+	principal *models.AccessPrincipal,
+) error {
+	if t == nil || t.accessTokenService == nil || ctx == nil || claims == nil || principal == nil {
+		return errors.New("access token scope unavailable")
+	}
+
+	projectID := strings.TrimSpace(ctx.Request().Header.Get(models.ApitoProjectIDHeader))
+	tenantID := strings.TrimSpace(ctx.Request().Header.Get(models.ApitoTenantIDHeader))
+	if projectID == "" {
+		if tenantID != "" {
+			return errors.New("X-Apito-Project-Id is required when X-Apito-Tenant-ID is set")
+		}
+		return nil
+	}
+
+	if err := EnforceProjectForPrincipal(ctx, t.accessTokenService, projectID); err != nil {
+		return err
+	}
+	claims.ProjectID = projectID
+	ctx.Set("project", projectID)
+	ctx.Set("project_id", projectID)
+
+	if tenantID != "" {
+		if err := EnforceTenantForPrincipal(ctx, t.accessTokenService, projectID, tenantID); err != nil {
+			return err
+		}
+		ctx.Set("tenant_id", tenantID)
+	}
+	return nil
 }
 
 func NewApitoTokenService(cfg *models.Config, auth AuthServiceInterface, driver interfaces.ApitoSystemDB) (*ApitoTokenService, error) {
@@ -75,18 +162,16 @@ func NewApitoTokenService(cfg *models.Config, auth AuthServiceInterface, driver 
 		return nil, err
 	}
 
-	syncKeyManager := GetBrankaTokenOptimized(cfg, driver)
-
 	service := &ApitoTokenService{
-		cfg:            cfg,
-		systemDB:       driver,
-		blankaService:  GetBrankaToken(cfg, driver),
-		apiKeyManager:  apiKeyManager,
-		syncKeyManager: syncKeyManager,
-		authService:    auth,
-		Batch:          batch,
-		ctx:            ctx,
-		cancel:         cancel,
+		cfg:                cfg,
+		systemDB:           driver,
+		blankaService:      GetBrankaToken(cfg, driver),
+		apiKeyManager:      apiKeyManager,
+		accessTokenService: NewAccessTokenService(cfg, driver),
+		authService:        auth,
+		Batch:              batch,
+		ctx:                ctx,
+		cancel:             cancel,
 	}
 
 	// Start batch processing in a goroutine
@@ -234,8 +319,8 @@ func (t *ApitoTokenService) ApitoPublicFunctionRouteHandler(next echo.HandlerFun
 }
 
 // ValidateAppUserFunctionBearer validates Authorization Bearer as an app end-user
-// token for live SaaS /function calls. Rejects missing auth, sync/admin tokens
-// (cli-/mcp-/sdk-), and non-project-user API keys.
+// token for live SaaS /function calls. Rejects missing auth, system automation
+// tokens (apt_ / retired cli-/mcp-/sdk-), and non-project-user API keys.
 func (t *ApitoTokenService) ValidateAppUserFunctionBearer(ctx echo.Context) (*models.TokenClaims, error) {
 	if t == nil {
 		return nil, errors.New("token service unavailable")
@@ -246,8 +331,8 @@ func (t *ApitoTokenService) ValidateAppUserFunctionBearer(ctx echo.Context) (*mo
 	}
 	raw := strings.TrimSpace(*token)
 
-	if strings.HasPrefix(raw, "cli-") || strings.HasPrefix(raw, "sdk-") || strings.HasPrefix(raw, "mcp-") {
-		return nil, errors.New("sync/admin tokens cannot invoke live SaaS functions; use an app-user JWT")
+	if IsAccessToken(raw) || IsRetiredSyncTokenPrefix(raw) {
+		return nil, errors.New("system automation tokens cannot invoke live SaaS functions; use an app-user JWT")
 	}
 
 	var verified *models.TokenClaims
@@ -290,7 +375,6 @@ func (t *ApitoTokenService) ApitoTokenHandler(next echo.HandlerFunc) echo.Handle
 
 		useCookies := ctx.Request().Header.Get("X-Use-Cookies")
 		apitoKey := ctx.Request().Header.Get("X-Apito-Key")
-		syncKey := ctx.Request().Header.Get("X-Apito-Sync-Key")
 		if apitoKey != "" || ((requestPath == "/secured/graphql" || requestPath == "/secured/graphql/v2") || strings.HasPrefix(requestPath, "/secured/rest/") || strings.HasPrefix(requestPath, "/secured/files/") || strings.HasPrefix(requestPath, "/secured/upload/file")) && useCookies == "" {
 			var token *string
 			if apitoKey != "" {
@@ -303,33 +387,48 @@ func (t *ApitoTokenService) ApitoTokenHandler(next echo.HandlerFunc) echo.Handle
 				}
 			}
 			var verifiedToken *models.TokenClaims
-			if strings.HasPrefix(*token, "ak_") {
-				// for projec token
-				verifiedToken, err = t.apiKeyManager.ValidateAndSetContext(ctx, *token)
+			rawToken := strings.TrimSpace(*token)
+			if IsRetiredSyncTokenPrefix(rawToken) {
+				return ctx.JSON(http.StatusForbidden, map[string]interface{}{"message": "TOKEN_FORMAT_RETIRED: use apt_ access tokens"})
+			}
+			if strings.HasPrefix(rawToken, "ak_") {
+				// for project token
+				ctx.Set("auth_plane", "project_api_key")
+				verifiedToken, err = t.apiKeyManager.ValidateAndSetContext(ctx, rawToken)
 				if err != nil {
 					return ctx.JSON(http.StatusForbidden, map[string]interface{}{"message": ae.InvalidToken})
 				}
-			} else if strings.HasPrefix(*token, "cli-") || strings.HasPrefix(*token, "sdk-") || strings.HasPrefix(*token, "mcp-") {
-				// Optimized sync-style token (same payload as X-Apito-Sync-Key path), including console MCP-prefixed tokens.
-				verifiedToken, err = t.syncKeyManager.ValidateSyncTokenOptimized(ctx.Request().Context(), *token)
-				if err != nil {
+			} else if IsAccessToken(rawToken) {
+				ctx.Set("auth_plane", "access_token")
+				if t.accessTokenService == nil {
 					return ctx.JSON(http.StatusForbidden, map[string]interface{}{"message": ae.InvalidToken})
+				}
+				var principal *models.AccessPrincipal
+				verifiedToken, principal, err = t.accessTokenService.ValidateRaw(ctx.Request().Context(), rawToken, ctx.RealIP(), ctx.Request().UserAgent())
+				if err != nil {
+					return ctx.JSON(http.StatusForbidden, map[string]interface{}{"message": err.Error()})
 				}
 				err = utility.SetTokenClaimsToRouter(ctx, verifiedToken)
 				if err != nil {
 					return err
 				}
-				ctx.Set("token", *token)
-				ctx.Set("sync_token_claims", verifiedToken)
+				ctx.Set("token", rawToken)
+				ctx.Set("access_principal", principal)
+				ctx.Set("sync_token_claims", verifiedToken) // compat for listProjects merge
 				if len(verifiedToken.ProjectIDs) > 0 {
 					ctx.Set("project_ids", verifiedToken.ProjectIDs)
 				}
-				if len(verifiedToken.Scopes) > 0 {
-					ctx.Set("scopes", verifiedToken.Scopes)
+				if len(principal.Capabilities) > 0 {
+					ctx.Set("scopes", principal.Capabilities)
+					ctx.Set("capabilities", principal.Capabilities)
+				}
+				if err := t.applyAccessTokenScope(ctx, verifiedToken, principal); err != nil {
+					return ctx.JSON(http.StatusForbidden, map[string]interface{}{"message": err.Error()})
 				}
 			} else {
-				// Legacy Branka (non-optimized) cli/sdk payloads and other bearer material
-				verifiedToken, err = t.blankaService.ValidateAndSetContext(ctx, *token)
+				// Console/session JWT and other bearer material
+				ctx.Set("auth_plane", "id_token_bearer")
+				verifiedToken, err = t.blankaService.ValidateAndSetContext(ctx, rawToken)
 				if err != nil {
 					return ctx.JSON(http.StatusForbidden, map[string]interface{}{"message": ae.InvalidToken})
 				}
@@ -338,38 +437,51 @@ func (t *ApitoTokenService) ApitoTokenHandler(next echo.HandlerFunc) echo.Handle
 			projectID = getPrimaryProjectIDFromClaims(verifiedToken)
 			userID = verifiedToken.UserID
 
-		} else if useCookies == "false" || syncKey != "" {
+		} else if useCookies == "false" {
+			token, err = tokenFromBearer(ctx.Request())
+			if err != nil {
+				return ctx.JSON(http.StatusUnauthorized, map[string]interface{}{"message": "invalid auth header or auth header missing"})
+			}
+			rawToken := strings.TrimSpace(*token)
+			if IsRetiredSyncTokenPrefix(rawToken) {
+				return ctx.JSON(http.StatusForbidden, map[string]interface{}{"message": "TOKEN_FORMAT_RETIRED: use apt_ access tokens"})
+			}
 			var verifiedToken *models.TokenClaims
-			if strings.HasPrefix(syncKey, "cli-") || strings.HasPrefix(syncKey, "sdk-") || strings.HasPrefix(syncKey, "mcp-") {
-				verifiedToken, err = t.syncKeyManager.ValidateSyncTokenOptimized(ctx.Request().Context(), syncKey)
-				if err != nil {
+			if IsAccessToken(rawToken) {
+				ctx.Set("auth_plane", "access_token")
+				if t.accessTokenService == nil {
 					return ctx.JSON(http.StatusForbidden, map[string]interface{}{"message": ae.InvalidToken})
 				}
-			} else {
-				token, err = tokenFromBearer(ctx.Request())
+				var principal *models.AccessPrincipal
+				verifiedToken, principal, err = t.accessTokenService.ValidateRaw(ctx.Request().Context(), rawToken, ctx.RealIP(), ctx.Request().UserAgent())
 				if err != nil {
-					return ctx.JSON(http.StatusUnauthorized, map[string]interface{}{"message": "invalid auth header or auth header missing"})
+					return ctx.JSON(http.StatusForbidden, map[string]interface{}{"message": err.Error()})
 				}
-				verifiedToken, err = t.authService.VerifyIDToken(ctx.Request().Context(), *token)
+				ctx.Set("token", rawToken)
+				ctx.Set("access_principal", principal)
+				ctx.Set("sync_token_claims", verifiedToken)
+				if len(verifiedToken.ProjectIDs) > 0 {
+					ctx.Set("project_ids", verifiedToken.ProjectIDs)
+				}
+				if len(principal.Capabilities) > 0 {
+					ctx.Set("scopes", principal.Capabilities)
+					ctx.Set("capabilities", principal.Capabilities)
+				}
+			} else {
+				ctx.Set("auth_plane", "id_token_bearer")
+				verifiedToken, err = t.authService.VerifyIDToken(ctx.Request().Context(), rawToken)
 				if err != nil {
 					return ctx.JSON(http.StatusForbidden, map[string]interface{}{"message": ae.InvalidToken})
 				}
 			}
-
-			/* if t.cfg.ProjectInjectId != "" {
-				tokenClaims.ProjectID = t.cfg.ProjectInjectId
-			} */
 
 			err = utility.SetTokenClaimsToRouter(ctx, verifiedToken)
 			if err != nil {
 				return ctx.JSON(http.StatusForbidden, map[string]interface{}{"message": ae.InvalidToken})
 			}
-
-			if strings.HasPrefix(syncKey, "cli-") || strings.HasPrefix(syncKey, "sdk-") || strings.HasPrefix(syncKey, "mcp-") {
-				ctx.Set("token", syncKey)
-				ctx.Set("sync_token_claims", verifiedToken)
-				if len(verifiedToken.ProjectIDs) > 0 {
-					ctx.Set("project_ids", verifiedToken.ProjectIDs)
+			if principal := PrincipalFromEcho(ctx); principal != nil {
+				if err := t.applyAccessTokenScope(ctx, verifiedToken, principal); err != nil {
+					return ctx.JSON(http.StatusForbidden, map[string]interface{}{"message": err.Error()})
 				}
 			}
 
@@ -380,6 +492,7 @@ func (t *ApitoTokenService) ApitoTokenHandler(next echo.HandlerFunc) echo.Handle
 
 		} else {
 			// apito console cookie token handler
+			ctx.Set("auth_plane", "console_session")
 			_ctx := ctx.Request().Context()
 			tokens, err := tokenFromCookies(ctx.Request())
 			if err != nil {
@@ -417,6 +530,7 @@ func (t *ApitoTokenService) ApitoTokenHandler(next echo.HandlerFunc) echo.Handle
 				return ctx.JSON(http.StatusForbidden, map[string]interface{}{"message": ae.InvalidToken})
 			}
 
+			t.applySessionProjectOverride(ctx, tokenClaims)
 			t.runPostTokenValidateHook(ctx, tokenClaims)
 
 			projectID = getPrimaryProjectIDFromClaims(tokenClaims)
@@ -424,6 +538,10 @@ func (t *ApitoTokenService) ApitoTokenHandler(next echo.HandlerFunc) echo.Handle
 		}
 
 		// Check if the request is an upgrade to WebSocket
+		if err := RequireSecuredRESTCapability(ctx, requestPath, ctx.Request().Method); err != nil {
+			return ctx.JSON(http.StatusForbidden, map[string]interface{}{"message": err.Error()})
+		}
+
 		if websocket.IsWebSocketUpgrade(ctx.Request()) {
 			// Bypass the custom response writer for WebSocket connections
 			// If you dont do this then the graphql websocket connection will fail
@@ -442,6 +560,17 @@ func (t *ApitoTokenService) ApitoTokenHandler(next echo.HandlerFunc) echo.Handle
 			requestBody.Write(bodyBytes)
 			// Restore the body for downstream handlers
 			ctx.Request().Body = io.NopCloser(bytes.NewBuffer(bodyBytes))
+		}
+		if PrincipalFromEcho(ctx) != nil &&
+			(requestPath == "/secured/graphql" || requestPath == "/secured/graphql/v2") &&
+			requestBody.Len() > 0 {
+			var gqlReq models.GraphQLIncomingRequest
+			if err := json.Unmarshal(requestBody.Bytes(), &gqlReq); err != nil {
+				return ctx.JSON(http.StatusBadRequest, map[string]interface{}{"message": "invalid GraphQL request"})
+			}
+			if err := RequireDataGraphQLCapabilities(ctx, gqlReq.Query); err != nil {
+				return ctx.JSON(http.StatusForbidden, map[string]interface{}{"message": err.Error()})
+			}
 		}
 
 		// Create a new CustomResponseWriter

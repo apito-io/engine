@@ -3,195 +3,259 @@ package controller
 import (
 	"net/http"
 	"strings"
-	"time"
 
+	"github.com/apito-io/engine/authz"
 	"github.com/apito-io/engine/models"
 	"github.com/apito-io/engine/services"
-	"github.com/apito-io/engine/utility"
 	"github.com/labstack/echo/v4"
 )
 
-type DeleteSyncTokenRequest struct {
-	Token    string `json:"token"`
-	Duration string `json:"duration"`
+func (a *AuthController) accessTokenSvc() *services.AccessTokenService {
+	if a == nil || a.graphQLServer == nil || a.graphQLServer.ApitoTokenService == nil {
+		return nil
+	}
+	return a.graphQLServer.ApitoTokenService.AccessTokens()
 }
 
-func (a *AuthController) DeleteSyncToken(c echo.Context) error {
-	var req DeleteSyncTokenRequest
+func requireAccessTokenConsoleSession(c echo.Context) error {
+	plane, _ := c.Get("auth_plane").(string)
+	if services.PrincipalFromEcho(c) != nil || plane == "access_token" || plane == "project_api_key" {
+		return echo.NewHTTPError(
+			http.StatusForbidden,
+			"access tokens can only be managed from an authenticated console session",
+		)
+	}
+	return nil
+}
+
+// CreateAccessToken mints a new apt_ token (reveal once).
+func (a *AuthController) CreateAccessToken(c echo.Context) error {
+	if err := requireAccessTokenConsoleSession(c); err != nil {
+		return err
+	}
+	var req models.CreateAccessTokenRequest
 	if err := c.Bind(&req); err != nil {
 		return c.JSON(http.StatusBadRequest, &models.HttpResponse{
 			Message: err.Error(),
 			Code:    http.StatusBadRequest,
 		})
 	}
-
-	ctx := c.Request().Context()
-	userID := c.Get("user").(string)
-
-	// Use optimized token service to validate the token
-	t := services.GetBrankaTokenOptimized(a.Cfg, a.graphQLServer.SystemDriver)
-
-	// Validate the token to ensure it exists and is valid
-	claims, err := t.ValidateSyncTokenOptimized(ctx, req.Token)
+	svc := a.accessTokenSvc()
+	if svc == nil {
+		return c.JSON(http.StatusInternalServerError, &models.HttpResponse{
+			Message: "access token service unavailable",
+			Code:    http.StatusInternalServerError,
+		})
+	}
+	userID, _ := c.Get("user").(string)
+	raw, pub, err := svc.Mint(c.Request().Context(), userID, &req)
 	if err != nil {
-		return c.JSON(http.StatusForbidden, &models.HttpResponse{
-			Message: "Invalid or expired token",
-			Code:    http.StatusForbidden,
+		return c.JSON(http.StatusBadRequest, &models.HttpResponse{
+			Message: err.Error(),
+			Code:    http.StatusBadRequest,
 		})
 	}
+	return c.JSON(http.StatusOK, map[string]interface{}{
+		"code":    http.StatusOK,
+		"token":   raw,
+		"record":  pub,
+		"message": "Token created. Copy it now — it will not be shown again.",
+	})
+}
 
-	// Verify the token belongs to the current user
-	if claims.UserID != userID {
-		return c.JSON(http.StatusForbidden, &models.HttpResponse{
-			Message: "Token does not belong to current user",
-			Code:    http.StatusForbidden,
+// ListAccessTokens returns public inventory for the current system user.
+func (a *AuthController) ListAccessTokens(c echo.Context) error {
+	if err := requireAccessTokenConsoleSession(c); err != nil {
+		return err
+	}
+	svc := a.accessTokenSvc()
+	if svc == nil {
+		return c.JSON(http.StatusInternalServerError, &models.HttpResponse{
+			Message: "access token service unavailable",
+			Code:    http.StatusInternalServerError,
 		})
 	}
-
-	// Get the user to access their sync tokens
-	user, err := a.graphQLServer.SystemDriver.GetSystemUser(ctx, userID)
+	userID, _ := c.Get("user").(string)
+	tokens, err := svc.List(c.Request().Context(), userID)
 	if err != nil {
 		return c.JSON(http.StatusForbidden, &models.HttpResponse{
 			Message: err.Error(),
 			Code:    http.StatusForbidden,
 		})
 	}
+	return c.JSON(http.StatusOK, map[string]interface{}{
+		"code":   http.StatusOK,
+		"tokens": tokens,
+	})
+}
 
-	// #TODO blacklist the token id
-	// #TODO move the token blacklist from system db to kv db
-
-	// Find and remove the token from the user's SyncTokens list
-	var tokenFound bool
-	for i, syncToken := range user.SyncTokens {
-		if syncTokensMatch(syncToken.Token, req.Token) {
-			user.SyncTokens = append(user.SyncTokens[:i], user.SyncTokens[i+1:]...)
-			tokenFound = true
-			break
-		}
+// RevokeAccessToken revokes by id (preferred) or raw token.
+func (a *AuthController) RevokeAccessToken(c echo.Context) error {
+	if err := requireAccessTokenConsoleSession(c); err != nil {
+		return err
 	}
-
-	if !tokenFound {
-		return c.JSON(http.StatusNotFound, &models.HttpResponse{
-			Message: "Token not found",
-			Code:    http.StatusNotFound,
+	var req models.RevokeAccessTokenRequest
+	if err := c.Bind(&req); err != nil {
+		return c.JSON(http.StatusBadRequest, &models.HttpResponse{
+			Message: err.Error(),
+			Code:    http.StatusBadRequest,
 		})
 	}
-
-	// Update the user with the modified token list
-	err = a.graphQLServer.SystemDriver.UpdateSystemUser(ctx, user, true)
-	if err != nil {
+	svc := a.accessTokenSvc()
+	if svc == nil {
 		return c.JSON(http.StatusInternalServerError, &models.HttpResponse{
-			Message: "Failed to update user tokens",
+			Message: "access token service unavailable",
 			Code:    http.StatusInternalServerError,
 		})
 	}
-
+	userID, _ := c.Get("user").(string)
+	var err error
+	if strings.TrimSpace(req.ID) != "" {
+		err = svc.Revoke(c.Request().Context(), userID, strings.TrimSpace(req.ID), userID)
+	} else if strings.TrimSpace(req.Token) != "" {
+		err = svc.RevokeByRaw(c.Request().Context(), userID, req.Token)
+	} else {
+		return c.JSON(http.StatusBadRequest, &models.HttpResponse{
+			Message: "id or token is required",
+			Code:    http.StatusBadRequest,
+		})
+	}
+	if err != nil {
+		code := http.StatusBadRequest
+		if strings.Contains(err.Error(), "not found") {
+			code = http.StatusNotFound
+		}
+		return c.JSON(code, &models.HttpResponse{Message: err.Error(), Code: uint32(code)})
+	}
 	return c.JSON(http.StatusOK, &models.HttpResponse{
-		Message: "Token deleted successfully",
+		Message: "Token revoked",
 		Code:    http.StatusOK,
 	})
 }
 
-type GenerateSyncTokenRequest struct {
-	Name       string   `json:"name"`
-	Duration   string   `json:"duration"`
-	ProjectIDs []string `json:"project_ids"`
-	Scopes     []string `json:"scopes"`
-	TokenType  string   `json:"token_type"`
-}
-
-func (a *AuthController) GenerateSyncToken(c echo.Context) error {
-
-	var req GenerateSyncTokenRequest
+// RotateAccessToken issues a replacement secret with the same grants.
+func (a *AuthController) RotateAccessToken(c echo.Context) error {
+	if err := requireAccessTokenConsoleSession(c); err != nil {
+		return err
+	}
+	var req models.RotateAccessTokenRequest
 	if err := c.Bind(&req); err != nil {
 		return c.JSON(http.StatusBadRequest, &models.HttpResponse{
 			Message: err.Error(),
 			Code:    http.StatusBadRequest,
 		})
 	}
-
-	ctx := c.Request().Context()
-	userID := c.Get("user").(string)
-	name := req.Name
-	duration := strings.TrimSpace(req.Duration)
-	projectIDs := req.ProjectIDs
-	scopes := req.Scopes
-
-	accessType, err := normalizeAccessTokenType(req.TokenType)
+	if strings.TrimSpace(req.ID) == "" {
+		return c.JSON(http.StatusBadRequest, &models.HttpResponse{
+			Message: "id is required",
+			Code:    http.StatusBadRequest,
+		})
+	}
+	svc := a.accessTokenSvc()
+	if svc == nil {
+		return c.JSON(http.StatusInternalServerError, &models.HttpResponse{
+			Message: "access token service unavailable",
+			Code:    http.StatusInternalServerError,
+		})
+	}
+	userID, _ := c.Get("user").(string)
+	raw, pub, err := svc.Rotate(c.Request().Context(), userID, strings.TrimSpace(req.ID))
 	if err != nil {
 		return c.JSON(http.StatusBadRequest, &models.HttpResponse{
 			Message: err.Error(),
 			Code:    http.StatusBadRequest,
 		})
 	}
-
-	var expireAtUnix int64
-	if duration == "" {
-		// Never-expiring: far-future expiry (year 2099)
-		expireAtUnix = time.Date(2099, 12, 31, 23, 59, 59, 0, time.UTC).Unix()
-	} else {
-		parseDuration, parseErr := time.Parse("2006-01-02", duration)
-		if parseErr != nil {
-			return c.JSON(http.StatusBadRequest, &models.HttpResponse{
-				Message: parseErr.Error(),
-				Code:    http.StatusBadRequest,
-			})
-		}
-		expireAtUnix = parseDuration.Unix()
-	}
-
-	// Use optimized token service
-	t := services.GetBrankaTokenOptimized(a.Cfg, a.graphQLServer.SystemDriver)
-
-	innerType := accessTokenInnerType(accessType)
-	rawKey, err := t.GenerateSyncTokenOptimized(ctx, userID, projectIDs, scopes, innerType, expireAtUnix)
-	if err != nil {
-		return c.JSON(http.StatusBadRequest, &models.HttpResponse{
-			Message: err.Error(),
-			Code:    http.StatusBadRequest,
-		})
-	}
-
-	prefixedToken := prefixAccessToken(accessType, *rawKey)
-
-	// update user current project id
-	user, err := a.graphQLServer.SystemDriver.GetSystemUser(ctx, userID)
-	if err != nil {
-		return c.JSON(http.StatusForbidden, &models.HttpResponse{
-			Message: err.Error(),
-			Code:    http.StatusForbidden,
-		})
-	}
-
-	// append the sync token to the user
-	user.SyncTokens = append(user.SyncTokens, &models.SyncToken{
-		Token:     prefixedToken,
-		TokenType: accessType,
-		Name:      name,
-		Expire:    duration,
-		CreatedAt: utility.GetCurrentTime(),
-		// need these for ui display
-		ProjectIDs: projectIDs,
-		Scopes:     scopes,
-	})
-
-	// update the user
-	err = a.graphQLServer.SystemDriver.UpdateSystemUser(ctx, user, false)
-	if err != nil {
-		return c.JSON(http.StatusForbidden, &models.HttpResponse{
-			Message: err.Error(),
-			Code:    http.StatusForbidden,
-		})
-	}
-
-	return c.JSON(http.StatusOK, &models.HttpResponse{
-		Token: prefixedToken,
-		Code:  http.StatusOK,
+	return c.JSON(http.StatusOK, map[string]interface{}{
+		"code":    http.StatusOK,
+		"token":   raw,
+		"record":  pub,
+		"message": "Token rotated. Copy the new secret now — it will not be shown again.",
 	})
 }
 
-func (a *AuthController) SyncProject(c echo.Context) error {
+// ListAccessTokenCatalog returns capability registry + presets for Console.
+func (a *AuthController) ListAccessTokenCatalog(c echo.Context) error {
+	return c.JSON(http.StatusOK, map[string]interface{}{
+		"code":         http.StatusOK,
+		"capabilities": authz.All(),
+		"presets":      authz.Presets(),
+		"bindings":     authz.DefaultOperationBindings(),
+	})
+}
 
+// ListAdministrableProjects returns projects the issuer can currently administer (for "all projects" preview).
+func (a *AuthController) ListAdministrableProjects(c echo.Context) error {
+	userID, _ := c.Get("user").(string)
+	rows, err := a.graphQLServer.SystemDriver.FindUserProjectsWithRoles(c.Request().Context(), userID)
+	if err != nil {
+		return c.JSON(http.StatusForbidden, &models.HttpResponse{Message: err.Error(), Code: http.StatusForbidden})
+	}
+	type projectBrief struct {
+		ID   string `json:"id"`
+		Name string `json:"name"`
+		Role string `json:"role"`
+	}
+	var out []projectBrief
+	for _, row := range rows {
+		if row == nil || row.Project == nil {
+			continue
+		}
+		if !services.IsAdministrableRole(row.Role) {
+			continue
+		}
+		out = append(out, projectBrief{ID: row.Project.ID, Name: row.Project.Name, Role: row.Role})
+	}
+	return c.JSON(http.StatusOK, map[string]interface{}{
+		"code":     http.StatusOK,
+		"projects": out,
+		"count":    len(out),
+	})
+}
+
+// --- Legacy route aliases (same handlers; old paths kept briefly for Console cutover) ---
+
+func (a *AuthController) GenerateSyncToken(c echo.Context) error {
+	return a.CreateAccessToken(c)
+}
+
+func (a *AuthController) ListSyncTokens(c echo.Context) error {
+	return a.ListAccessTokens(c)
+}
+
+func (a *AuthController) DeleteSyncToken(c echo.Context) error {
+	// Accept legacy {token,duration} or new {id}/{token}
+	var legacy struct {
+		Token string `json:"token"`
+		ID    string `json:"id"`
+	}
+	_ = c.Bind(&legacy)
+	c.Set("user", c.Get("user"))
+	req := models.RevokeAccessTokenRequest{ID: legacy.ID, Token: legacy.Token}
+	// Re-bind via temporary: call revoke with constructed body
+	svc := a.accessTokenSvc()
+	if svc == nil {
+		return c.JSON(http.StatusInternalServerError, &models.HttpResponse{
+			Message: "access token service unavailable",
+			Code:    http.StatusInternalServerError,
+		})
+	}
+	userID, _ := c.Get("user").(string)
+	if req.ID != "" {
+		if err := svc.Revoke(c.Request().Context(), userID, req.ID, userID); err != nil {
+			return c.JSON(http.StatusBadRequest, &models.HttpResponse{Message: err.Error(), Code: http.StatusBadRequest})
+		}
+	} else if req.Token != "" {
+		if err := svc.RevokeByRaw(c.Request().Context(), userID, req.Token); err != nil {
+			return c.JSON(http.StatusBadRequest, &models.HttpResponse{Message: err.Error(), Code: http.StatusBadRequest})
+		}
+	} else {
+		return c.JSON(http.StatusBadRequest, &models.HttpResponse{Message: "id or token is required", Code: http.StatusBadRequest})
+	}
+	return c.JSON(http.StatusOK, &models.HttpResponse{Message: "Token revoked", Code: http.StatusOK})
+}
+
+func (a *AuthController) SyncProject(c echo.Context) error {
 	type SyncProjectRequest struct {
 		Token   string          `json:"token"`
 		Project *models.Project `json:"project"`
@@ -211,14 +275,18 @@ func (a *AuthController) SyncProject(c echo.Context) error {
 			Code:    http.StatusBadRequest,
 		})
 	}
-
+	if services.IsRetiredSyncTokenPrefix(req.Token) {
+		return c.JSON(http.StatusForbidden, &models.HttpResponse{
+			Message: "TOKEN_FORMAT_RETIRED: use apt_ access tokens",
+			Code:    http.StatusForbidden,
+		})
+	}
 	if req.Project == nil {
 		return c.JSON(http.StatusBadRequest, &models.HttpResponse{
 			Message: "project is missing",
 			Code:    http.StatusBadRequest,
 		})
 	}
-
 	if req.Project.Schema == nil {
 		return c.JSON(http.StatusBadRequest, &models.HttpResponse{
 			Message: "project does not contain any model. Nothing to sync",
@@ -234,42 +302,36 @@ func (a *AuthController) SyncProject(c echo.Context) error {
 		})
 	}
 
+	svc := a.accessTokenSvc()
+	if svc == nil {
+		return c.JSON(http.StatusInternalServerError, &models.HttpResponse{
+			Message: "access token service unavailable",
+			Code:    http.StatusInternalServerError,
+		})
+	}
+
 	ctx := c.Request().Context()
-
-	// Use optimized token service
-	t := services.GetBrankaTokenOptimized(a.Cfg, a.graphQLServer.SystemDriver)
-
-	decodedToken, err := t.ValidateSyncTokenOptimized(ctx, req.Token)
+	claims, principal, err := svc.ValidateRaw(ctx, req.Token, c.RealIP(), c.Request().UserAgent())
 	if err != nil {
 		return c.JSON(http.StatusBadRequest, &models.HttpResponse{
 			Message: err.Error(),
 			Code:    http.StatusBadRequest,
 		})
 	}
-
-	// Check if user has access to the project
-	hasAccess := false
-	for _, projectID := range decodedToken.ProjectIDs {
-		if projectID == req.Project.ID {
-			hasAccess = true
-			break
-		}
-	}
-
-	if !hasAccess {
+	if err := svc.AuthorizeProject(ctx, principal, req.Project.ID); err != nil {
 		return c.JSON(http.StatusForbidden, &models.HttpResponse{
-			Message: "You don't have access to this project",
+			Message: err.Error(),
 			Code:    http.StatusForbidden,
 		})
 	}
-
-	// Check if user has write scope
-	if !decodedToken.HasScope("system_api_write") && !decodedToken.HasScope("project_write") {
+	if !authz.HasCapability(principal.Capabilities, authz.CapSyncWrite) &&
+		!authz.HasCapability(principal.Capabilities, authz.CapProjectsWrite) {
 		return c.JSON(http.StatusForbidden, &models.HttpResponse{
-			Message: "You don't have write permissions",
+			Message: "CAPABILITY_DENIED: missing capability sync.write",
 			Code:    http.StatusForbidden,
 		})
 	}
+	_ = claims
 
 	// Proceed with project sync logic here...
 	// This would contain the actual project synchronization logic
@@ -277,23 +339,5 @@ func (a *AuthController) SyncProject(c echo.Context) error {
 	return c.JSON(http.StatusOK, &models.HttpResponse{
 		Message: "Project synced successfully",
 		Code:    http.StatusOK,
-	})
-}
-
-func (a *AuthController) ListSyncTokens(c echo.Context) error {
-	ctx := c.Request().Context()
-	userID := c.Get("user").(string)
-
-	user, err := a.graphQLServer.SystemDriver.GetSystemUser(ctx, userID)
-	if err != nil {
-		return c.JSON(http.StatusForbidden, &models.HttpResponse{
-			Message: err.Error(),
-			Code:    http.StatusForbidden,
-		})
-	}
-
-	return c.JSON(http.StatusOK, map[string]interface{}{
-		"tokens": user.SyncTokens,
-		"code":   http.StatusOK,
 	})
 }

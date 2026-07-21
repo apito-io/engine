@@ -12,6 +12,7 @@ import (
 	ae "github.com/apito-io/engine/err"
 	"github.com/apito-io/engine/interfaces"
 	"github.com/apito-io/engine/models"
+	"github.com/apito-io/engine/services"
 	pluginService "github.com/apito-io/engine/services/plugin"
 	"github.com/apito-io/engine/utility"
 	"github.com/apito-io/types"
@@ -150,6 +151,22 @@ func (s *GraphQLServer) ListProjectsResolverFn(p graphql.ResolveParams) (interfa
 	}
 
 	results := res.Results
+	if principal := services.PrincipalFromEcho(router); principal != nil {
+		if err := requireAccessCapability(router, CapProjectsRead); err != nil {
+			return nil, err
+		}
+		tokenSvc := s.ApitoTokenService.AccessTokens()
+		filtered := make([]*models.Project, 0, len(results))
+		for _, project := range results {
+			if project == nil || strings.TrimSpace(project.ID) == "" {
+				continue
+			}
+			if err := tokenSvc.AuthorizeProject(p.Context, principal, project.ID); err == nil {
+				filtered = append(filtered, project)
+			}
+		}
+		return filtered, nil
+	}
 	if merged, err := s.mergeSyncTokenProjects(p.Context, router, results); err != nil {
 		return nil, err
 	} else if merged != nil {
@@ -278,6 +295,9 @@ func (s *GraphQLServer) GetCurrentProjectResolverFn(p graphql.ResolveParams) (in
 		v      = p.Context.Value
 		router = v("router").(echo.Context)
 	)
+	if err := requireAccessCapability(router, CapProjectsRead); err != nil {
+		return nil, err
+	}
 
 	cache, err := s.GetApplicationCache(router)
 	if err != nil {
@@ -354,6 +374,9 @@ func (s *GraphQLServer) ModelDocumentCountsResolverFn(p graphql.ResolveParams) (
 		v      = p.Context.Value
 		router = v("router").(echo.Context)
 	)
+	if err := requireAccessCapability(router, CapDataRead); err != nil {
+		return nil, err
+	}
 
 	cache, err := s.GetApplicationCache(router)
 	if err != nil {
@@ -451,6 +474,9 @@ func (s *GraphQLServer) GetLoggedInUserFn(p graphql.ResolveParams) (interface{},
 		v      = p.Context.Value
 		router = v("router").(echo.Context)
 	)
+	if err := requireAccessCapability(router, CapProjectsRead); err != nil {
+		return nil, err
+	}
 
 	param, err := s.buildCommonSystemParam(router)
 	if err != nil {
@@ -529,6 +555,9 @@ func (s *GraphQLServer) ListModelsInfoResolverFn(p graphql.ResolveParams) (inter
 		v      = p.Context.Value
 		router = v("router").(echo.Context)
 	)
+	if err := requireAccessCapability(router, CapSchemaRead); err != nil {
+		return nil, err
+	}
 
 	cache, err := s.GetApplicationCache(router)
 	if err != nil {
@@ -609,6 +638,9 @@ func (s *GraphQLServer) ProjectSchemaRelationGraphResolverFn(p graphql.ResolvePa
 		v      = p.Context.Value
 		router = v("router").(echo.Context)
 	)
+	if err := requireAccessCapability(router, CapSchemaRead); err != nil {
+		return nil, err
+	}
 
 	cache, err := s.GetApplicationCache(router)
 	if err != nil {
@@ -845,6 +877,9 @@ func (s *GraphQLServer) ProjectModelInfoResolverFn(p graphql.ResolveParams) (int
 		v      = p.Context.Value
 		router = v("router").(echo.Context)
 	)
+	if err := requireAccessCapability(router, CapSchemaRead); err != nil {
+		return nil, err
+	}
 
 	cache, err := s.GetApplicationCache(router)
 	if err != nil {
@@ -1512,6 +1547,9 @@ func (s *GraphQLServer) ProjectFunctionsInfoResolverFn(p graphql.ResolveParams) 
 		return nil, err
 	}
 	if err := requireFunctionManage(cache); err != nil {
+		return nil, err
+	}
+	if err := requireAccessCapability(router, CapFunctionsRead); err != nil {
 		return nil, err
 	}
 

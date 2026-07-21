@@ -5,8 +5,11 @@ import (
 	"errors"
 	"strings"
 
+	"github.com/apito-io/engine/authz"
 	"github.com/apito-io/engine/interfaces"
 	"github.com/apito-io/engine/models"
+	"github.com/apito-io/engine/services"
+	"github.com/labstack/echo/v4"
 )
 
 func (s *GraphQLServer) systemDB() interfaces.ApitoSystemDB {
@@ -34,6 +37,8 @@ func requireProjectAdmin(cache *models.ApplicationCache) error {
 // requireFunctionManage gates function list/upsert/delete/test/deploy/history/rollback.
 // Today: owner/admin or project_admin. Centralized so a future logic.manage team
 // permission can be added without touching each resolver.
+// When an apt_ AccessPrincipal is on the echo context, also require functions.write
+// (callers that need deploy/test/delete should call requireAccessCapability separately).
 func requireFunctionManage(cache *models.ApplicationCache) error {
 	if cache == nil || cache.Param == nil || cache.Param.Role == nil {
 		return errors.New("function management requires project admin")
@@ -51,6 +56,50 @@ func requireFunctionManage(cache *models.ApplicationCache) error {
 func RequireFunctionManage(cache *models.ApplicationCache) error {
 	return requireFunctionManage(cache)
 }
+
+// requireAccessCapability enforces apt_ capability when principal present (no-op for cookie sessions).
+func requireAccessCapability(router echo.Context, capability string) error {
+	return services.RequireCapability(router, capability)
+}
+
+// RequireAccessCapability is the exported form.
+func RequireAccessCapability(router echo.Context, capability string) error {
+	return requireAccessCapability(router, capability)
+}
+
+// routerFromResolveParams extracts echo.Context from GraphQL resolve context.
+func routerFromResolveParams(ctx context.Context) echo.Context {
+	if ctx == nil {
+		return nil
+	}
+	if v := ctx.Value("router"); v != nil {
+		if r, ok := v.(echo.Context); ok {
+			return r
+		}
+	}
+	return nil
+}
+
+// Cap is a convenience re-export for resolvers.
+const (
+	CapFunctionsRead   = authz.CapFunctionsRead
+	CapFunctionsWrite  = authz.CapFunctionsWrite
+	CapFunctionsTest   = authz.CapFunctionsTest
+	CapFunctionsDeploy = authz.CapFunctionsDeploy
+	CapFunctionsDelete = authz.CapFunctionsDelete
+	CapSchemaRead      = authz.CapSchemaRead
+	CapSchemaWrite     = authz.CapSchemaWrite
+	CapSchemaPublish   = authz.CapSchemaPublish
+	CapSyncRead        = authz.CapSyncRead
+	CapSyncWrite       = authz.CapSyncWrite
+	CapDataRead        = authz.CapDataRead
+	CapDataWrite       = authz.CapDataWrite
+	CapDataDelete      = authz.CapDataDelete
+	CapProjectsRead    = authz.CapProjectsRead
+	CapProjectsWrite   = authz.CapProjectsWrite
+	CapPluginsWrite    = authz.CapPluginsWrite
+	CapRolesWrite      = authz.CapRolesWrite
+)
 
 // GetArgString reads a string GraphQL argument.
 func GetArgString(args map[string]interface{}, key string) string {

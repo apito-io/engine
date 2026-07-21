@@ -8,13 +8,16 @@ import (
 	"github.com/labstack/echo/v4"
 )
 
-const apitoProjectIDHeader = "X-Apito-Project-Id"
-
 func resolveProjectIDFromClaims(ctx echo.Context, tokenClaims *models.TokenClaims) string {
 	if tokenClaims == nil {
 		return ""
 	}
-	if header := strings.TrimSpace(ctx.Request().Header.Get(apitoProjectIDHeader)); header != "" {
+	// Unified access tokens are scoped only after AccessTokenService authorizes
+	// the canonical project header. Never silently pick ProjectIDs[0] here.
+	if tokenClaims.TokenType == "access_token" {
+		return ""
+	}
+	if header := strings.TrimSpace(ctx.Request().Header.Get(models.ApitoProjectIDHeader)); header != "" {
 		if tokenClaims.ProjectID != "" {
 			if header == tokenClaims.ProjectID {
 				return header

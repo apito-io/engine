@@ -752,6 +752,25 @@ func (s *GraphQLServer) GetApplicationCache(router echo.Context) (*models.Applic
 	projectID := _projectID.(string)
 	//userID := _userID.(string)
 
+	// apt_ tokens: project grant ∩ issuer administrable role before cache/driver lookup.
+	if s.ApitoTokenService != nil {
+		if err := services.EnforceProjectForPrincipal(router, s.ApitoTokenService.AccessTokens(), projectID); err != nil {
+			return nil, err
+		}
+		tenantID := ""
+		if v := router.Get("tenant_id"); v != nil {
+			if s, ok := v.(string); ok {
+				tenantID = s
+			}
+		}
+		if tenantID == "" {
+			tenantID = strings.TrimSpace(router.Request().Header.Get("X-Apito-Tenant-ID"))
+		}
+		if err := services.EnforceTenantForPrincipal(router, s.ApitoTokenService.AccessTokens(), projectID, tenantID); err != nil {
+			return nil, err
+		}
+	}
+
 	ctx := router.Request().Context()
 
 	//s.wg.Add(1)
