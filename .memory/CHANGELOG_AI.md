@@ -4,6 +4,29 @@ Not git history — the *reasoning* behind changes. Newest on top.
 Format per entry: date, **Changed**, **Why**, **Affected**.
 
 ---
+## 2026-07-21 — apt_ fail-closed canonical project scope
+- **Changed:** `applyAccessTokenScope` shared on secured + `X-Use-Cookies: false`;
+  only `X-Apito-Project-Id` (no aliases); access_token claims never implicit
+  `ProjectIDs[0]`; listProjects grant-filtered + `projects.read`;
+  create/list/revoke/rotate console-session only; capability gates for secured
+  GraphQL data, REST/files, schema/role/plugin/function/tenant ops.
+- **Why:** Fresh multi-project automation contract — fail closed, one header forever.
+- **Affected:** `services/token.go`, `access_policy.go`, `access_token_service.go`,
+  `utility/claims_set.go`, `resolver/system_*.go`, `function_lifecycle_resolvers.go`,
+  `controller/token_controller.go`, tests. Uncommitted.
+
+## 2026-07-20→21 — Unified apt_ access tokens + session project override
+- **Changed:** `AccessTokenRecord` on SystemUser; `authz` registry; mint/list/revoke/rotate;
+  middleware `apt_` + `TOKEN_FORMAT_RETIRED`; project/tenant policy; REST
+  `/system/access-tokens`. Cookie path: `applySessionProjectOverride` for
+  `X-Apito-Project-Id` when user still administers target project (Console
+  multi-project tenant pickers).
+- **Why:** One revocable automation credential; Access Token UI must fetch
+  tenants for non-current SaaS projects without switching active project cookie.
+- **Affected:** `models/access_token.go`, `authz/*`, `services/access_token_service.go`,
+  `access_policy.go`, `token.go`, `controller/token_controller.go`, `router/router.go`,
+  `resolver/graphql_server.go` (GetApplicationCache gates). Uncommitted.
+
 ## 2026-07-20 — v1.7.14 active_revision_hash for function sync
 - **Changed:** Non-persisted `ActiveRevisionHash` on ApitoFunction; GraphQL
   `active_revision_hash`; `projectFunctionsInfo` enriches from active revision

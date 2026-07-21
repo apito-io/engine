@@ -4,15 +4,19 @@
 - Tracks engine `udbhabon` via go.mod replace in monorepo
 
 ## Done
-- **Apito Functions foundation (2026-07-16):** `models/apito_function.go` + `function_lifecycle.go`; `functions/*` runtime stack; resolver routing by `EffectiveRuntime()`; `/function` constant-time secret verify; `docker-compose.functions.yml`. Tests: `functions/`, `resolver/` green. Uncommitted.
+- **apt_ tokens (2026-07-20→21):** Full AccessTokenService + authz + middleware +
+  REST; `applySessionProjectOverride` for Console multi-project GraphQL.
+  Uncommitted — ask before `./command.sh save`.
+- **Apito Functions foundation (2026-07-16):** `functions/*` runtime stack;
+  active_revision_hash (v1.7.14). Write ops stubbed.
 
 ## Broken / watch
-- Data gateway ops register stubs — not yet calling project DB driver
-- Deno provider uses process spawn when `deno` on PATH; stub when missing
-- Event dispatcher is in-memory only
+- Capability bindings catalog ≠ full resolver enforcement yet
+- Data gateway write ops still stubs
+- Existing DB needs `EnsureSystemUserAccessTokensColumn` (open_driver migration)
 
 ## Next
-- Driver-backed gateway + batch; console codegen hooks for lifecycle mutations
+- Capability gate rollout per ACCESS_TOKENS checklist
 - Do not remove HashiCorp `hc-*` path until Rosna functions validated
 
 ## Do not touch
@@ -20,4 +24,4 @@
 - Generated GraphQL in console — edit `.ts` documents + codegen
 
 ## Last Updated
-2026-07-16
+2026-07-21
