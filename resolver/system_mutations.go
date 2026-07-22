@@ -2852,6 +2852,7 @@ func (s *GraphQLServer) DeleteModelDataFn(p graphql.ResolveParams) (interface{},
 	}
 
 	param.DocPublishStatus = "all"
+	param.ResolveParams = &p
 
 	exists, err := driver.GetSingleProjectDocument(cache.Ctx, param)
 	if err != nil {
@@ -4202,6 +4203,8 @@ func (s *GraphQLServer) DeleteModelDataFnFn(p graphql.ResolveParams) (interface{
 	}
 
 	param.DocPublishStatus = "all"
+	// GetSingleProjectDocument reads ResolveParams.Args["local"]; delete callers must set this.
+	param.ResolveParams = &p
 
 	exists, err := driver.GetSingleProjectDocument(cache.Ctx, param)
 	if err != nil {
