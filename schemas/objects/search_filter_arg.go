@@ -1,7 +1,6 @@
 package objects
 
 import (
-	"fmt"
 	"strings"
 
 	"github.com/apito-io/engine/models"
@@ -392,7 +391,14 @@ func BuildWhereConditionArgument(modelName, fieldPath string, fieldInfo *models.
 	}
 
 	if len(fields) == 0 {
-		fmt.Println("Field is empty")
+		// Empty nested repeated/object groups (no subfields yet) used to produce
+		// InputObject configs with nil Fields and abort public schema generation
+		// ("…COMMON_FILTER_CONDITION fields must be an object…"). Keep a harmless
+		// placeholder so the project schema can still load until children are added.
+		fields["_empty"] = &graphql.InputObjectFieldConfig{
+			Type:        graphql.Boolean,
+			Description: "Placeholder; nested group has no filterable subfields",
+		}
 	}
 
 	return graphql.NewInputObject(graphql.InputObjectConfig{

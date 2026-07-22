@@ -4,6 +4,13 @@ Notable changes to **open-core** only. Release tags use `v1.x` (for example `v1.
 
 ## [Unreleased]
 
+## [1.8.3] — 2026-07-22
+
+### Fixed
+
+- **Recursive `SubFieldInfo` in system GraphQL** — `projectModelsInfo` / FieldInfo no longer truncates at a leaf `NestedSubFieldInfo`. Nested `repeated`/`object` trees (e.g. `exam.routine.details.date_and_time`) are returned for CLI/MCP schema sync.
+- **Empty nested where filters** — empty nested `repeated`/`object` groups no longer abort public schema generation with `…COMMON_FILTER_CONDITION fields must be an object`; a placeholder input field is used until children exist.
+
 ## [1.8.2] — 2026-07-22
 
 ### Fixed

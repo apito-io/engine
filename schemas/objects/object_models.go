@@ -266,6 +266,30 @@ func (s *SchemaObjects) GetPluginDetailsObject(funcEnvVarObject *graphql.Object)
 }
 
 func (s *SchemaObjects) GetFieldInfoObject(validationTypeObj *graphql.Object) *graphql.Object {
+	// SubFieldInfo is recursive so projectModelsInfo can return arbitrarily nested
+	// repeated/object trees (e.g. exam.routine.details.date_and_time). The previous
+	// NestedSubFieldInfo leaf type truncated at depth 2 and hid deeper children from
+	// CLI/MCP schema sync.
+	var subFieldInfoType *graphql.Object
+	subFieldInfoType = graphql.NewObject(graphql.ObjectConfig{
+		Name: "SubFieldInfo",
+		Fields: graphql.FieldsThunk(func() graphql.Fields {
+			return graphql.Fields{
+				"identifier":       &graphql.Field{Type: graphql.String},
+				"description":      &graphql.Field{Type: graphql.String},
+				"input_type":       &graphql.Field{Type: graphql.String},
+				"field_type":       &graphql.Field{Type: graphql.String},
+				"field_sub_type":   &graphql.Field{Type: graphql.String},
+				"validation":       &graphql.Field{Type: validationTypeObj},
+				"serial":           &graphql.Field{Type: graphql.Int},
+				"label":            &graphql.Field{Type: graphql.String},
+				"system_generated": &graphql.Field{Type: graphql.Boolean},
+				"parent_field":     &graphql.Field{Type: graphql.String},
+				"sub_field_info":   &graphql.Field{Type: graphql.NewList(subFieldInfoType)},
+			}
+		}),
+	})
+
 	return graphql.NewObject(graphql.ObjectConfig{
 		Name: "FieldInfo",
 		Fields: graphql.Fields{
@@ -275,39 +299,10 @@ func (s *SchemaObjects) GetFieldInfoObject(validationTypeObj *graphql.Object) *g
 			"field_type":       &graphql.Field{Type: graphql.String},
 			"field_sub_type":   &graphql.Field{Type: graphql.String},
 			"system_generated": &graphql.Field{Type: graphql.Boolean},
-			"sub_field_info": &graphql.Field{Type: graphql.NewList(graphql.NewObject(graphql.ObjectConfig{
-				Name: "SubFieldInfo",
-				Fields: graphql.Fields{
-					"identifier":       &graphql.Field{Type: graphql.String},
-					"description":      &graphql.Field{Type: graphql.String},
-					"input_type":       &graphql.Field{Type: graphql.String},
-					"field_type":       &graphql.Field{Type: graphql.String},
-					"field_sub_type":   &graphql.Field{Type: graphql.String},
-					"validation":       &graphql.Field{Type: validationTypeObj},
-					"serial":           &graphql.Field{Type: graphql.Int},
-					"label":            &graphql.Field{Type: graphql.String},
-					"system_generated": &graphql.Field{Type: graphql.Boolean},
-					"parent_field":     &graphql.Field{Type: graphql.String},
-					"sub_field_info": &graphql.Field{Type: graphql.NewList(graphql.NewObject(graphql.ObjectConfig{
-						Name: "NestedSubFieldInfo",
-						Fields: graphql.Fields{
-							"identifier":       &graphql.Field{Type: graphql.String},
-							"description":      &graphql.Field{Type: graphql.String},
-							"input_type":       &graphql.Field{Type: graphql.String},
-							"field_type":       &graphql.Field{Type: graphql.String},
-							"field_sub_type":   &graphql.Field{Type: graphql.String},
-							"validation":       &graphql.Field{Type: validationTypeObj},
-							"serial":           &graphql.Field{Type: graphql.Int},
-							"label":            &graphql.Field{Type: graphql.String},
-							"system_generated": &graphql.Field{Type: graphql.Boolean},
-							"parent_field":     &graphql.Field{Type: graphql.String},
-						},
-					}))},
-				},
-			}))},
-			"validation": &graphql.Field{Type: validationTypeObj},
-			"serial":     &graphql.Field{Type: graphql.Int},
-			"label":      &graphql.Field{Type: graphql.String},
+			"sub_field_info":   &graphql.Field{Type: graphql.NewList(subFieldInfoType)},
+			"validation":       &graphql.Field{Type: validationTypeObj},
+			"serial":           &graphql.Field{Type: graphql.Int},
+			"label":            &graphql.Field{Type: graphql.String},
 			//"repeated_group_identifier": &graphql.Field{Type: graphql.String},
 			"parent_field":    &graphql.Field{Type: graphql.String},
 			"is_object_field": &graphql.Field{Type: graphql.Boolean},
