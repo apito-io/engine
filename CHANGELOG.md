@@ -4,9 +4,11 @@ Notable changes to **open-core** only. Release tags use `v1.x` (for example `v1.
 
 ## [Unreleased]
 
+## [1.8.2] — 2026-07-22
+
 ### Fixed
 
-- **`deleteModelData` nil panic** — set `ResolveParams` before `GetSingleProjectDocument` in both delete resolvers; SQL drivers nil-check `ResolveParams` when reading `local` (delete from CMS no longer returns `invalid memory address or nil pointer dereference`).
+- **`deleteModelData` nil panic** — set `ResolveParams` before `GetSingleProjectDocument` in both delete resolvers (delete from CMS no longer returns `invalid memory address or nil pointer dereference`). Pair with open_driver nil-safe `ResolveParams` when reading `local`.
 
 ## [1.8.1] — 2026-07-22
 
