@@ -197,8 +197,21 @@ func (fc *FilesController) Upload(c echo.Context) error {
 		return fc.jsonError(c, http.StatusBadRequest, err.Error())
 	}
 
+	tenantID := resolveUploadTenantID(c, cache)
+	if isSaaSProjectParam(cache.Param) {
+		if tenantID == "" {
+			return fc.jsonError(c, http.StatusBadRequest, "tenant id is required for SaaS file upload")
+		}
+	} else {
+		// General projects never embed a tenant segment in the object key.
+		tenantID = ""
+	}
+
 	fileID := utility.NewID()
-	storageKey := storage.BuildObjectKey(cache.Project.ID, fileType, fileID, ext)
+	storageKey, err := storage.BuildObjectKey(cache.Project.ID, tenantID, fileType, fileID, ext)
+	if err != nil {
+		return fc.jsonError(c, http.StatusBadRequest, err.Error())
+	}
 
 	objStore, err := fc.Storage(cache.Project, fc.Cfg)
 	if err != nil {
@@ -403,4 +416,42 @@ func sanitizeFileBaseName(name string) string {
 		return "file"
 	}
 	return s
+}
+
+// resolveUploadTenantID reads tenant context from echo (token/middleware) then param Ext.
+func resolveUploadTenantID(c echo.Context, cache *models.ApplicationCache) string {
+	if c != nil {
+		if v, ok := c.Get("tenant_id").(string); ok {
+			if tid := strings.TrimSpace(v); tid != "" {
+				return tid
+			}
+		}
+	}
+	if cache != nil && cache.Param != nil && cache.Param.Ext != nil {
+		switch v := cache.Param.Ext["tenant_id"].(type) {
+		case string:
+			return strings.TrimSpace(v)
+		}
+	}
+	return ""
+}
+
+// isSaaSProjectParam mirrors pro ParamIsSaaSProject without importing pro packages.
+// pro_project_type is set by SetParamProProjectType (1 = SaaS).
+func isSaaSProjectParam(p *models.CommonSystemParams) bool {
+	if p == nil || p.Ext == nil {
+		return false
+	}
+	switch v := p.Ext["pro_project_type"].(type) {
+	case int32:
+		return v == 1
+	case int:
+		return v == 1
+	case int64:
+		return v == 1
+	case float64:
+		return int(v) == 1
+	default:
+		return false
+	}
 }

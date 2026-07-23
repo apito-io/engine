@@ -180,6 +180,87 @@ func TestFilesControllerUploadBlobFilenameUsesMIMEExtension(t *testing.T) {
 	require.True(t, strings.HasSuffix(uploader.uploaded[0], "proj-1/media/"+db.files[0].ID+".png"))
 }
 
+func TestFilesControllerUploadSaaSRequiresTenant(t *testing.T) {
+	e := echo.New()
+	body := &bytes.Buffer{}
+	w := multipart.NewWriter(body)
+	part, err := w.CreateFormFile("file", "photo.png")
+	require.NoError(t, err)
+	_, err = part.Write([]byte{0x89, 0x50, 0x4e, 0x47})
+	require.NoError(t, err)
+	require.NoError(t, w.WriteField("file_type", models.SystemFileTypeMedia))
+	require.NoError(t, w.Close())
+
+	req := httptest.NewRequest(http.MethodPost, "/secured/files/upload", body)
+	req.Header.Set(echo.HeaderContentType, w.FormDataContentType())
+	rec := httptest.NewRecorder()
+	c := e.NewContext(req, rec)
+
+	fc := &FilesController{
+		Cfg: &models.Config{},
+		cacheProvider: &stubCacheProvider{cache: &models.ApplicationCache{
+			Ctx:     context.Background(),
+			Project: &models.Project{ID: "proj-1"},
+			Param: &models.CommonSystemParams{
+				UserID: "user-1",
+				Ext:    map[string]interface{}{"pro_project_type": int32(1)},
+			},
+		}},
+		driverResolver: &stubProjectDriverResolver{store: &mockProjectFilesDB{}},
+		Storage: func(project *models.Project, cfg *models.Config) (ObjectUploader, error) {
+			return &mockUploader{}, nil
+		},
+	}
+
+	require.NoError(t, fc.Upload(c))
+	require.Equal(t, http.StatusBadRequest, rec.Code)
+	require.Contains(t, rec.Body.String(), "tenant id is required")
+}
+
+func TestFilesControllerUploadSaaSUsesTenantKey(t *testing.T) {
+	e := echo.New()
+	body := &bytes.Buffer{}
+	w := multipart.NewWriter(body)
+	part, err := w.CreateFormFile("file", "photo.png")
+	require.NoError(t, err)
+	_, err = part.Write([]byte{0x89, 0x50, 0x4e, 0x47})
+	require.NoError(t, err)
+	require.NoError(t, w.WriteField("file_type", models.SystemFileTypeMedia))
+	require.NoError(t, w.Close())
+
+	req := httptest.NewRequest(http.MethodPost, "/secured/files/upload", body)
+	req.Header.Set(echo.HeaderContentType, w.FormDataContentType())
+	rec := httptest.NewRecorder()
+	c := e.NewContext(req, rec)
+	c.Set("tenant_id", "01TENANT")
+
+	db := &mockProjectFilesDB{}
+	uploader := &mockUploader{}
+	fc := &FilesController{
+		Cfg: &models.Config{},
+		cacheProvider: &stubCacheProvider{cache: &models.ApplicationCache{
+			Ctx:     context.Background(),
+			Project: &models.Project{ID: "proj-1"},
+			Param: &models.CommonSystemParams{
+				UserID: "user-1",
+				Ext: map[string]interface{}{
+					"pro_project_type": int32(1),
+					"tenant_id":        "01TENANT",
+				},
+			},
+		}},
+		driverResolver: &stubProjectDriverResolver{store: db},
+		Storage: func(project *models.Project, cfg *models.Config) (ObjectUploader, error) {
+			return uploader, nil
+		},
+	}
+
+	require.NoError(t, fc.Upload(c))
+	require.Equal(t, http.StatusOK, rec.Code)
+	require.Len(t, db.files, 1)
+	require.True(t, strings.HasSuffix(uploader.uploaded[0], "proj-1/01TENANT/media/"+db.files[0].ID+".png"))
+}
+
 func TestFilesControllerList(t *testing.T) {
 	e := echo.New()
 	db := &mockProjectFilesDB{

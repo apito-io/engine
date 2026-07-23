@@ -19,13 +19,14 @@ const defaultAWSRegion = "us-east-1"
 type ObjectStorage interface {
 	Upload(ctx context.Context, key string, body io.Reader, contentType string, size int64) (publicURL string, err error)
 	DeleteObjects(ctx context.Context, keys []string) (failed []string, err error)
+	DeletePrefix(ctx context.Context, prefix string) (deleted int, failed []string, err error)
 }
 
 // ProjectS3Storage implements ObjectStorage using aws-sdk-go-v2 and project storage settings.
 type ProjectS3Storage struct {
-	client        *s3.Client
-	bucket        string
-	publicBaseURL string
+	client         *s3.Client
+	bucket         string
+	publicBaseURL  string
 	forcePathStyle bool
 }
 
@@ -80,13 +81,47 @@ func NewProjectS3Storage(project *models.Project, cfg *models.Config) (*ProjectS
 	}, nil
 }
 
-// BuildObjectKey returns the canonical storage key: {project_id}/{file_type}/{uuid}{ext}.
-func BuildObjectKey(projectID, fileType, fileID, ext string) string {
+// ValidateTenantIDSegment returns a trimmed tenant id or an error when the value is unsafe for object keys.
+func ValidateTenantIDSegment(tenantID string) (string, error) {
+	tid := strings.TrimSpace(tenantID)
+	if tid == "" {
+		return "", nil
+	}
+	if strings.Contains(tid, "/") || strings.Contains(tid, "\\") || strings.Contains(tid, "..") {
+		return "", fmt.Errorf("invalid tenant id for storage key")
+	}
+	return tid, nil
+}
+
+// BuildObjectKey returns the canonical storage key.
+// General: {project_id}/{file_type}/{uuid}{ext}
+// SaaS (non-empty tenantID): {project_id}/{tenant_id}/{file_type}/{uuid}{ext}
+func BuildObjectKey(projectID, tenantID, fileType, fileID, ext string) (string, error) {
+	tid, err := ValidateTenantIDSegment(tenantID)
+	if err != nil {
+		return "", err
+	}
 	ext = strings.TrimSpace(ext)
 	if ext != "" && !strings.HasPrefix(ext, ".") {
 		ext = "." + ext
 	}
-	return fmt.Sprintf("%s/%s/%s%s", projectID, fileType, fileID, ext)
+	if tid != "" {
+		return fmt.Sprintf("%s/%s/%s/%s%s", projectID, tid, fileType, fileID, ext), nil
+	}
+	return fmt.Sprintf("%s/%s/%s%s", projectID, fileType, fileID, ext), nil
+}
+
+// TenantObjectPrefix returns the S3 key prefix for all objects belonging to a SaaS tenant.
+// Example: "protiva_bqyu3/01KXZ…/"
+func TenantObjectPrefix(projectID, tenantID string) (string, error) {
+	tid, err := ValidateTenantIDSegment(tenantID)
+	if err != nil {
+		return "", err
+	}
+	if strings.TrimSpace(projectID) == "" || tid == "" {
+		return "", fmt.Errorf("project id and tenant id are required for storage prefix")
+	}
+	return fmt.Sprintf("%s/%s/", strings.TrimSpace(projectID), tid), nil
 }
 
 // PublicURL builds the object URL from PublicBaseURL or endpoint/bucket/key.
@@ -151,4 +186,47 @@ func (s *ProjectS3Storage) DeleteObjects(ctx context.Context, keys []string) ([]
 		return failed, fmt.Errorf("failed to delete %d object(s) from storage", len(failed))
 	}
 	return nil, nil
+}
+
+// DeletePrefix lists all objects under prefix and deletes them.
+func (s *ProjectS3Storage) DeletePrefix(ctx context.Context, prefix string) (int, []string, error) {
+	prefix = strings.TrimSpace(prefix)
+	if prefix == "" {
+		return 0, nil, fmt.Errorf("prefix is required")
+	}
+
+	var keys []string
+	var token *string
+	for {
+		out, err := s.client.ListObjectsV2(ctx, &s3.ListObjectsV2Input{
+			Bucket:            aws.String(s.bucket),
+			Prefix:            aws.String(prefix),
+			ContinuationToken: token,
+		})
+		if err != nil {
+			return 0, nil, err
+		}
+		for _, obj := range out.Contents {
+			if obj.Key == nil {
+				continue
+			}
+			key := strings.TrimSpace(*obj.Key)
+			if key == "" {
+				continue
+			}
+			keys = append(keys, key)
+		}
+		if !aws.ToBool(out.IsTruncated) {
+			break
+		}
+		token = out.NextContinuationToken
+	}
+
+	if len(keys) == 0 {
+		return 0, nil, nil
+	}
+
+	failed, err := s.DeleteObjects(ctx, keys)
+	deleted := len(keys) - len(failed)
+	return deleted, failed, err
 }

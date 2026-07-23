@@ -4,6 +4,15 @@ Not git history — the *reasoning* behind changes. Newest on top.
 Format per entry: date, **Changed**, **Why**, **Affected**.
 
 ---
+
+## 2026-07-22 — v1.8.3 recursive SubFieldInfo + empty nested filters
+
+- **Changed:** Recursive GraphQL `SubFieldInfo`; `_empty` placeholder for empty nested where filters.
+- **Why:** CLI/MCP sync missed `exam.routine.details.*`; empty nested groups aborted public schema.
+- **Affected:** `schemas/objects/object_models.go`, `search_filter_arg.go`, tests. Tagged **v1.8.3**.
+
+---
+
 ## 2026-07-21 — apt_ fail-closed canonical project scope
 - **Changed:** `applyAccessTokenScope` shared on secured + `X-Use-Cookies: false`;
   only `X-Apito-Project-Id` (no aliases); access_token claims never implicit
