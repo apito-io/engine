@@ -4,6 +4,14 @@ Notable changes to **open-core** only. Release tags use `v1.x` (for example `v1.
 
 ## [Unreleased]
 
+## [1.8.5] — 2026-07-27
+
+### Fixed
+
+- **Canonical long model ids** — `CanonicalizeModelName` skips run-on rejection when the input already matches canonical snake_case (`indication`, `practitioner`). CLI/schema sync no longer fails `model name needs a word boundary…` on valid stored ids.
+- **Draft field/connection ops** — `UpsertFieldToModel` / connection resolvers fall back to `LegacyStoredNameToCanonical` when canonicalize fails, so draft-only long singles still accept field ops.
+- **Empty repeated on full replace** — `HandlePayloadFormatting` writes `[]` for empty repeated arrays when `deltaUpdate=false` (clear nested items); empty input remains a no-op under delta update.
+
 ## [1.8.3] — 2026-07-22
 
 ### Fixed

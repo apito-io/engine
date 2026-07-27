@@ -5,6 +5,17 @@ Format per entry: date, **Changed**, **Why**, **Affected**.
 
 ---
 
+## 2026-07-27 — v1.8.5 canonical long model ids + empty repeated clear
+
+- **Changed:** Skip run-on reject for already-canonical ids; LegacyStoredName
+  fallback on field/connection resolvers; empty `[]` repeated on full replace.
+- **Why:** CLI sync of Prottoy models (`indication`, etc.) failed validation;
+  draft field ops needed the same acceptance; CMS clear-repeated was a no-op.
+- **Affected:** `utility/apito_naming.go`, `system_mutations.go`, `executor/solver.go`,
+  tests. Tagged **v1.8.5**.
+
+---
+
 ## 2026-07-22 — v1.8.3 recursive SubFieldInfo + empty nested filters
 
 - **Changed:** Recursive GraphQL `SubFieldInfo`; `_empty` placeholder for empty nested where filters.

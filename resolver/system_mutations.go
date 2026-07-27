@@ -2362,7 +2362,12 @@ func (s *GraphQLServer) UpsertFieldToModelResolverFn(p graphql.ResolveParams) (i
 		var err error
 		modelName, err = utility.CanonicalizeModelName(val)
 		if err != nil {
-			return nil, err
+			// Draft-only models may already be stored as long single-segment
+			// ids (indication, practitioner). Accept those for field ops.
+			modelName, err = utility.LegacyStoredNameToCanonical(val)
+			if err != nil {
+				return nil, err
+			}
 		}
 	} else {
 		return nil, errors.New(ae.MODEL_NAME_REQUIRED)
@@ -3505,7 +3510,10 @@ func (s *GraphQLServer) DeleteConnectionFromModelResolverFn(p graphql.ResolvePar
 		var err error
 		fromResource, err = utility.CanonicalizeModelName(val)
 		if err != nil {
-			return nil, err
+			fromResource, err = utility.LegacyStoredNameToCanonical(val)
+			if err != nil {
+				return nil, err
+			}
 		}
 	} else {
 		return nil, errors.New("from Model Needed")
@@ -3516,7 +3524,10 @@ func (s *GraphQLServer) DeleteConnectionFromModelResolverFn(p graphql.ResolvePar
 		var err error
 		toResource, err = utility.CanonicalizeModelName(val)
 		if err != nil {
-			return nil, err
+			toResource, err = utility.LegacyStoredNameToCanonical(val)
+			if err != nil {
+				return nil, err
+			}
 		}
 	} else {
 		return nil, errors.New("to Model Needed")
@@ -3617,7 +3628,10 @@ func (s *GraphQLServer) CreateConnectionTypeResolverFn(p graphql.ResolveParams) 
 		var err error
 		fromResource, err = utility.CanonicalizeModelName(val)
 		if err != nil {
-			return nil, err
+			fromResource, err = utility.LegacyStoredNameToCanonical(val)
+			if err != nil {
+				return nil, err
+			}
 		}
 	} else {
 		return nil, errors.New("from Model Needed")
@@ -3628,7 +3642,10 @@ func (s *GraphQLServer) CreateConnectionTypeResolverFn(p graphql.ResolveParams) 
 		var err error
 		toResource, err = utility.CanonicalizeModelName(val)
 		if err != nil {
-			return nil, err
+			toResource, err = utility.LegacyStoredNameToCanonical(val)
+			if err != nil {
+				return nil, err
+			}
 		}
 	} else {
 		return nil, errors.New("to Model Needed")

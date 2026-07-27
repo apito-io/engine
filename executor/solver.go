@@ -851,7 +851,15 @@ func (s *GraphQLExecutor) HandlePayloadFormatting(ctx context.Context, param *mo
 
 		case _const.RepeatedField:
 
-			if userInput, ok := inputPayload[f.Identifier].([]interface{}); ok && len(userInput) > 0 {
+			if userInput, ok := inputPayload[f.Identifier].([]interface{}); ok {
+				// Full replace (deltaUpdate=false) may send [] to clear the field.
+				// deltaUpdate=true never deletes nested items — empty input is a no-op.
+				if len(userInput) == 0 {
+					if !deltaUpdate {
+						dbPayload[identifier] = []interface{}{}
+					}
+					break
+				}
 
 				// on delta update we update using the _id
 				// delte operation is ambigous here so this mode doesnt support delete operation only update

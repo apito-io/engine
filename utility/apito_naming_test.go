@@ -2,6 +2,7 @@ package utility
 
 import (
 	"encoding/json"
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
@@ -27,8 +28,8 @@ func TestCanonicalSystemRelationFieldIdentifier(t *testing.T) {
 
 func TestCanonicalizeModelName(t *testing.T) {
 	cases := []struct {
-		raw    string
-		want   string
+		raw     string
+		want    string
 		wantErr bool
 	}{
 		{"food_order", "food_order", false},
@@ -41,6 +42,12 @@ func TestCanonicalizeModelName(t *testing.T) {
 		{"category", "category", false},
 		{"users", "users", false},
 		{"Users", "users", false},
+		{"Indication", "indication", false},
+		// Already-canonical long single words must succeed (CLI schema sync sends these).
+		{"indication", "indication", false},
+		{"practitioner", "practitioner", false},
+		{"prescription", "prescription", false},
+		{"requisition", "requisition", false},
 		{"", "", true},
 	}
 	for _, tc := range cases {
@@ -59,8 +66,11 @@ func TestCanonicalizeModelName(t *testing.T) {
 			t.Errorf("CanonicalizeModelName(%q) = %q, want %q", tc.raw, got, tc.want)
 		}
 	}
-	if _, err := CanonicalizeModelName("foodorder"); err == nil {
-		t.Error("expected ErrRunOnName for foodorder")
+	if err := rejectRunOnLowercaseConcat("foodorder"); !errors.Is(err, ErrRunOnModelName) {
+		t.Errorf("expected ErrRunOnModelName for free-text foodorder, got %v", err)
+	}
+	if got, err := LegacyStoredNameToCanonical("indication"); err != nil || got != "indication" {
+		t.Errorf("LegacyStoredNameToCanonical(indication) = %q, %v", got, err)
 	}
 }
 

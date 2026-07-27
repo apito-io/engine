@@ -47,6 +47,22 @@ func CanonicalizeModelName(raw string) (string, error) {
 		return "", errors.New("model name is required")
 	}
 
+	// Already-canonical ids (sync, draft replay, stored schema) skip run-on rejection.
+	// Long single words like "indication" / "practitioner" are valid snake_case model ids;
+	// rejectRunOnLowercaseConcat is only for free-text admin input like "foodorder".
+	if IsCanonicalModelID(raw) {
+		parts := strings.Split(raw, "_")
+		parts[len(parts)-1] = singularizeSegment(parts[len(parts)-1])
+		out := strings.Join(parts, "_")
+		if !canonicalIDRegexp.MatchString(out) {
+			return "", ErrInvalidModelName
+		}
+		if err := checkReservedModelName(out); err != nil {
+			return "", err
+		}
+		return out, nil
+	}
+
 	if err := rejectRunOnLowercaseConcat(raw); err != nil {
 		return "", err
 	}
@@ -75,8 +91,9 @@ func CanonicalizeModelName(raw string) (string, error) {
 }
 
 // rejectRunOnLowercaseConcat rejects single-token all-lowercase strings that are long
-// enough to likely be two words jammed (e.g. foodorder) while allowing single English
+// enough to likely be two words jammed (e.g. foodorder) while allowing short single
 // words like "category" (len 8). Threshold: no boundary and len >= 9.
+// Not applied when the input is already a canonical model id (see CanonicalizeModelName).
 func rejectRunOnLowercaseConcat(raw string) error {
 	if strings.ContainsAny(raw, " \t\n\r_-") {
 		return nil

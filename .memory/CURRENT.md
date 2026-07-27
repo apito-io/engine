@@ -2,16 +2,15 @@
 
 ## Working on
 
-- **Released v1.8.3 (2026-07-22):** Recursive `SubFieldInfo` in system GraphQL;
-  empty nested `repeated`/`object` where filters get `_empty` placeholder.
-- Prior: v1.8.1 shallowest `parent_field`; v1.8.2 `deleteModelData` ResolveParams;
-  v1.8.0 apt_ tokens.
+- **Released v1.8.5 (2026-07-27):** Canonical long model ids skip run-on
+  rejection; draft field/connection LegacyStoredName fallback; empty repeated
+  clear on full replace.
+- Prior: v1.8.3 recursive SubFieldInfo; v1.8.2 deleteModelData; v1.8.0 apt_ tokens.
 
 ## Next
 
-- Studio/engine consumers already pin **v1.8.3** via engine v2.4.18
-- Optional later: path-aware parent for colliding nested identifiers
+- Engine **v2.4.20** pins this module; Studio/CLI deploy follows engine push.
 
 ## Last Updated
 
-2026-07-23
+2026-07-27
