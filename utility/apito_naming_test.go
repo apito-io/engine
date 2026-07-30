@@ -204,7 +204,19 @@ func TestRelationFilterGraphQLKey(t *testing.T) {
 	if got := RelationFilterGraphQLKey("users", ""); got != "users" {
 		t.Fatalf("users model: got %q want users", got)
 	}
-	if got := RelationFilterGraphQLKey("food_category", ""); got != "foodCategory" {
-		t.Fatalf("food_category: got %q want foodCategory", got)
+	if got := RelationFilterGraphQLKey("food_category", ""); got != "food_category" {
+		t.Fatalf("food_category: got %q want food_category", got)
+	}
+	if got := RelationFilterGraphQLKey("ledgerAccount", ""); got != "ledger_account" {
+		t.Fatalf("legacy camel ledgerAccount: got %q want ledger_account", got)
+	}
+	if got := RelationNestedListGraphQLKey("food_category", ""); got != "food_category_list" {
+		t.Fatalf("nested list: got %q want food_category_list", got)
+	}
+	if got := RelationNestedListGraphQLKey("users", "chef"); got != "chef_list" {
+		t.Fatalf("known_as nested list: got %q want chef_list", got)
+	}
+	if got := RelationNestedListGraphQLKey("food", ""); got != "food_list" {
+		t.Fatalf("single-word nested list: got %q want food_list", got)
 	}
 }

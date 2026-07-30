@@ -4,6 +4,15 @@ Notable changes to **open-core** only. Release tags use `v1.x` (for example `v1.
 
 ## [Unreleased]
 
+## [1.8.6] — 2026-07-30
+
+### Breaking — Nested public GraphQL relations are snake_case
+
+- **has_one nested fields** use `RelationFilterGraphQLKey` → canonical stored model id (`food_category`), not `SingularResourceName` (`foodCategory`).
+- **has_many nested fields** use `RelationNestedListGraphQLKey` → `{model}_list` (`food_category_list`), not `MultipleResourceName` (`foodCategoryList`).
+- **Root** query/mutation names stay lowerCamel (`foodList`, `foodCategoryList`).
+- Pair with admin SDKs ≥ js **3.11.7** / matching go+flutter naming helpers. Deploy engine built against this tag before shipping SDK consumers to production.
+
 ## [1.8.5] — 2026-07-27
 
 ### Fixed

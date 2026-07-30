@@ -428,12 +428,11 @@ func (st *publicSchemaBuildState) attachConnectionFields() {
 
 					st.allLoaders[modelName] = dataloader.NewBatchedLoader(g.gqlServer.DataLoaderFn)
 
-					// Public GraphQL field name: match has_many / root fields by using SingularResourceName
-					// for canonical snake ids (e.g. food_category → foodCategory). Raw connection.Model
-					// is only used when KnownAs overrides the key.
-					graphQLFieldName := modelName
-					if connection.KnownAs == "" {
-						graphQLFieldName = utility.SingularResourceName(connection.Model)
+					// Public GraphQL field name: canonical snake model id (or known_as alias).
+					// Root queries stay lowerCamel (productList); nested relation nodes match model ids.
+					graphQLFieldName := utility.RelationFilterGraphQLKey(connection.Model, connection.KnownAs)
+					if graphQLFieldName != modelName {
+						st.allLoaders[graphQLFieldName] = st.allLoaders[modelName]
 					}
 
 					connRef := connection
@@ -532,9 +531,12 @@ func (st *publicSchemaBuildState) attachConnectionFields() {
 						modelName = connection.Model
 					}
 
-					st.allLoaders[utility.MultipleResourceName(modelName)] = dataloader.NewBatchedLoader(g.gqlServer.DataLoaderFn)
+					hmName := utility.RelationNestedListGraphQLKey(connection.Model, connection.KnownAs)
+					// Loaders stay keyed by MultipleResourceName for dataloader identity; field name is snake `_list`.
+					loaderKey := utility.MultipleResourceName(modelName)
+					st.allLoaders[loaderKey] = dataloader.NewBatchedLoader(g.gqlServer.DataLoaderFn)
+					st.allLoaders[hmName] = st.allLoaders[loaderKey]
 
-					hmName := utility.MultipleResourceName(modelName)
 					fields[hmName] = &graphql.Field{
 						Type: graphql.NewList(graphql.NewObject(graphql.ObjectConfig{
 							Name:        definedModel.Name + "_has_many_" + utility.MultipleResourceName(definedModel.Name+"_"+modelName) + "_connections",
@@ -564,14 +566,15 @@ func (st *publicSchemaBuildState) attachConnectionFields() {
 								}, nil
 							}
 							key := models.NewResolverKey(source.ID, nil)
-							lid := utility.MultipleResourceName(p.Info.FieldName)
+							fieldName := p.Info.FieldName
+							lid := utility.MultipleResourceName(fieldName)
 							knownAs := _definedModel.KnownAs
 
 							var selectionSet *ast.SelectionSet
 							for _, sel := range rootSelectionSet {
 								if val := sel.(*ast.Field); utility.SingularResourceName(val.Name) == source.Type {
 									for _, inner := range val.SelectionSet {
-										if _s := inner.(*ast.Field); _s.Name == lid {
+										if _s := inner.(*ast.Field); _s.Name == fieldName || _s.Name == lid || _s.Name == hmName {
 											selectionSet = &_s.SelectionSet
 											break
 										}
@@ -591,7 +594,19 @@ func (st *publicSchemaBuildState) attachConnectionFields() {
 							})
 							tx, closeContext := onecontext.Merge(p.Context, typeRelation)
 							defer closeContext()
+							if ld, ok := loaders[fieldName]; ok {
+								thunk := ld.Load(tx, key)
+								return func() (interface{}, error) {
+									return thunk()
+								}, nil
+							}
 							if ld, ok := loaders[lid]; ok {
+								thunk := ld.Load(tx, key)
+								return func() (interface{}, error) {
+									return thunk()
+								}, nil
+							}
+							if ld, ok := loaders[loaderKey]; ok {
 								thunk := ld.Load(tx, key)
 								return func() (interface{}, error) {
 									return thunk()

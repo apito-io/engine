@@ -386,11 +386,23 @@ func SyntheticSystemRelationFieldIdentifier(modelID, knownAs string) string {
 }
 
 // RelationFilterGraphQLKey is the public GraphQL key for relation list filters and nested
-// relation fields. When known_as is set it is the field alias (e.g. owner); otherwise the
-// lowerCamel singular model name (e.g. foodCategory).
+// has_one relation fields. When known_as is set it is the field alias (e.g. owner); otherwise
+// the canonical stored model id (snake_case, e.g. food_category). Query roots like
+// foodCategoryList stay lowerCamel via SingularResourceName / MultipleResourceName.
 func RelationFilterGraphQLKey(modelName, knownAs string) string {
 	if strings.TrimSpace(knownAs) != "" {
 		return knownAs
 	}
-	return SingularResourceName(modelName)
+	return PhysicalSQLTableName(modelName)
+}
+
+// RelationNestedListGraphQLKey is the nested has_many field on a parent type
+// (e.g. food_category_list, chef_list). Fully snake_case — only root query/mutation
+// operation names use lowerCamel (MultipleResourceName → foodCategoryList).
+func RelationNestedListGraphQLKey(modelName, knownAs string) string {
+	base := RelationFilterGraphQLKey(modelName, knownAs)
+	if base == "" {
+		return ""
+	}
+	return base + "_list"
 }
