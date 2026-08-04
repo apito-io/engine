@@ -5,6 +5,33 @@ Format per entry: date, **Changed**, **Why**, **Affected**.
 
 ---
 
+## 2026-08-04 — v1.8.7 public connect DDL + auth cache
+
+- **Changed:** Public mutations set `ProjectSchemaModels`; orphan rollback on
+  failed create-connect; auth settings cache refresh; loginUser prefers DB
+  project for identifier method. Tagged **v1.8.7**.
+- **Why:** `createExam` + `mark_config_ids` → `no such column: exam_id` when
+  EnsureRelationArtifacts never ran on public path; auth settings lagged in
+  cache after update.
+- **Affected:** `resolver/public_schema_mutation.go`,
+  `resolver/project_settings.go`, `resolver/user_resolvers.go`, CHANGELOG.
+
+---
+
+## 2026-08-04 — Public mutations set ProjectSchemaModels for connect DDL
+
+- **Changed:** `MutationResolverFn` assigns `ProjectSchemaModels` from
+  `cache.Project.Schema.Models`; `createAndConnectDocument` deletes the new
+  document if connect param build or `ConnectBuilder` fails.
+- **Why:** Public create/update skipped `EnsureRelationArtifactsFromSchema`,
+  so connects like `mark_config_ids` → `UPDATE mark_config SET exam_id` failed
+  with `no such column: exam_id` on older tenant DBs (parity gap vs queries /
+  system upsert).
+- **Affected:** `resolver/public_schema_mutation.go`. Uncommitted — needs tag
+  + engine pin. Ask before commit.
+
+---
+
 ## 2026-07-27 — v1.8.5 canonical long model ids + empty repeated clear
 
 - **Changed:** Skip run-on reject for already-canonical ids; LegacyStoredName

@@ -243,11 +243,16 @@ func (s *GraphQLServer) createAndConnectDocument(ctx context.Context, cache *mod
 		_param := s.NewParam(param)
 		v, err := utility.ConnectDisconnectParamBuilder(cache.Project, _doc.ID, connections, _param.Model)
 		if err != nil {
+			// Match system upsertModelData: drop the orphan if relation wiring fails.
+			_param.DocumentID = _doc.ID
+			_ = projectDriver.DeleteDocumentFromProject(dbCtx, _param)
 			return nil, err
 		}
 		_param.ConDisParam = v
 		err = projectDriver.ConnectBuilder(dbCtx, _param)
 		if err != nil {
+			_param.DocumentID = _doc.ID
+			_ = projectDriver.DeleteDocumentFromProject(dbCtx, _param)
 			return nil, err
 		}
 	}
@@ -309,6 +314,13 @@ func (s *GraphQLServer) MutationResolverFn(p graphql.ResolveParams) (interface{}
 
 	param.Model = modelType
 	param.ResolveParams = &p
+	// Required for SQLite EnsureRelationArtifactsFromSchema on connect/disconnect.
+	// Public queries already set this; system upsertModelData does too. Without it,
+	// maybeEnsureRelationDDLForMutation no-ops and FK connects fail with
+	// "no such column: <model>_id" on tenants whose tables predate the relation.
+	if cache.Project != nil && cache.Project.Schema != nil {
+		param.ProjectSchemaModels = cache.Project.Schema.Models
+	}
 
 	// p == "none" || p == "all" || p == "own" || p == "auth"
 	permission, err := mutationPermissionForRole(param.Role, modelType.Name)

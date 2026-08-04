@@ -2,23 +2,22 @@
 
 ## Branch
 
-- `main` clean — tagged **v1.8.3** (pushed GitHub `apito-io/engine` module)
+- `main` — tag **v1.8.7** (2026-08-04)
 
-## Done (2026-07-22 — v1.8.3)
+## Done (2026-08-04 — v1.8.7)
 
-- `GetFieldInfoObject`: recursive `SubFieldInfo` via FieldsThunk (no leaf
-  `NestedSubFieldInfo`)
-- `BuildWhereConditionArgument`: empty nested groups → `_empty` Boolean
-- Tests: recursive type + empty nested repeated/object filters
+- Public `MutationResolverFn` sets `ProjectSchemaModels`.
+- Orphan delete after failed connect on public create.
+- Auth settings: ProjectCache refresh + loginUser DB prefer.
 
 ## Broken / watch
 
-- Public schema still builds filters for empty groups (placeholder only);
-  remediating empty children via sync is the real fix
+- Older tenant DBs still need one ensure/connect to ALTER missing FK columns;
+  v1.8.7 makes public mutations run that path.
 
 ## Next
 
-- Path-aware `parent_field` if products keep colliding identifiers
+- Engine require **v1.8.7** + Studio rebuild from engine tip.
 
 ## Do not touch
 
@@ -26,4 +25,4 @@
 
 ## Last Updated
 
-2026-07-23
+2026-08-04

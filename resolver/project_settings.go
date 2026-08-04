@@ -197,6 +197,12 @@ func (s *GraphQLServer) UpdateProjectAuthenticationSettingsResolverFn(p graphql.
 	if err != nil {
 		return nil, err
 	}
+	// Refresh project cache so loginUser sees the new identifier method immediately.
+	if s.ProjectCache != nil {
+		if _, err := s.ProjectCache.SaveProject(ctx, updated); err != nil {
+			return nil, err
+		}
+	}
 	return map[string]interface{}{
 		"authentication_settings": projectAuthenticationSettingsSnapshot(updated),
 	}, nil

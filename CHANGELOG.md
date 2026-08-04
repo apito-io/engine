@@ -4,6 +4,22 @@ Notable changes to **open-core** only. Release tags use `v1.x` (for example `v1.
 
 ## [Unreleased]
 
+## [1.8.7] — 2026-08-04
+
+### Fixed
+
+- **Public create/update connect DDL** — `MutationResolverFn` sets
+  `ProjectSchemaModels` (same as public queries / system upsert) so SQLite
+  `EnsureRelationArtifactsFromSchema` runs before connect. Stops
+  `no such column: <model>_id` on tenants whose tables predate relation FKs
+  (e.g. `createExam` + `mark_config_ids` → `exam_id`).
+- **Orphan docs on failed connect** — public `createAndConnectDocument`
+  deletes the inserted document if connect param build or `ConnectBuilder`
+  fails (parity with system upsert).
+- **Auth settings cache lag** — `updateProjectAuthenticationSettings`
+  refreshes `ProjectCache`; `loginUser` prefers DB-backed project for auth
+  identifier method so settings apply immediately.
+
 ## [1.8.6] — 2026-07-30
 
 ### Breaking — Nested public GraphQL relations are snake_case

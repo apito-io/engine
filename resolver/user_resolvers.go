@@ -213,6 +213,13 @@ func (s *GraphQLServer) LoginUserResolverFn(p graphql.ResolveParams) (interface{
 		return nil, err
 	}
 	authProject := cache.Project
+	// Prefer DB-backed project for auth settings — ProjectCache can lag after
+	// updateProjectAuthenticationSettings until cache is rewritten.
+	if s.SystemDriver != nil {
+		if fresh, ferr := s.SystemDriver.GetProject(ctx, cache.Project.ID); ferr == nil && fresh != nil {
+			authProject = fresh
+		}
+	}
 	authMethod := strings.ToLower(strings.TrimSpace(getArgString(p.Args, "auth_method")))
 	if authMethod == "" {
 		authMethod = "general"
