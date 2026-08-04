@@ -212,7 +212,7 @@ func (st *publicSchemaBuildState) loadOrBuildPreConnectionMaps() error {
 						Type: objects.BuildWhereConditionArgument(definedModel.Name, f.Identifier, f),
 					}
 
-					if f.FieldType == "boolean" || f.FieldType == "list" {
+					if !utility.FieldIsSortable(f) {
 						continue
 					}
 					queryBuilderInformation.SortParamObjects[whereSortKey] = &graphql.InputObjectFieldConfig{
