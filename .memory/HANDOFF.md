@@ -1,7 +1,6 @@
 # open-core — Handoff
 
-- `main` — tag **v1.8.8**
-- FieldIsSortable: text/number/boolean/date + single-choice list
+- Tag **v1.8.9** — pin in engine for Studio relation-direction fix.
 
 ## Last Updated
 2026-08-05

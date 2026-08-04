@@ -1,3 +1,10 @@
+## 2026-08-05 — v1.8.9 upsertConnection normalizes forward/backward
+
+- **Fixed:** CreateConnectionTypeResolverFn always sets from=`forward`, to=`backward` on update.
+- **Why:** Flipped Type metadata made CLI/pro staging treat edges as present but never rewrite direction.
+- Tag **v1.8.9**.
+
+---
 # open-core — AI Changelog
 
 ## 2026-08-05 — v1.8.8 FieldIsSortable

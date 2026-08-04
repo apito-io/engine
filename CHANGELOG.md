@@ -2,6 +2,11 @@
 
 Notable changes to **open-core** only. Release tags use `v1.x` (for example `v1.5.4`, `v1.6.0`).
 
+## [1.8.9] - 2026-08-05
+
+### Fixed
+- `upsertConnectionToModel` always normalizes connection `Type` to `forward`/`backward` on update (flipped metadata no longer sticky).
+
 ## [Unreleased]
 
 ## [1.8.7] — 2026-08-04

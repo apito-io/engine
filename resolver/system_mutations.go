@@ -3699,11 +3699,11 @@ func (s *GraphQLServer) CreateConnectionTypeResolverFn(p graphql.ResolveParams) 
 		}
 		if fromConnectionInfo == nil {
 			fromConnectionInfo = &models.ConnectionType{Model: toResource, Type: "forward", KnownAs: knownAs}
-			if val, ok := p.Args["forward_connection_type"]; ok {
-				fromConnectionInfo.Relation = val.(string)
-			}
 			fromModelType.Connections = append(fromModelType.Connections, fromConnectionInfo)
-		} else if val, ok := p.Args["forward_connection_type"]; ok {
+		}
+		// Always normalize ownership direction on upsert (fixes flipped metadata).
+		fromConnectionInfo.Type = "forward"
+		if val, ok := p.Args["forward_connection_type"]; ok {
 			fromConnectionInfo.Relation = val.(string)
 		}
 		connections = append(connections, fromConnectionInfo)
@@ -3717,11 +3717,10 @@ func (s *GraphQLServer) CreateConnectionTypeResolverFn(p graphql.ResolveParams) 
 		}
 		if toConnectionInfo == nil {
 			toConnectionInfo = &models.ConnectionType{Model: fromResource, Type: "backward", KnownAs: knownAs}
-			if val, ok := p.Args["reverse_connection_type"]; ok {
-				toConnectionInfo.Relation = val.(string)
-			}
 			toModelType.Connections = append(toModelType.Connections, toConnectionInfo)
-		} else if val, ok := p.Args["reverse_connection_type"]; ok {
+		}
+		toConnectionInfo.Type = "backward"
+		if val, ok := p.Args["reverse_connection_type"]; ok {
 			toConnectionInfo.Relation = val.(string)
 		}
 
