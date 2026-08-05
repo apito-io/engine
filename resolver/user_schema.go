@@ -42,6 +42,12 @@ func (s *GraphQLServer) RegisterUserSchema() {
 		},
 	})
 
+	oauthStatePayload := graphql.NewObject(graphql.ObjectConfig{
+		Name: "OAuthStatePayload",
+		Fields: graphql.Fields{
+			"state": &graphql.Field{Type: graphql.String},
+		},
+	})
 	googleOAuthStatePayload := graphql.NewObject(graphql.ObjectConfig{
 		Name: "GoogleOAuthStatePayload",
 		Fields: graphql.Fields{
@@ -80,6 +86,14 @@ func (s *GraphQLServer) RegisterUserSchema() {
 	s.SystemQueriesChan <- &graphql.Fields{
 		"searchUsers": searchUsersField,
 		"loginUser":   loginUserField,
+		"oauthState": &graphql.Field{
+			Type: oauthStatePayload,
+			Args: graphql.FieldConfigArgument{
+				"provider":   &graphql.ArgumentConfig{Type: graphql.NewNonNull(graphql.String)},
+				"project_id": &graphql.ArgumentConfig{Type: graphql.NewNonNull(graphql.String)},
+			},
+			Resolve: s.OAuthStateResolverFn,
+		},
 		"googleOAuthState": &graphql.Field{
 			Type: googleOAuthStatePayload,
 			Args: graphql.FieldConfigArgument{

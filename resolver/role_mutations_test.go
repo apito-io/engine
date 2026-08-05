@@ -58,6 +58,9 @@ func (f *failingAuthUserStore) ListProjectAuthUsersByPhone(context.Context, stri
 func (f *failingAuthUserStore) ListProjectAuthUsersByGoogleSub(context.Context, string, string) ([]*models.ProjectAuthUser, error) {
 	return nil, nil
 }
+func (f *failingAuthUserStore) ListProjectAuthUsersByOAuthSub(context.Context, string, string, string) ([]*models.ProjectAuthUser, error) {
+	return nil, nil
+}
 func (f *failingAuthUserStore) SearchProjectAuthUsers(context.Context, string, string, int, int) ([]*models.ProjectAuthUser, int, error) {
 	return nil, 0, nil
 }

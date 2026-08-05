@@ -37,7 +37,8 @@ type ApitoSystemDB interface {
 	GetProject(ctx context.Context, id string) (*models.Project, error)
 	// CheckProjectName checks if a project name already exists
 	CheckProjectName(ctx context.Context, name string) error
-	// SearchProjects lists all the projects for a given user
+	// SearchProjects lists projects. param may be nil (treated as empty filters = all projects).
+	// When UserID is set, results are scoped to that user's memberships.
 	SearchProjects(ctx context.Context, param *models.CommonSystemParams) (*models.SearchResponse[models.Project], error)
 	// FindUserProjects lists all the projects for a given user
 	FindUserProjects(ctx context.Context, userId string) ([]*models.Project, error)

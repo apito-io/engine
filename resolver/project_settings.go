@@ -28,10 +28,26 @@ func init() {
 		Fields: graphql.Fields{
 			"enable_general_auth":           &graphql.Field{Type: graphql.NewNonNull(graphql.Boolean)},
 			"enable_google_auth":            &graphql.Field{Type: graphql.NewNonNull(graphql.Boolean)},
+			"enable_facebook_auth":          &graphql.Field{Type: graphql.NewNonNull(graphql.Boolean)},
+			"enable_github_auth":            &graphql.Field{Type: graphql.NewNonNull(graphql.Boolean)},
+			"enable_x_auth":                 &graphql.Field{Type: graphql.NewNonNull(graphql.Boolean)},
+			"enable_linkedin_auth":          &graphql.Field{Type: graphql.NewNonNull(graphql.Boolean)},
 			"general_authentication_method": &graphql.Field{Type: graphql.NewNonNull(graphql.String)},
 			"google_client_id":              &graphql.Field{Type: graphql.String},
 			"google_oauth_redirect_uri":     &graphql.Field{Type: graphql.String},
 			"has_google_client_secret":      &graphql.Field{Type: graphql.NewNonNull(graphql.Boolean)},
+			"facebook_client_id":            &graphql.Field{Type: graphql.String},
+			"facebook_oauth_redirect_uri":   &graphql.Field{Type: graphql.String},
+			"has_facebook_client_secret":    &graphql.Field{Type: graphql.NewNonNull(graphql.Boolean)},
+			"github_client_id":              &graphql.Field{Type: graphql.String},
+			"github_oauth_redirect_uri":     &graphql.Field{Type: graphql.String},
+			"has_github_client_secret":      &graphql.Field{Type: graphql.NewNonNull(graphql.Boolean)},
+			"x_client_id":                   &graphql.Field{Type: graphql.String},
+			"x_oauth_redirect_uri":          &graphql.Field{Type: graphql.String},
+			"has_x_client_secret":           &graphql.Field{Type: graphql.NewNonNull(graphql.Boolean)},
+			"linkedin_client_id":            &graphql.Field{Type: graphql.String},
+			"linkedin_oauth_redirect_uri":   &graphql.Field{Type: graphql.String},
+			"has_linkedin_client_secret":    &graphql.Field{Type: graphql.NewNonNull(graphql.Boolean)},
 			"default_registration_role":     &graphql.Field{Type: graphql.String},
 		},
 	})
@@ -41,10 +57,26 @@ func init() {
 		Fields: graphql.InputObjectConfigFieldMap{
 			"enable_general_auth":           &graphql.InputObjectFieldConfig{Type: graphql.Boolean},
 			"enable_google_auth":            &graphql.InputObjectFieldConfig{Type: graphql.Boolean},
+			"enable_facebook_auth":          &graphql.InputObjectFieldConfig{Type: graphql.Boolean},
+			"enable_github_auth":            &graphql.InputObjectFieldConfig{Type: graphql.Boolean},
+			"enable_x_auth":                 &graphql.InputObjectFieldConfig{Type: graphql.Boolean},
+			"enable_linkedin_auth":          &graphql.InputObjectFieldConfig{Type: graphql.Boolean},
 			"general_authentication_method": &graphql.InputObjectFieldConfig{Type: graphql.String},
 			"google_client_id":              &graphql.InputObjectFieldConfig{Type: graphql.String},
 			"google_client_secret":          &graphql.InputObjectFieldConfig{Type: graphql.String},
 			"google_oauth_redirect_uri":     &graphql.InputObjectFieldConfig{Type: graphql.String},
+			"facebook_client_id":            &graphql.InputObjectFieldConfig{Type: graphql.String},
+			"facebook_client_secret":        &graphql.InputObjectFieldConfig{Type: graphql.String},
+			"facebook_oauth_redirect_uri":   &graphql.InputObjectFieldConfig{Type: graphql.String},
+			"github_client_id":              &graphql.InputObjectFieldConfig{Type: graphql.String},
+			"github_client_secret":          &graphql.InputObjectFieldConfig{Type: graphql.String},
+			"github_oauth_redirect_uri":     &graphql.InputObjectFieldConfig{Type: graphql.String},
+			"x_client_id":                   &graphql.InputObjectFieldConfig{Type: graphql.String},
+			"x_client_secret":               &graphql.InputObjectFieldConfig{Type: graphql.String},
+			"x_oauth_redirect_uri":          &graphql.InputObjectFieldConfig{Type: graphql.String},
+			"linkedin_client_id":            &graphql.InputObjectFieldConfig{Type: graphql.String},
+			"linkedin_client_secret":        &graphql.InputObjectFieldConfig{Type: graphql.String},
+			"linkedin_oauth_redirect_uri":   &graphql.InputObjectFieldConfig{Type: graphql.String},
 			"default_registration_role":     &graphql.InputObjectFieldConfig{Type: graphql.String},
 		},
 	})
@@ -101,19 +133,70 @@ func projectAuthenticationSettingsSnapshot(project *models.Project) map[string]i
 	if project != nil && project.AuthenticationSettings != nil && project.AuthenticationSettings.EnableGeneralAuth != nil {
 		enableGeneral = *project.AuthenticationSettings.EnableGeneralAuth
 	}
-	enableGoogle := false
-	if project != nil && project.AuthenticationSettings != nil && project.AuthenticationSettings.EnableGoogleAuth != nil {
-		enableGoogle = *project.AuthenticationSettings.EnableGoogleAuth
-	}
 	method := models.GeneralIdentifierMethod(project)
-	gcid := strings.TrimSpace(models.GoogleOAuthClientID(project))
+	snapProvider := func(provider models.OAuthProviderID) (enabled bool, clientID, redirect string, hasSecret bool) {
+		cred := models.OAuthCredentials(project, provider)
+		enabled = false
+		if cred.Enable != nil {
+			enabled = *cred.Enable
+		} else if provider == models.OAuthProviderGoogle && cred.ClientID != "" {
+			// Legacy: Google treated as on when client id present and flag unset.
+			enabled = false
+		}
+		if project != nil && project.AuthenticationSettings != nil {
+			switch provider {
+			case models.OAuthProviderGoogle:
+				if project.AuthenticationSettings.EnableGoogleAuth != nil {
+					enabled = *project.AuthenticationSettings.EnableGoogleAuth
+				}
+			case models.OAuthProviderFacebook:
+				if project.AuthenticationSettings.EnableFacebookAuth != nil {
+					enabled = *project.AuthenticationSettings.EnableFacebookAuth
+				}
+			case models.OAuthProviderGithub:
+				if project.AuthenticationSettings.EnableGithubAuth != nil {
+					enabled = *project.AuthenticationSettings.EnableGithubAuth
+				}
+			case models.OAuthProviderX:
+				if project.AuthenticationSettings.EnableXAuth != nil {
+					enabled = *project.AuthenticationSettings.EnableXAuth
+				}
+			case models.OAuthProviderLinkedin:
+				if project.AuthenticationSettings.EnableLinkedinAuth != nil {
+					enabled = *project.AuthenticationSettings.EnableLinkedinAuth
+				}
+			}
+		}
+		return enabled, cred.ClientID, cred.RedirectURI, cred.ClientSecret != ""
+	}
+	gEn, gID, gRD, gSec := snapProvider(models.OAuthProviderGoogle)
+	fEn, fID, fRD, fSec := snapProvider(models.OAuthProviderFacebook)
+	ghEn, ghID, ghRD, ghSec := snapProvider(models.OAuthProviderGithub)
+	xEn, xID, xRD, xSec := snapProvider(models.OAuthProviderX)
+	lEn, lID, lRD, lSec := snapProvider(models.OAuthProviderLinkedin)
 	return map[string]interface{}{
 		"enable_general_auth":           enableGeneral,
-		"enable_google_auth":            enableGoogle,
+		"enable_google_auth":            gEn,
+		"enable_facebook_auth":          fEn,
+		"enable_github_auth":            ghEn,
+		"enable_x_auth":                 xEn,
+		"enable_linkedin_auth":          lEn,
 		"general_authentication_method": method,
-		"google_client_id":              settingsNullIfEmpty(gcid),
-		"google_oauth_redirect_uri":     settingsNullIfEmpty(strings.TrimSpace(models.GoogleOAuthRedirectURI(project))),
-		"has_google_client_secret":      models.HasGoogleClientSecretConfigured(project),
+		"google_client_id":              settingsNullIfEmpty(gID),
+		"google_oauth_redirect_uri":     settingsNullIfEmpty(gRD),
+		"has_google_client_secret":      gSec,
+		"facebook_client_id":            settingsNullIfEmpty(fID),
+		"facebook_oauth_redirect_uri":   settingsNullIfEmpty(fRD),
+		"has_facebook_client_secret":    fSec,
+		"github_client_id":              settingsNullIfEmpty(ghID),
+		"github_oauth_redirect_uri":     settingsNullIfEmpty(ghRD),
+		"has_github_client_secret":      ghSec,
+		"x_client_id":                   settingsNullIfEmpty(xID),
+		"x_oauth_redirect_uri":          settingsNullIfEmpty(xRD),
+		"has_x_client_secret":           xSec,
+		"linkedin_client_id":            settingsNullIfEmpty(lID),
+		"linkedin_oauth_redirect_uri":   settingsNullIfEmpty(lRD),
+		"has_linkedin_client_secret":    lSec,
 		"default_registration_role":     settingsNullIfEmpty(models.DefaultRegistrationRoleConfigured(project)),
 	}
 }

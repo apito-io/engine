@@ -15,6 +15,12 @@ func (s *GraphQLServer) PublicAuthQueryFields() graphql.Fields {
 			"user":  &graphql.Field{Type: userItem},
 		},
 	})
+	oauthStatePayload := graphql.NewObject(graphql.ObjectConfig{
+		Name: "PublicOAuthStatePayload",
+		Fields: graphql.Fields{
+			"state": &graphql.Field{Type: graphql.String},
+		},
+	})
 	googleOAuthStatePayload := graphql.NewObject(graphql.ObjectConfig{
 		Name: "PublicGoogleOAuthStatePayload",
 		Fields: graphql.Fields{
@@ -39,6 +45,14 @@ func (s *GraphQLServer) PublicAuthQueryFields() graphql.Fields {
 
 	return graphql.Fields{
 		"loginUser": loginUserField,
+		"oauthState": &graphql.Field{
+			Type: oauthStatePayload,
+			Args: graphql.FieldConfigArgument{
+				"provider":   &graphql.ArgumentConfig{Type: graphql.NewNonNull(graphql.String)},
+				"project_id": &graphql.ArgumentConfig{Type: graphql.NewNonNull(graphql.String)},
+			},
+			Resolve: s.OAuthStateResolverFn,
+		},
 		"googleOAuthState": &graphql.Field{
 			Type: googleOAuthStatePayload,
 			Args: graphql.FieldConfigArgument{

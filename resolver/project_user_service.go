@@ -18,6 +18,7 @@ type projectAuthUserStore interface {
 	ListProjectAuthUsersByEmail(ctx context.Context, tenantID, email string) ([]*models.ProjectAuthUser, error)
 	ListProjectAuthUsersByPhone(ctx context.Context, tenantID, phone string) ([]*models.ProjectAuthUser, error)
 	ListProjectAuthUsersByGoogleSub(ctx context.Context, tenantID, googleSub string) ([]*models.ProjectAuthUser, error)
+	ListProjectAuthUsersByOAuthSub(ctx context.Context, tenantID, provider, oauthSub string) ([]*models.ProjectAuthUser, error)
 	SearchProjectAuthUsers(ctx context.Context, tenantID, q string, limit, offset int) ([]*models.ProjectAuthUser, int, error)
 	CountProjectAuthUsersByRole(ctx context.Context, tenantID string) (map[string]int, error)
 	UpdateProjectAuthUser(ctx context.Context, user *models.ProjectAuthUser) error
@@ -223,6 +224,22 @@ func (svc *ProjectUserService) listByGoogleSubWithFallback(tenantID, googleSub s
 	return rows, nil
 }
 
+func (svc *ProjectUserService) listByOAuthSubWithFallback(tenantID, provider, oauthSub string) ([]*models.User, error) {
+	prov := strings.ToLower(strings.TrimSpace(provider))
+	sub := strings.TrimSpace(oauthSub)
+	if prov == "" || sub == "" {
+		return nil, nil
+	}
+	if svc.store == nil {
+		return nil, nil
+	}
+	rows, err := svc.store.ListProjectAuthUsersByOAuthSub(svc.ctx, tenantID, prov, sub)
+	if err != nil && !errors.Is(err, ae.ErrProjectAuthUsersUnsupported) {
+		return nil, err
+	}
+	return projectAuthRowsToUsers(svc, rows), nil
+}
+
 func (svc *ProjectUserService) searchWithFallback(tenantID, q string, limit, offset int) ([]*models.User, int, error) {
 	if svc.store != nil {
 		rows, count, err := svc.store.SearchProjectAuthUsers(svc.ctx, tenantID, q, limit, offset)
@@ -365,6 +382,10 @@ func (svc *ProjectUserService) ListByPhoneWithFallback(tenantID, phone string) (
 
 func (svc *ProjectUserService) ListByGoogleSubWithFallback(tenantID, googleSub string) ([]*models.User, error) {
 	return svc.listByGoogleSubWithFallback(tenantID, googleSub)
+}
+
+func (svc *ProjectUserService) ListByOAuthSubWithFallback(tenantID, provider, oauthSub string) ([]*models.User, error) {
+	return svc.listByOAuthSubWithFallback(tenantID, provider, oauthSub)
 }
 
 func (svc *ProjectUserService) GetUserWithFallback(userID, tenantID string) (*models.User, error) {

@@ -26,6 +26,7 @@ type ProjectAuthUser struct {
 	Role      string `bun:"role,notnull" json:"role"`
 	Provider  string `bun:"provider,notnull" json:"provider"`
 	GoogleSub string `bun:"google_sub" json:"google_sub,omitempty"`
+	OAuthSub  string `bun:"oauth_sub" json:"oauth_sub,omitempty"`
 	Status    string `bun:"status,notnull" json:"status"`
 	CreatedAt time.Time `bun:"created_at,nullzero" json:"created_at"`
 	UpdatedAt time.Time `bun:"updated_at,nullzero" json:"updated_at"`
@@ -46,6 +47,7 @@ func UserFromProjectAuthUser(projectID string, row *ProjectAuthUser) *User {
 		Role:      row.Role,
 		Provider:  row.Provider,
 		GoogleSub: row.GoogleSub,
+		OAuthSub:  row.OAuthSub,
 		Status:    row.Status,
 		CreatedAt: row.CreatedAt,
 		UpdatedAt: row.UpdatedAt,
@@ -67,6 +69,7 @@ func ProjectAuthUserFromUser(u *User, tenantID string) *ProjectAuthUser {
 		Role:      u.Role,
 		Provider:  u.Provider,
 		GoogleSub: u.GoogleSub,
+		OAuthSub:  u.OAuthSub,
 		Status:    u.Status,
 		CreatedAt: u.CreatedAt,
 		UpdatedAt: u.UpdatedAt,

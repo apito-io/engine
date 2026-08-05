@@ -16,6 +16,10 @@ const (
 	UserStatusSuspended  = "suspended"
 	UserProviderLocal    = "local"
 	UserProviderGoogle   = "google"
+	UserProviderFacebook = "facebook"
+	UserProviderGithub   = "github"
+	UserProviderX        = "x"
+	UserProviderLinkedin = "linkedin"
 	UserDefaultRoleAdmin = "admin"
 )
 
@@ -40,6 +44,8 @@ type User struct {
 	Role      string `bun:"role,notnull" json:"role" bson:"role,omitempty"`
 	Provider  string `bun:"provider,notnull" json:"provider" bson:"provider,omitempty"`
 	GoogleSub string `bun:"google_sub" json:"google_sub,omitempty" bson:"google_sub,omitempty"`
+	// OAuthSub holds the provider subject for facebook/github/x/linkedin (not Google).
+	OAuthSub string `bun:"oauth_sub" json:"oauth_sub,omitempty" bson:"oauth_sub,omitempty"`
 
 	Status string `bun:"status,notnull" json:"status" bson:"status,omitempty"`
 

@@ -93,42 +93,6 @@ func (s *GraphQLServer) completeGeneralGoogleLogin(
 	}, nil
 }
 
-// GoogleOAuthStateResolverFn returns an HMAC-signed OAuth state bound to the project and configured redirect URI.
-func (s *GraphQLServer) GoogleOAuthStateResolverFn(p graphql.ResolveParams) (interface{}, error) {
-	if hooks := s.projectUserHooks(); hooks != nil {
-		if res, stop, err := s.runProjectUserHook(hooks.GoogleOAuthState, p); stop {
-			return res, err
-		}
-	}
-	router, ok := p.Context.Value("router").(echo.Context)
-	if !ok {
-		return nil, errors.New("router context missing")
-	}
-	cache, err := s.GetApplicationCache(router)
-	if err != nil {
-		return nil, err
-	}
-	if cache.Project == nil {
-		return nil, errors.New("no project loaded in cache")
-	}
-	if err := requireProjectArg(p.Args, cache.Project.ID); err != nil {
-		return nil, err
-	}
-	authProject := cache.Project
-	if !models.GoogleOAuthCodeExchangeReady(authProject) {
-		return nil, errors.New("google oauth code flow is not configured for this project (client id, client secret, and redirect URI required)")
-	}
-	secret := models.GoogleOAuthClientSecret(authProject)
-	redirectURI := models.GoogleOAuthRedirectURI(authProject)
-	state, err := models.SignGoogleOAuthState(secret, cache.Project.ID, redirectURI)
-	if err != nil {
-		return nil, fmt.Errorf("sign oauth state: %w", err)
-	}
-	return map[string]interface{}{
-		"state": state,
-	}, nil
-}
-
 // SearchUsersResolverFn lists project end-users for the authenticated project.
 func (s *GraphQLServer) SearchUsersResolverFn(p graphql.ResolveParams) (interface{}, error) {
 	if hooks := s.projectUserHooks(); hooks != nil {
@@ -286,6 +250,14 @@ func (s *GraphQLServer) LoginUserResolverFn(p graphql.ResolveParams) (interface{
 			return nil, fmt.Errorf("invalid google id_token: %w", err)
 		}
 		return s.completeGeneralGoogleLogin(ctx, cache, svc, payload)
+
+	case "facebook", "github", "x", "linkedin":
+		provider, ok := models.ParseOAuthProviderID(authMethod)
+		if !ok {
+			return nil, errors.New("unsupported auth_method")
+		}
+		return s.loginWithOAuthCode(ctx, cache, authProject, svc, provider,
+			getArgString(p.Args, "code"), getArgString(p.Args, "state"))
 
 	case "general":
 		if !models.GeneralAuthEffective(authProject) {

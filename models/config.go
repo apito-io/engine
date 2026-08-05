@@ -308,6 +308,13 @@ type Config struct {
 	// SchemaBuildMetrics registers OTel counter schema_build_total and histogram schema_build_duration_seconds.
 	SchemaBuildMetrics bool `env:"SCHEMA_BUILD_METRICS" env-default:"false"`
 
+	// BackupAssetOpenedHook fires after a physical database asset is opened (pro backup coordinator).
+	BackupAssetOpenedHook func(ctx context.Context, asset DatabaseAsset) error `env:"-"`
+	// BackupAssetClosedHook fires before a physical database asset is closed/evicted.
+	BackupAssetClosedHook func(ctx context.Context, asset DatabaseAsset) error `env:"-"`
+	// BackupAssetFlushHook flushes pending backup/replication for one asset (pro coordinator).
+	BackupAssetFlushHook func(ctx context.Context, asset DatabaseAsset) error `env:"-"`
+
 	// MetricsEnabled gates apito_* OpenTelemetry instruments (HTTP, GraphQL, pool, DB decorator, cache, KV, queue, session).
 	// When false, telemetry helpers no-op. When true, instruments record if a global MeterProvider is registered (OSS or extended builds).
 	MetricsEnabled bool `env:"METRICS_ENABLED" env-default:"true"`

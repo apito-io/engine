@@ -99,18 +99,21 @@ func VerifyGoogleOAuthState(clientSecret, projectID string, redirectURI string, 
 	return nil
 }
 
-// ValidateGoogleOAuthRedirectURIForPersist returns an error if the URI is unset or malformed for storage.
-func ValidateGoogleOAuthRedirectURIForPersist(s string) error {
+// ValidateOAuthRedirectURIForPersist returns an error if the URI is unset or malformed for storage.
+func ValidateOAuthRedirectURIForPersist(s, fieldName string) error {
+	if fieldName == "" {
+		fieldName = "oauth_redirect_uri"
+	}
 	u := strings.TrimSpace(s)
 	if u == "" {
 		return nil
 	}
 	if len(u) > 4096 {
-		return errors.New("google_oauth_redirect_uri is too long")
+		return fmt.Errorf("%s is too long", fieldName)
 	}
 	schemeSep := strings.Index(u, "://")
 	if schemeSep <= 0 {
-		return fmt.Errorf("google_oauth_redirect_uri must be an absolute URL with scheme")
+		return fmt.Errorf("%s must be an absolute URL with scheme", fieldName)
 	}
 	scheme := strings.ToLower(u[:schemeSep])
 	switch scheme {
@@ -124,8 +127,23 @@ func ValidateGoogleOAuthRedirectURIForPersist(s string) error {
 		}
 		return fmt.Errorf("http redirect uri is only allowed for localhost development")
 	default:
-		return fmt.Errorf("google_oauth_redirect_uri scheme must be https (or http for localhost)")
+		return fmt.Errorf("%s scheme must be https (or http for localhost)", fieldName)
 	}
+}
+
+// ValidateGoogleOAuthRedirectURIForPersist returns an error if the URI is unset or malformed for storage.
+func ValidateGoogleOAuthRedirectURIForPersist(s string) error {
+	return ValidateOAuthRedirectURIForPersist(s, "google_oauth_redirect_uri")
+}
+
+// SignOAuthState is an alias for SignGoogleOAuthState (HMAC keyed by provider client secret).
+func SignOAuthState(clientSecret, projectID, redirectURI string) (string, error) {
+	return SignGoogleOAuthState(clientSecret, projectID, redirectURI)
+}
+
+// VerifyOAuthState is an alias for VerifyGoogleOAuthState.
+func VerifyOAuthState(clientSecret, projectID string, redirectURI string, state string) error {
+	return VerifyGoogleOAuthState(clientSecret, projectID, redirectURI, state)
 }
 
 // Deprecated: use SignGoogleOAuthState.

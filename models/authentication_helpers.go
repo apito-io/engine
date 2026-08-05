@@ -22,43 +22,99 @@ func GeneralAuthEffective(p *Project) bool {
 	return *p.AuthenticationSettings.EnableGeneralAuth
 }
 
-// GoogleAuthEffective is true when Google login should be allowed.
-func GoogleAuthEffective(p *Project) bool {
-	if p == nil {
+// OAuthProviderCredentials holds trimmed client credentials for one provider.
+type OAuthProviderCredentials struct {
+	ClientID     string
+	ClientSecret string
+	RedirectURI  string
+	Enable       *bool
+}
+
+// OAuthCredentials returns credentials for a provider from project settings.
+func OAuthCredentials(p *Project, provider OAuthProviderID) OAuthProviderCredentials {
+	var out OAuthProviderCredentials
+	if p == nil || p.AuthenticationSettings == nil {
+		return out
+	}
+	a := p.AuthenticationSettings
+	switch provider {
+	case OAuthProviderGoogle:
+		out = OAuthProviderCredentials{
+			ClientID: a.GoogleClientID, ClientSecret: a.GoogleClientSecret,
+			RedirectURI: a.GoogleOAuthRedirectURI, Enable: a.EnableGoogleAuth,
+		}
+	case OAuthProviderFacebook:
+		out = OAuthProviderCredentials{
+			ClientID: a.FacebookClientID, ClientSecret: a.FacebookClientSecret,
+			RedirectURI: a.FacebookOAuthRedirectURI, Enable: a.EnableFacebookAuth,
+		}
+	case OAuthProviderGithub:
+		out = OAuthProviderCredentials{
+			ClientID: a.GithubClientID, ClientSecret: a.GithubClientSecret,
+			RedirectURI: a.GithubOAuthRedirectURI, Enable: a.EnableGithubAuth,
+		}
+	case OAuthProviderX:
+		out = OAuthProviderCredentials{
+			ClientID: a.XClientID, ClientSecret: a.XClientSecret,
+			RedirectURI: a.XOAuthRedirectURI, Enable: a.EnableXAuth,
+		}
+	case OAuthProviderLinkedin:
+		out = OAuthProviderCredentials{
+			ClientID: a.LinkedinClientID, ClientSecret: a.LinkedinClientSecret,
+			RedirectURI: a.LinkedinOAuthRedirectURI, Enable: a.EnableLinkedinAuth,
+		}
+	}
+	out.ClientID = strings.TrimSpace(out.ClientID)
+	out.ClientSecret = strings.TrimSpace(out.ClientSecret)
+	out.RedirectURI = strings.TrimSpace(out.RedirectURI)
+	return out
+}
+
+// OAuthAuthEffective is true when the provider login should be allowed.
+func OAuthAuthEffective(p *Project, provider OAuthProviderID) bool {
+	cred := OAuthCredentials(p, provider)
+	if cred.ClientID == "" {
 		return false
 	}
-	cid := strings.TrimSpace(GoogleOAuthClientID(p))
-	if p.AuthenticationSettings == nil {
-		return cid != ""
+	if cred.Enable != nil {
+		return *cred.Enable
 	}
-	if p.AuthenticationSettings.EnableGoogleAuth != nil {
-		return *p.AuthenticationSettings.EnableGoogleAuth && cid != ""
+	// Google legacy: enabled when client id present and flag unset.
+	return provider == OAuthProviderGoogle
+}
+
+// OAuthCodeExchangeReady reports whether server-side OAuth code exchange can run.
+func OAuthCodeExchangeReady(p *Project, provider OAuthProviderID) bool {
+	if !OAuthAuthEffective(p, provider) {
+		return false
 	}
-	return cid != ""
+	cred := OAuthCredentials(p, provider)
+	return cred.ClientID != "" && cred.ClientSecret != "" && cred.RedirectURI != ""
+}
+
+// HasOAuthClientSecretConfigured reports whether a non-empty secret is stored.
+func HasOAuthClientSecretConfigured(p *Project, provider OAuthProviderID) bool {
+	return OAuthCredentials(p, provider).ClientSecret != ""
+}
+
+// GoogleAuthEffective is true when Google login should be allowed.
+func GoogleAuthEffective(p *Project) bool {
+	return OAuthAuthEffective(p, OAuthProviderGoogle)
 }
 
 // GoogleOAuthClientID returns the OAuth client ID from AuthenticationSettings (trimmed).
 func GoogleOAuthClientID(p *Project) string {
-	if p == nil || p.AuthenticationSettings == nil {
-		return ""
-	}
-	return strings.TrimSpace(p.AuthenticationSettings.GoogleClientID)
+	return OAuthCredentials(p, OAuthProviderGoogle).ClientID
 }
 
 // GoogleOAuthClientSecret returns the OAuth client secret from AuthenticationSettings (trimmed).
 func GoogleOAuthClientSecret(p *Project) string {
-	if p == nil || p.AuthenticationSettings == nil {
-		return ""
-	}
-	return strings.TrimSpace(p.AuthenticationSettings.GoogleClientSecret)
+	return OAuthCredentials(p, OAuthProviderGoogle).ClientSecret
 }
 
 // GoogleOAuthRedirectURI returns the configured authorized redirect URI for Google OAuth (code flow).
 func GoogleOAuthRedirectURI(p *Project) string {
-	if p == nil || p.AuthenticationSettings == nil {
-		return ""
-	}
-	return strings.TrimSpace(p.AuthenticationSettings.GoogleOAuthRedirectURI)
+	return OAuthCredentials(p, OAuthProviderGoogle).RedirectURI
 }
 
 // GeneralIdentifierMethod returns "email", "phone", or "email" as default when unset/invalid.
@@ -76,18 +132,12 @@ func GeneralIdentifierMethod(p *Project) string {
 
 // HasGoogleClientSecretConfigured reports whether a non-empty secret is stored.
 func HasGoogleClientSecretConfigured(p *Project) bool {
-	return GoogleOAuthClientSecret(p) != ""
+	return HasOAuthClientSecretConfigured(p, OAuthProviderGoogle)
 }
 
 // GoogleOAuthCodeExchangeReady reports whether server-side OAuth code exchange can run.
 func GoogleOAuthCodeExchangeReady(p *Project) bool {
-	if !GoogleAuthEffective(p) {
-		return false
-	}
-	cid := GoogleOAuthClientID(p)
-	sec := GoogleOAuthClientSecret(p)
-	rd := GoogleOAuthRedirectURI(p)
-	return cid != "" && sec != "" && strings.TrimSpace(rd) != ""
+	return OAuthCodeExchangeReady(p, OAuthProviderGoogle)
 }
 
 // Deprecated: use GoogleOAuthCodeExchangeReady.

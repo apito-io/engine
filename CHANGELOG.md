@@ -2,6 +2,14 @@
 
 Notable changes to **open-core** only. Release tags use `v1.x` (for example `v1.5.4`, `v1.6.0`).
 
+## [1.8.10] - 2026-08-05
+
+### Added
+- Multi-provider project app-user OAuth settings: Facebook, GitHub, X, LinkedIn (flat fields parallel to Google).
+- GraphQL `has_*_client_secret` for each provider; `oauthState(provider, project_id)` (+ `googleOAuthState` alias).
+- `loginUser` `auth_method` values: `facebook`, `github`, `x`, `linkedin` (code+state exchange).
+- Project auth users `oauth_sub` column + list-by-provider-sub for non-Google linking.
+
 ## [1.8.9] - 2026-08-05
 
 ### Fixed
