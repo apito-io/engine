@@ -13,6 +13,20 @@
 - Tag **v1.8.9**.
 
 ---
+## 2026-08-07 — v1.8.11 upsertModelData inserts with supplied _id
+
+- **Fixed:** `UpsertModelDataFnFn` supplied-`_id` branch was update-only; missing
+  doc returned `document <id> not found` (sqlite) or `document does not belongs
+  to <model>` (postgres/mysql/mariadb empty-doc + nil error). Now falls through
+  to insert with that id, preserving cross-environment id parity.
+- **Why:** `apito sync --type content` to an empty destination aborted on the
+  first row; relation sync depends on source ids existing on the destination.
+- **Added:** `ae.ErrDocumentNotFound` + `resolver.IsDocumentNotFoundErr`;
+  `existingDocumentFromLookup` normalizes both driver conventions.
+- **Affected:** `err/system.go`, `resolver/document_lookup.go`,
+  `resolver/system_mutations.go`. Tag **v1.8.11**.
+
+---
 # open-core — AI Changelog
 
 ## 2026-08-05 — v1.8.8 FieldIsSortable

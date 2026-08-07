@@ -3878,6 +3878,7 @@ func (s *GraphQLServer) UpsertModelDataFnFn(p graphql.ResolveParams) (interface{
 	}
 
 	var doc *types.DefaultDocumentStructure
+	var docExists bool
 
 	if val, ok := p.Args["_id"]; ok && val != nil {
 		if id, ok := val.(string); ok && id != "" {
@@ -3902,16 +3903,24 @@ func (s *GraphQLServer) UpsertModelDataFnFn(p graphql.ResolveParams) (interface{
 			param.SinglePageData = true
 		}
 
-		raw, err := driver.GetSingleRawDocumentFromProject(cache.Ctx, param)
+		raw, lookupErr := driver.GetSingleRawDocumentFromProject(cache.Ctx, param)
+		existing, found, err := existingDocumentFromLookup(raw, lookupErr)
 		if err != nil {
 			return nil, err
 		}
-		doc = raw.(*types.DefaultDocumentStructure)
-
-		// got the doc but doc doesn't belong to specific model
-		if doc.Type != modelName {
-			return nil, fmt.Errorf("document does not belongs to %s", modelName)
+		if found {
+			// got the doc but doc doesn't belong to specific model
+			if existing.Type != modelName {
+				return nil, fmt.Errorf("document does not belongs to %s", modelName)
+			}
+			doc = existing
+			docExists = true
 		}
+		// Not found is not fatal here: insert below reuses the caller supplied id so
+		// cross-environment copies (apito sync content) keep document id parity.
+	}
+
+	if docExists {
 
 		if len(modelType.Connections) > 0 {
 			if disconnects, ok := p.Args["disconnect"].(map[string]interface{}); ok && len(disconnects) > 0 {

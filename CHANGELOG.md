@@ -2,6 +2,14 @@
 
 Notable changes to **open-core** only. Release tags use `v1.x` (for example `v1.5.4`, `v1.6.0`).
 
+## [1.8.11] - 2026-08-07
+
+### Fixed
+- `upsertModelData` with an explicit `_id` now **inserts** when the document is absent instead of failing with `document <id> not found`. Previously the supplied-id branch was update-only, so `apito sync --type content` into a fresh destination died on the first row. Drivers disagree on how "missing" is reported (sqlite/mongo/bbolt error, postgres/mysql/mariadb return an empty document with a nil error); both are now normalized as absent, which also removes the misleading `document does not belongs to <model>` on SQL drivers.
+
+### Added
+- `ae.ErrDocumentNotFound` sentinel plus `resolver.IsDocumentNotFoundErr` so callers match missing documents with `errors.Is` instead of driver message strings.
+
 ## [1.8.10] - 2026-08-05
 
 ### Added

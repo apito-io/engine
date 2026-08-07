@@ -37,6 +37,11 @@ var ModelTypeNotFound = fmt.Errorf("model type not found")
 // ErrParentFieldNotFound is returned when upsertFieldToModel cannot resolve parent_field on the live schema.
 var ErrParentFieldNotFound = errors.New("parent field not found")
 
+// ErrDocumentNotFound is the canonical "no such document" signal for project drivers.
+// Callers that can recover (upsert inserting with a caller supplied _id) must match it
+// with errors.Is instead of comparing driver specific message strings.
+var ErrDocumentNotFound = errors.New("document not found")
+
 const NEW_MODEL_NAME_REQUIRED = "new model name is required"
 
 // third party
