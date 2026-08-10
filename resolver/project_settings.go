@@ -174,7 +174,7 @@ func projectAuthenticationSettingsSnapshot(project *models.Project) map[string]i
 	ghEn, ghID, ghRD, ghSec := snapProvider(models.OAuthProviderGithub)
 	xEn, xID, xRD, xSec := snapProvider(models.OAuthProviderX)
 	lEn, lID, lRD, lSec := snapProvider(models.OAuthProviderLinkedin)
-	return map[string]interface{}{
+	out := map[string]interface{}{
 		"enable_general_auth":           enableGeneral,
 		"enable_google_auth":            gEn,
 		"enable_facebook_auth":          fEn,
@@ -199,6 +199,7 @@ func projectAuthenticationSettingsSnapshot(project *models.Project) map[string]i
 		"has_linkedin_client_secret":    lSec,
 		"default_registration_role":     settingsNullIfEmpty(models.DefaultRegistrationRoleConfigured(project)),
 	}
+	return out
 }
 
 func projectStorageSettingsSnapshot(project *models.Project) map[string]interface{} {
@@ -257,6 +258,7 @@ func (s *GraphQLServer) loadActiveProjectForSettings(p graphql.ResolveParams) (*
 
 // UpdateProjectAuthenticationSettingsResolverFn persists authentication settings for the active project.
 func (s *GraphQLServer) UpdateProjectAuthenticationSettingsResolverFn(p graphql.ResolveParams) (interface{}, error) {
+	s.applyProjectAuthenticationSettingsSchemaHooks()
 	project, ctx, err := s.loadActiveProjectForSettings(p)
 	if err != nil {
 		return nil, err
@@ -276,6 +278,9 @@ func (s *GraphQLServer) UpdateProjectAuthenticationSettingsResolverFn(p graphql.
 	if err := s.SystemDriver.SaveProjectAuthenticationSettings(ctx, project.ID, nextAuth); err != nil {
 		return nil, err
 	}
+	if err := s.runAfterUpdateProjectAuthenticationSettings(ctx, project.ID, input); err != nil {
+		return nil, err
+	}
 	updated, err := s.SystemDriver.GetProject(ctx, project.ID)
 	if err != nil {
 		return nil, err
@@ -287,7 +292,7 @@ func (s *GraphQLServer) UpdateProjectAuthenticationSettingsResolverFn(p graphql.
 		}
 	}
 	return map[string]interface{}{
-		"authentication_settings": projectAuthenticationSettingsSnapshot(updated),
+		"authentication_settings": s.AuthenticationSettingsSnapshot(updated),
 	}, nil
 }
 
@@ -336,16 +341,17 @@ func (s *GraphQLServer) StoragePluginInitEnvs(ctx context.Context, projectID str
 	return models.BuildStoragePluginEnvVars(project, s.Cfg)
 }
 
-func registerProjectSettingsGraphQLFields(objs *objects.ObjectModels) {
+func (s *GraphQLServer) registerProjectSettingsGraphQLFields(objs *objects.ObjectModels) {
 	if objs == nil || objs.ProjectDetailsObject == nil {
 		return
 	}
+	s.applyProjectAuthenticationSettingsSchemaHooks()
 	objs.ProjectDetailsObject.AddFieldConfig("authentication_settings", &graphql.Field{
 		Type: projectAuthenticationSettingsObject,
 		Resolve: func(p graphql.ResolveParams) (interface{}, error) {
 			switch src := p.Source.(type) {
 			case *models.Project:
-				return projectAuthenticationSettingsSnapshot(src), nil
+				return s.AuthenticationSettingsSnapshot(src), nil
 			default:
 				return nil, nil
 			}

@@ -1,3 +1,32 @@
+## 2026-08-10 — Roles/permissions + ak_ lifecycle harden
+
+- **Changed:** Project-admin gates on role/token CRUD; `ProjectToken`
+  metadata (`token_id`/`prefix`/`fingerprint`) + blacklist on validate;
+  v2 role encoding; fail-closed scopes (`none|all|auth|own`, no
+  `custom_logic`); `EffectivePermission`/`AuthorizeModel*`; SQL own on
+  counts; dataloader + known_as target read; system GraphQL capability
+  gate; `project_tokens` SQL column migration.
+- **Why:** Close privilege escalation, revoke bypass, fail-open scopes.
+- **Affected:** `resolver/*`, `utility/*`, `services/*`, `authz/*`,
+  `controller/graph_controller.go`; open_driver system SQL migrations.
+  **Ops:** restart engine (migrate), then Console `pnpm codegen`.
+  Ask before commit/tag.
+
+---
+
+## 2026-08-09 — Scoped bootstrap: RegisterUser + auth caps + ak_ token path
+
+- **Changed:** `RegisterUser` on GraphQL hooks; caps `auth.login` /
+  `auth.register`; preset `sdk_bootstrap`; gates on login/register/
+  createUser; `token.go` treats `ak_` + `X-Use-Cookies:false` as API key
+  (not ID token). Security tests added.
+- **Why:** Non-admin Flutter/SDK keys can signup/login; createUser stays
+  privileged; cookie=false clients were 403’ing on login.
+- **Affected:** `authz/*`, `resolver/user_*.go`, `services/token.go`,
+  tests. Ask before tag (likely **v1.8.12**).
+
+---
+
 ## 2026-08-06 — v1.8.10 multi-provider OAuth auth settings + login
 
 - **Changed:** Flat FB/GitHub/X/LinkedIn settings + GraphQL; `oauthState`;

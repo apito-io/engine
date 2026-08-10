@@ -40,6 +40,9 @@ func (s *GraphQLServer) GenerateProjectTokenResolverFn(p graphql.ResolveParams) 
 	if err != nil {
 		return nil, err
 	}
+	if err := requireProjectAdmin(cache); err != nil {
+		return nil, err
+	}
 
 	param := s.NewParam(cache.Param)
 
@@ -70,6 +73,28 @@ func (s *GraphQLServer) GenerateProjectTokenResolverFn(p graphql.ResolveParams) 
 
 	project := cache.Project
 
+	if len(role) > 64 {
+		return nil, errors.New("role name exceeds maximum length of 64 characters")
+	}
+	roleKey := strings.ToLower(utility.SingularResourceName(role))
+	if roleKey == "admin" || roleKey == "owner" {
+		return nil, errors.New("cannot mint project tokens for admin or owner roles")
+	}
+	roleDef, ok := project.Roles[roleKey]
+	if !ok {
+		roleDef, ok = project.Roles[role]
+		if ok {
+			roleKey = role
+		}
+	}
+	if !ok || roleDef == nil {
+		return nil, errors.New("role does not exist on this project")
+	}
+	if roleDef.IsAdmin {
+		return nil, errors.New("cannot mint project tokens for admin roles")
+	}
+	role = roleKey
+
 	// Parse the date string and set it to end of day
 	parseDuration, err := time.Parse("2006-01-02", duration)
 	if err != nil {
@@ -93,11 +118,16 @@ func (s *GraphQLServer) GenerateProjectTokenResolverFn(p graphql.ResolveParams) 
 		return nil, err
 	}
 
+	// Persist metadata only — never store the full secret again.
 	project.Tokens = append(project.Tokens, &models.ProjectToken{
-		Name:   name,
-		Token:  apiKey,
-		Role:   role,
-		Expire: duration,
+		Name:             name,
+		Token:            "",
+		TokenID:          tokenClaims.TokenUniqueID,
+		TokenPrefix:      services.TokenPrefix(apiKey),
+		TokenFingerprint: services.TokenFingerprint(apiKey),
+		Role:             role,
+		Expire:           duration,
+		CreatedAt:        time.Now().UTC().Format(time.RFC3339),
 	})
 
 	err = s.SystemDriver.UpdateProject(cache.Ctx, project, false)
@@ -132,14 +162,22 @@ func (s *GraphQLServer) DeleteProjectTokenResolverFn(p graphql.ResolveParams) (i
 	if err != nil {
 		return nil, err
 	}
+	if err := requireProjectAdmin(cache); err != nil {
+		return nil, err
+	}
 
 	param := s.NewParam(cache.Param)
 
+	var tokenID string
+	if val, ok := p.Args["token_id"].(string); ok {
+		tokenID = strings.TrimSpace(val)
+	}
 	var token string
 	if val, ok := p.Args["token"].(string); ok {
-		token = val
-	} else {
-		return nil, ae.TokenIsRequired
+		token = strings.TrimSpace(val)
+	}
+	if tokenID == "" && token == "" {
+		return nil, errors.New("token_id or token is required")
 	}
 
 	var duration string
@@ -149,35 +187,70 @@ func (s *GraphQLServer) DeleteProjectTokenResolverFn(p graphql.ResolveParams) (i
 		return nil, errors.New("duration is Required")
 	}
 
-	var verifiedToken *models.TokenClaims
-	if strings.HasPrefix(token, "ak_") {
-		verifiedToken, err = s.ProjectKeyManager.Validate(cache.Ctx, token, false)
-		if err != nil {
-			if err.Error() == "This token is blacklisted" || err.Error() == "key has expired" {
-				// do nothing
-			} else {
-				return nil, err
+	project := cache.Project
+	blacklistID := tokenID
+
+	if tokenID != "" {
+		// Preferred revoke path: match persisted TokenID metadata (no secret required).
+		found := false
+		remaining := make([]*models.ProjectToken, 0, len(project.Tokens))
+		for _, t := range project.Tokens {
+			if t != nil && t.TokenID == tokenID {
+				found = true
+				continue
+			}
+			remaining = append(remaining, t)
+		}
+		if !found {
+			return nil, errors.New("token not found")
+		}
+		project.Tokens = remaining
+	} else {
+		// Legacy path: revoke by full secret (still supported for older clients).
+		var verifiedToken *models.TokenClaims
+		if strings.HasPrefix(token, "ak_") {
+			verifiedToken, err = s.ProjectKeyManager.Validate(cache.Ctx, token, false)
+			if err != nil {
+				if err.Error() == "This token is blacklisted" || err.Error() == "key has expired" {
+					// do nothing — still remove from project inventory
+				} else {
+					return nil, err
+				}
+			}
+		} else {
+			verifiedToken, err = s.BlankaTokenService.Validate(cache.Ctx, token)
+			if err != nil {
+				return nil, ae.InvalidToken
 			}
 		}
-	} else {
-		verifiedToken, err = s.BlankaTokenService.Validate(cache.Ctx, token)
-		if err != nil {
-			return nil, ae.InvalidToken
-		}
-	}
 
-	if !param.Role.IsAdmin {
-		if verifiedToken.UserID != param.UserID {
-			return nil, errors.New("its none of your business, Pal ")
+		if verifiedToken != nil {
+			if !param.Role.IsAdmin {
+				if verifiedToken.UserID != param.UserID {
+					return nil, errors.New("its none of your business, Pal ")
+				}
+			}
+			blacklistID = verifiedToken.TokenUniqueID
 		}
-	}
 
-	project := cache.Project
-
-	for i, t := range project.Tokens {
-		if t.Token == token {
-			project.Tokens = append(project.Tokens[:i], project.Tokens[i+1:]...)
+		fp := services.TokenFingerprint(token)
+		remaining := make([]*models.ProjectToken, 0, len(project.Tokens))
+		for _, t := range project.Tokens {
+			if t == nil {
+				continue
+			}
+			match := t.Token == token ||
+				(blacklistID != "" && t.TokenID == blacklistID) ||
+				(t.TokenFingerprint != "" && t.TokenFingerprint == fp)
+			if match {
+				if blacklistID == "" && t.TokenID != "" {
+					blacklistID = t.TokenID
+				}
+				continue
+			}
+			remaining = append(remaining, t)
 		}
+		project.Tokens = remaining
 	}
 
 	err = s.SystemDriver.UpdateProject(cache.Ctx, project, true)
@@ -185,18 +258,20 @@ func (s *GraphQLServer) DeleteProjectTokenResolverFn(p graphql.ResolveParams) (i
 		return nil, err
 	}
 
-	parseDuration, _ := time.Parse(time.RFC3339, duration)
-	alreadyExpired := time.Until(parseDuration).Hours()
-	if alreadyExpired > 0.0 { // expire the token
-		expiredToken := map[string]interface{}{
-			"id":        verifiedToken.TokenUniqueID,
-			"_key":      verifiedToken.TokenUniqueID,
-			"expire_at": duration,
-		}
+	if blacklistID != "" {
+		parseDuration, _ := time.Parse(time.RFC3339, duration)
+		alreadyExpired := time.Until(parseDuration).Hours()
+		if alreadyExpired > 0.0 { // expire the token
+			expiredToken := map[string]interface{}{
+				"id":        blacklistID,
+				"_key":      blacklistID,
+				"expire_at": duration,
+			}
 
-		err = s.SystemDriver.BlacklistAToken(cache.Ctx, expiredToken)
-		if err != nil {
-			return nil, err
+			err = s.SystemDriver.BlacklistAToken(cache.Ctx, expiredToken)
+			if err != nil {
+				return nil, err
+			}
 		}
 	}
 
@@ -2065,6 +2140,9 @@ func (s *GraphQLServer) UpsertRoleToProjectResolverFn(p graphql.ResolveParams) (
 	if err != nil {
 		return nil, err
 	}
+	if err := requireProjectAdmin(cache); err != nil {
+		return nil, err
+	}
 
 	project := cache.Project
 
@@ -2091,31 +2169,37 @@ func (s *GraphQLServer) UpsertRoleToProjectResolverFn(p graphql.ResolveParams) (
 	}
 
 	var role *models.Role
+	existing := false
 	// if schema not found then create
 	if r, ok := project.Roles[roleName]; ok {
 		role = r
+		existing = true
 	} else {
 		role = &models.Role{}
 		project.Roles[roleName] = role
 	}
 
-	var isAdmin bool
-	if val, ok := p.Args["is_admin"].(bool); ok {
-		if val {
-			role.IsAdmin = val
-			isAdmin = val
-		}
+	if existing && role.SystemGenerated {
+		return nil, errors.New("cannot edit system generated roles")
 	}
 
-	if logicExecutions, ok := p.Args["logic_executions"].([]interface{}); ok && len(logicExecutions) > 0 {
-		for _, l := range logicExecutions {
-			if !utility.ArrayContains(role.LogicExecutions, l.(string)) {
-				role.LogicExecutions = append(role.LogicExecutions, l.(string))
+	if err := applyRoleUpsertIsAdmin(role, p.Args); err != nil {
+		return nil, err
+	}
+
+	if _, ok := p.Args["logic_executions"]; ok {
+		role.LogicExecutions = nil
+		if logicExecutions, ok := p.Args["logic_executions"].([]interface{}); ok {
+			role.LogicExecutions = make([]string, 0, len(logicExecutions))
+			for _, l := range logicExecutions {
+				if s, ok := l.(string); ok {
+					role.LogicExecutions = append(role.LogicExecutions, s)
+				}
 			}
 		}
 	}
 
-	if !isAdmin {
+	if !role.IsAdmin {
 		//if val, ok := p.Args["type"]
 		if val, ok := p.Args["api_permissions"].(map[string]interface{}); ok {
 			permissions := make(map[string]*models.APIPermission)
@@ -2163,6 +2247,9 @@ func (s *GraphQLServer) DuplicateRoleInProjectResolverFn(p graphql.ResolveParams
 
 	cache, err := s.GetApplicationCache(router)
 	if err != nil {
+		return nil, err
+	}
+	if err := requireProjectAdmin(cache); err != nil {
 		return nil, err
 	}
 
@@ -2287,6 +2374,9 @@ func (s *GraphQLServer) DeleteRoleResolverFn(p graphql.ResolveParams) (interface
 
 	cache, err := s.GetApplicationCache(router)
 	if err != nil {
+		return nil, err
+	}
+	if err := requireProjectAdmin(cache); err != nil {
 		return nil, err
 	}
 

@@ -1,12 +1,19 @@
-# open-core — Handoff
+# Handoff — open-core 2026-08-09
 
-- `main` — tag **v1.8.11** pushed (upsert insert-with-`_id`).
-- Pinned in engine **v2.4.30** with open_driver **v1.0.14**.
-- Drivers still report missing documents inconsistently; only the message
-  fallback in `IsDocumentNotFoundErr` covers them. New driver code should wrap
-  `ae.ErrDocumentNotFound`. Changing postgres/mysql/mariadb to error instead of
-  returning an empty document was deliberately **not** done — other callers rely
-  on the empty-doc behaviour.
+## Done (uncommitted)
 
-## Last Updated
-2026-08-07
+- RegisterUser hook + auth caps + `sdk_bootstrap`
+- Resolver gates: login→auth.login, register→auth.register,
+  createUser→members.write (+ admin)
+- `token.go`: ak_ + cookies=false → apiKeyManager path
+- Tests: authz preset, `auth_bootstrap_security_test.go`
+
+## Next
+
+- Restart consumers (engine) with replace
+- Confirm tag v1.8.12 after smoke
+
+## Do not
+
+- Narrow synthetic admin globally (deferred)
+- Auto-tag without ask

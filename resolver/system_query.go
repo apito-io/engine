@@ -309,6 +309,23 @@ func (s *GraphQLServer) GetCurrentProjectResolverFn(p graphql.ResolveParams) (in
 	*project = *cache.Project
 	project.Schema = nil
 
+	if err := requireProjectAdmin(cache); err != nil {
+		// Non-admins must not see token inventory metadata.
+		project.Tokens = nil
+	} else if len(project.Tokens) > 0 {
+		// Redact any legacy full secrets; return metadata only.
+		redacted := make([]*models.ProjectToken, 0, len(project.Tokens))
+		for _, t := range project.Tokens {
+			if t == nil {
+				continue
+			}
+			cp := *t
+			cp.Token = ""
+			redacted = append(redacted, &cp)
+		}
+		project.Tokens = redacted
+	}
+
 	return project, nil
 }
 

@@ -109,6 +109,81 @@ func RequireDataGraphQLCapabilities(ctx echo.Context, query string) error {
 	return RequireCapability(ctx, required)
 }
 
+// systemGraphQLFieldAliases maps GraphQL root field names that differ from
+// DefaultOperationBindings Operation values (or need CapRolesRead fallbacks).
+var systemGraphQLFieldAliases = map[string]string{
+	"upsertRoleToProject":      authz.CapRolesWrite,
+	"deleteRoleFromProject":    authz.CapRolesWrite,
+	"duplicateRoleInProject":   authz.CapRolesWrite,
+	"deleteRole":               authz.CapRolesWrite,
+	"getProjectPlans":          authz.CapPlansRead,
+	"upsertPlanToProject":      authz.CapPlansWrite,
+	"duplicatePlanInProject":   authz.CapPlansWrite,
+	"deletePlanFromProject":    authz.CapPlansWrite,
+	"generateProjectToken":     authz.CapProjectsWrite,
+	"deleteProjectToken":       authz.CapProjectsWrite,
+	"currentProject":           authz.CapProjectsRead,
+	"getProjectRoles":          authz.CapRolesRead,
+	"listPermissionsAndScopes": authz.CapRolesRead,
+}
+
+func systemGraphQLCapabilityForField(fieldName string) string {
+	fieldName = strings.TrimSpace(fieldName)
+	if fieldName == "" {
+		return ""
+	}
+	for _, b := range authz.DefaultOperationBindings() {
+		if b.Surface != "system_graphql" {
+			continue
+		}
+		if b.Operation == fieldName {
+			return b.Capability
+		}
+	}
+	if cap, ok := systemGraphQLFieldAliases[fieldName]; ok {
+		// Prefer CapRolesRead when bound for role-list fields; alias already uses CapRolesRead.
+		// If CapRolesRead were unavailable as a concept, fall back to CapProjectsRead.
+		if fieldName == "getProjectRoles" || fieldName == "listPermissionsAndScopes" {
+			if _, ok := authz.Get(authz.CapRolesRead); ok {
+				return authz.CapRolesRead
+			}
+			return authz.CapProjectsRead
+		}
+		return cap
+	}
+	return ""
+}
+
+// RequireSystemGraphQLCapabilities enforces apt_ capabilities for system GraphQL root fields.
+func RequireSystemGraphQLCapabilities(ctx echo.Context, query string) error {
+	if PrincipalFromEcho(ctx) == nil || strings.TrimSpace(query) == "" {
+		return nil
+	}
+	doc, err := parser.ParseQuery(&ast.Source{Input: query})
+	if err != nil {
+		return err
+	}
+	if len(doc.Operations) == 0 {
+		return fmt.Errorf("at least one GraphQL operation is required")
+	}
+	for _, op := range doc.Operations {
+		for _, selection := range op.SelectionSet {
+			field, ok := selection.(*ast.Field)
+			if !ok {
+				continue
+			}
+			cap := systemGraphQLCapabilityForField(field.Name)
+			if cap == "" {
+				continue
+			}
+			if err := RequireCapability(ctx, cap); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
+}
+
 // RequireSecuredRESTCapability applies coarse method/path capability gates to
 // apt_ secured REST and file routes.
 func RequireSecuredRESTCapability(ctx echo.Context, requestPath, method string) error {

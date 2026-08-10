@@ -12,24 +12,37 @@ import (
 	"github.com/tailor-platform/graphql"
 )
 
-// roleBypassesMutationACL is true for project admin role id or any role with IsAdmin (e.g. owner merged from admin template in BuildSystemParam).
+// roleBypassesMutationACL is true for project admin (IsAdmin or id admin/owner).
 func roleBypassesMutationACL(r *models.Role) bool {
-	return r != nil && (r.ID == "admin" || r.IsAdmin)
+	return utility.RoleBypassesDataACL(r)
 }
 
-// mutationPermissionForRole returns non-nil API CRUD scopes for the model. LookupAPIPermission alone can miss
-// (nil api_permissions on role); BuildCRUDPermissions supplies the same defaults as the rest of the stack.
+// mutationPermissionForRole returns non-nil API CRUD scopes for the model via EffectivePermission.
 func mutationPermissionForRole(role *models.Role, modelName string) (*models.APIPermission, error) {
 	if role == nil {
 		return nil, errors.New("role is required")
 	}
-	if roleBypassesMutationACL(role) {
-		return &models.APIPermission{Read: "all", Create: "all", Update: "all", Delete: "all"}, nil
+	perm := utility.EffectivePermission(role, modelName)
+	if perm == nil {
+		return nil, errors.New("internal error: mutation permission is not resolved")
 	}
-	if val, ok := utility.LookupAPIPermission(role, modelName); ok && val != nil {
-		return val, nil
+	return perm, nil
+}
+
+// ownDocOwnerID returns the ownership id for AuthorizeModelUpdate/Delete own checks.
+// For user documents the doc ID is the owner; otherwise only project-user creators are passed through
+// (matching historical deny-only own semantics).
+func ownDocOwnerID(doc *types.DefaultDocumentStructure) (ownerID string, isUserModel bool) {
+	if doc == nil {
+		return "", false
 	}
-	return utility.BuildCRUDPermissions(modelName, role)
+	if doc.Type == "user" {
+		return doc.ID, true
+	}
+	if doc.Meta != nil && doc.Meta.CreatedBy != nil && doc.Meta.CreatedBy.IsProjectUser {
+		return doc.Meta.CreatedBy.ID, false
+	}
+	return "", false
 }
 
 func (s *GraphQLServer) updateAndConnectDocument(ctx context.Context, cache *models.ApplicationCache, param *models.CommonSystemParams, hooks []*models.Webhook, userInputPayload map[string]interface{}, permission *models.APIPermission, connections, disconnects map[string]interface{}, deltaUpdate bool) (*types.DefaultDocumentStructure, error) {
@@ -52,24 +65,9 @@ func (s *GraphQLServer) updateAndConnectDocument(ctx context.Context, cache *mod
 	}
 	doc := raw.(*types.DefaultDocumentStructure)
 
-	if !roleBypassesMutationACL(param.Role) {
-		if permission == nil {
-			return nil, errors.New("internal error: mutation permission is not resolved")
-		}
-		switch permission.Update {
-		case "none":
-			return nil, errors.New("Update is not permitted")
-		case "auth":
-			if !param.Role.IsProjectUser {
-				return nil, errors.New("Authentication is required to Update a Document")
-			}
-		case "own":
-			if doc.Type == "user" && param.Role.IsProjectUser && param.UserID != doc.ID {
-				return nil, errors.New("You are not authorized to edit this document")
-			} else if doc.Meta != nil && doc.Meta.CreatedBy != nil && doc.Meta.CreatedBy.IsProjectUser && doc.Meta.CreatedBy.ID != param.UserID {
-				return nil, errors.New("You are not authorized to edit this document")
-			}
-		}
+	ownerID, isUserModel := ownDocOwnerID(doc)
+	if err := utility.AuthorizeModelUpdate(param.Role, param.Model.Name, ownerID, isUserModel, param.UserID); err != nil {
+		return nil, err
 	}
 
 	input := param.ResolveParams.Args
@@ -194,9 +192,9 @@ func (s *GraphQLServer) createAndConnectDocument(ctx context.Context, cache *mod
 
 	_id := utility.NewID()
 	doc := &types.DefaultDocumentStructure{
-		Key:      _id,
-		ID:       _id,
-		Type:     param.Model.Name,
+		Key:  _id,
+		ID:   _id,
+		Type: param.Model.Name,
 		Meta: &types.MetaField{
 			CreatedAt: utility.GetCurrentTime(),
 			UpdatedAt: utility.GetCurrentTime(),
@@ -372,6 +370,16 @@ func (s *GraphQLServer) MutationResolverFn(p graphql.ResolveParams) (interface{}
 				}
 				responses = append(responses, _doc)
 			} else {
+				if err := utility.AuthorizeModelCreate(param.Role, modelType.Name); err != nil {
+					errs = append(errs, err.Error())
+					responses = append(responses, nil)
+					continue
+				}
+				if err := s.enforcePlanCreateQuota(dbCtx, cache, param, modelType.Name); err != nil {
+					errs = append(errs, err.Error())
+					responses = append(responses, nil)
+					continue
+				}
 				// connection is only for create operation
 				var connections map[string]interface{}
 				if _connect, ok := payload["_connect"].(map[string]interface{}); ok && len(_connect) > 0 {
@@ -395,15 +403,11 @@ func (s *GraphQLServer) MutationResolverFn(p graphql.ResolveParams) (interface{}
 		return responses, nil
 	case "create":
 
-		if !roleBypassesMutationACL(param.Role) {
-			switch permission.Create {
-			case "none":
-				return nil, errors.New("creation is not permitted")
-			case "auth":
-				if !param.Role.IsProjectUser {
-					return nil, errors.New("authentication is required to Create a Document")
-				}
-			}
+		if err := utility.AuthorizeModelCreate(param.Role, modelType.Name); err != nil {
+			return nil, err
+		}
+		if err := s.enforcePlanCreateQuota(dbCtx, cache, param, modelType.Name); err != nil {
+			return nil, err
 		}
 
 		if modelType.SinglePage && modelType.SinglePageUUID != "" {
@@ -493,24 +497,9 @@ func (s *GraphQLServer) MutationResolverFn(p graphql.ResolveParams) (interface{}
 				return nil, err
 			}
 
-			if !roleBypassesMutationACL(param.Role) {
-				if permission == nil {
-					return nil, errors.New("internal error: mutation permission is not resolved")
-				}
-				switch permission.Delete {
-				case "none":
-					return nil, errors.New("Update is not permitted")
-				case "auth":
-					if !param.Role.IsProjectUser {
-						return nil, errors.New("Authentication is required to Update a Document")
-					}
-				case "own":
-					if doc.Type == "user" && param.Role.IsProjectUser && param.UserID != doc.ID {
-						return nil, errors.New("You are not authorized to delete this document")
-					} else if doc.Meta != nil && doc.Meta.CreatedBy != nil && doc.Meta.CreatedBy.IsProjectUser && doc.Meta.CreatedBy.ID != param.UserID {
-						return nil, errors.New("You are not authorized to delete this document")
-					}
-				}
+			ownerID, isUserModel := ownDocOwnerID(doc)
+			if err := utility.AuthorizeModelDelete(param.Role, modelType.Name, ownerID, isUserModel, param.UserID); err != nil {
+				return nil, err
 			}
 
 			err = projectDriver.DeleteDocumentFromProject(dbCtx, param)

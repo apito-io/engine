@@ -115,6 +115,9 @@ type Project struct {
 	Tokens []*ProjectToken `bun:"rel:has-many" json:"tokens,omitempty" firestore:"tokens,omitempty" bson:"tokens,omitempty"`
 
 	Roles      map[string]*Role   `bun:"type:jsonb" json:"roles,omitempty" protobuf_key:"bytes,1,opt,name=key,proto3" protobuf_val:"bytes,2,opt,name=value,proto3" firestore:"roles,omitempty" bson:"roles,omitempty"`
+	// Plans are project-defined permission ceilings keyed by slug (free/paid/…).
+	// Assigned per tenant via pro_tenants.plan_tier. Nil/empty is treated as fully permissive.
+	Plans      map[string]*Plan   `bun:"type:jsonb" json:"plans,omitempty" firestore:"plans,omitempty" bson:"plans,omitempty"`
 	Driver     *DriverCredentials `bun:"rel:belongs-to,join:id=project_id" json:"driver,omitempty"  firestore:"driver,omitempty" bson:"driver,omitempty"`
 	TempBanned bool               `json:"temp_banned,omitempty" firestore:"temp_banned,omitempty" bson:"temp_banned,omitempty"`
 

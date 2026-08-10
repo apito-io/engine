@@ -26,6 +26,7 @@ type ObjectModels struct {
 	FunctionEnvVariablesObject  *graphql.Object
 	FunctionRuntimeConfigObject *graphql.Object
 	RoleObject                  *graphql.Object
+	PlanObject                  *graphql.Object
 	//ProjectRoleObject           *graphql.Object
 	ConnectionTypeObject      *graphql.Object
 	FileDetailsTypeObject     *graphql.Object
@@ -97,6 +98,7 @@ func (s *SchemaObjects) InitPrivateObjects() *ObjectModels {
 
 	//projectWithRoleObject := s.GetProjectWithRoleObject()
 	roleObject := s.GetRoleObject()
+	planObject := s.GetPlanObject()
 
 	docModelObject := s.GetDocModelTypeObject()
 
@@ -123,6 +125,7 @@ func (s *SchemaObjects) InitPrivateObjects() *ObjectModels {
 		ValidationTypeObject:       validationTypeObject,
 		FieldInfoObject:            fieldInfoObject,
 		RoleObject:                 roleObject,
+		PlanObject:                 planObject,
 		//ProjectRoleObject:           projectWithRoleObject,
 		FunctionRuntimeConfigObject: functionRuntimeConfigObject,
 		FileDetailsTypeObject:       s.GetFileDetailsTypeObject(),

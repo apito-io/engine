@@ -184,6 +184,104 @@ func (a *AuthController) ListAccessTokenCatalog(c echo.Context) error {
 	})
 }
 
+// GetAccessTokenMe self-introspects the Bearer apt_ access token (AccessTokenPublic).
+// Console session / ak_ callers get 400 — this endpoint is for apt_ principals only.
+// Never accepts another token id/secret; never returns the raw secret.
+func (a *AuthController) GetAccessTokenMe(c echo.Context) error {
+	plane, _ := c.Get("auth_plane").(string)
+	if plane != "access_token" {
+		return c.JSON(http.StatusBadRequest, &models.HttpResponse{
+			Message: "use apt_ Bearer Authorization for GET /system/access-tokens/me (console session is not an access token)",
+			Code:    http.StatusBadRequest,
+		})
+	}
+	principal := services.PrincipalFromEcho(c)
+	if principal == nil {
+		return c.JSON(http.StatusUnauthorized, &models.HttpResponse{
+			Message: "missing access principal",
+			Code:    http.StatusUnauthorized,
+		})
+	}
+	svc := a.accessTokenSvc()
+	if svc == nil {
+		return c.JSON(http.StatusInternalServerError, &models.HttpResponse{
+			Message: "access token service unavailable",
+			Code:    http.StatusInternalServerError,
+		})
+	}
+	pub, err := svc.PublicForPrincipal(c.Request().Context(), principal)
+	if err != nil {
+		return c.JSON(http.StatusBadRequest, &models.HttpResponse{
+			Message: err.Error(),
+			Code:    http.StatusBadRequest,
+		})
+	}
+
+	out := map[string]interface{}{
+		"code":   http.StatusOK,
+		"token":  pub,
+		"plane":  "access_token",
+		"hint":   "Secret is never returned. Use when debugging CAPABILITY_DENIED or project/tenant grant failures.",
+	}
+
+	operation := strings.TrimSpace(c.QueryParam("operation"))
+	if operation != "" {
+		var required string
+		var surface string
+		for _, b := range authz.DefaultOperationBindings() {
+			if b.Operation == operation {
+				required = b.Capability
+				surface = b.Surface
+				break
+			}
+		}
+		if required == "" {
+			out["operation_hint"] = map[string]interface{}{
+				"operation": operation,
+				"known":     false,
+				"message":   "operation not found in DefaultOperationBindings",
+			}
+		} else {
+			out["operation_hint"] = map[string]interface{}{
+				"operation":  operation,
+				"surface":    surface,
+				"required":   required,
+				"present":    authz.HasCapability(principal.Capabilities, required),
+				"known":      true,
+			}
+		}
+	}
+
+	projectID := strings.TrimSpace(c.QueryParam("project_id"))
+	tenantID := strings.TrimSpace(c.QueryParam("tenant_id"))
+	if projectID != "" || tenantID != "" {
+		grant := map[string]interface{}{}
+		if projectID != "" {
+			perr := svc.AuthorizeProject(c.Request().Context(), principal, projectID)
+			grant["project_id"] = projectID
+			grant["project_allowed"] = perr == nil
+			if perr != nil {
+				grant["project_error"] = perr.Error()
+			}
+		}
+		if tenantID != "" && projectID != "" {
+			terr := svc.AuthorizeTenant(principal, projectID, tenantID)
+			grant["tenant_id"] = tenantID
+			grant["tenant_allowed"] = terr == nil
+			if terr != nil {
+				grant["tenant_error"] = terr.Error()
+			}
+		} else if tenantID != "" {
+			grant["tenant_id"] = tenantID
+			grant["tenant_allowed"] = false
+			grant["tenant_error"] = "project_id required to evaluate tenant grant"
+		}
+		out["grant_check"] = grant
+	}
+
+	return c.JSON(http.StatusOK, out)
+}
+
 // ListAdministrableProjects returns projects the issuer can currently administer (for "all projects" preview).
 func (a *AuthController) ListAdministrableProjects(c echo.Context) error {
 	userID, _ := c.Get("user").(string)

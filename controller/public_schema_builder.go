@@ -70,10 +70,16 @@ func (g *GraphCtrl) publicSchemaBuilder(ctx context.Context, cache *models.Appli
 		}
 	}
 
+	// Model/function filters can be empty when the request is only public auth
+	// roots (myEffectivePermissions, loginUser, myTenant, …). Those fields are
+	// merged later via PublicAuthQueryFields — do not treat that as "not found".
 	if len(filteredFunctions) == 0 && len(filteredModels) == 0 {
-		buildErr = errors.New("query not found in schema. please re-check")
-		recordSchemaBuildOutcome(ctx, g.cfg, "error")
-		return nil, buildErr
+		authNames := publicAuthQueryNameSet(g.gqlServer)
+		if !incomingRequestIsPublicAuthOnly(cache, authNames) {
+			buildErr = errors.New("query not found in schema. please re-check")
+			recordSchemaBuildOutcome(ctx, g.cfg, "error")
+			return nil, buildErr
+		}
 	}
 
 	if g.cfg != nil && g.cfg.MaxModelsPerProject > 0 && len(filteredModels) > g.cfg.MaxModelsPerProject {

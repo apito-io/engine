@@ -26,11 +26,40 @@ func TestExtractModelNames_foodCategoryList_resolvesCanonicalSnakeModel(t *testi
 	if len(reqs) != 1 {
 		t.Fatalf("len(reqs)=%d want 1", len(reqs))
 	}
+	if len(reqs[0].RootFields) != 1 || reqs[0].RootFields[0] != "foodCategoryList" {
+		t.Fatalf("RootFields=%#v want [foodCategoryList]", reqs[0].RootFields)
+	}
 	if len(reqs[0].FilteredModels) != 1 {
 		t.Fatalf("FilteredModels=%#v", reqs[0].FilteredModels)
 	}
 	if got := reqs[0].FilteredModels[0].Name; got != "food_category" {
 		t.Fatalf("want food_category, got %q", got)
+	}
+}
+
+func TestExtractModelNames_authOnlyRootFields(t *testing.T) {
+	schema := &models.ProjectSchema{
+		Models: []*models.ModelType{
+			{Name: "student", Fields: []*models.FieldInfo{{Identifier: "name"}}},
+		},
+	}
+	q := `query { myEffectivePermissions { role_id plan_slug } }`
+	doc, err := parser.ParseQuery(&ast.Source{Input: q})
+	if err != nil {
+		t.Fatal(err)
+	}
+	reqs, _, err := ExtractModelNames(schema, doc)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(reqs) != 1 {
+		t.Fatalf("len(reqs)=%d want 1", len(reqs))
+	}
+	if len(reqs[0].FilteredModels) != 0 {
+		t.Fatalf("FilteredModels=%#v want empty for auth-only root", reqs[0].FilteredModels)
+	}
+	if len(reqs[0].RootFields) != 1 || reqs[0].RootFields[0] != "myEffectivePermissions" {
+		t.Fatalf("RootFields=%#v", reqs[0].RootFields)
 	}
 }
 

@@ -45,3 +45,20 @@ func TestAccessTokenManagementRequiresConsoleSession(t *testing.T) {
 	require.ErrorAs(t, err, &httpErr)
 	require.Equal(t, http.StatusForbidden, httpErr.Code)
 }
+
+func TestGetAccessTokenMeRejectsNonAccessTokenPlane(t *testing.T) {
+	ctrl := &AuthController{}
+	e := echo.New()
+	rec := httptest.NewRecorder()
+	ctx := e.NewContext(
+		httptest.NewRequest(http.MethodGet, "/system/access-tokens/me", nil),
+		rec,
+	)
+	ctx.Set("auth_plane", "console_session")
+
+	err := ctrl.GetAccessTokenMe(ctx)
+	require.NoError(t, err)
+	require.Equal(t, http.StatusBadRequest, rec.Code)
+	require.Contains(t, rec.Body.String(), "apt_ Bearer")
+	require.NotContains(t, rec.Body.String(), "secret_hash")
+}

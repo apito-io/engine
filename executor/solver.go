@@ -319,16 +319,6 @@ func (s *GraphQLExecutor) SolvePublicMutation(ctx context.Context, resolverName 
 	param.Model = modelType
 	//param.ResolveParams = &p
 
-	// p == "none" || p == "all" || p == "own" || p == "auth"
-	var permission *models.APIPermission
-
-	// filter based on roles
-	if param.Role.ID != "admin" {
-		if val, ok := utility.LookupAPIPermission(param.Role, modelType.Name); ok {
-			permission = val
-		}
-	}
-
 	/*var hooks []*protobuff.Webhook
 	// call in the webhook
 	for _, hookId := range modelType.HookIds {
@@ -362,15 +352,11 @@ func (s *GraphQLExecutor) SolvePublicMutation(ctx context.Context, resolverName 
 	action := utility.ExtractActionName(resolverName)
 	switch action {
 	case "create":
-		if param.Role.ID != "admin" {
-			switch permission.Create {
-			case "none":
-				return nil, errors.New("creation is not permitted")
-			case "auth":
-				if !param.Role.IsProjectUser {
-					return nil, errors.New("authentication is required to Create a Document")
-				}
-			}
+		if err := utility.AuthorizeModelCreate(param.Role, modelType.Name); err != nil {
+			return nil, err
+		}
+		if err := enforceExecutorPlanCreateQuota(ctx, s, cache, param, modelType); err != nil {
+			return nil, err
 		}
 
 		if modelType.SinglePage == true && modelType.SinglePageUUID != "" {
@@ -509,22 +495,15 @@ func (s *GraphQLExecutor) SolvePublicMutation(ctx context.Context, resolverName 
 		}
 		doc := raw.(*types.DefaultDocumentStructure)
 
-		if param.Role.ID != "admin" {
-			switch permission.Update {
-			case "none":
-				return nil, errors.New("update is not permitted")
-			case "auth":
-				if !param.Role.IsProjectUser {
-					return nil, errors.New("authentication is required to Update a Document")
-				}
-				break
-			case "own":
-				if doc.Type == "user" && param.Role.IsProjectUser && param.UserID != doc.ID {
-					return nil, errors.New("you are not authorized to edit this document")
-				} else if doc.Meta != nil && doc.Meta.CreatedBy != nil && doc.Meta.CreatedBy.IsProjectUser && doc.Meta.CreatedBy.ID != param.UserID {
-					return nil, errors.New("you are not authorized to edit this document")
-				}
-			}
+		ownerID := ""
+		isUserModel := doc.Type == "user"
+		if isUserModel {
+			ownerID = doc.ID
+		} else if doc.Meta != nil && doc.Meta.CreatedBy != nil && doc.Meta.CreatedBy.IsProjectUser {
+			ownerID = doc.Meta.CreatedBy.ID
+		}
+		if err := utility.AuthorizeModelUpdate(param.Role, modelType.Name, ownerID, isUserModel, param.UserID); err != nil {
+			return nil, err
 		}
 
 		if userInputPayload != nil && len(userInputPayload) > 0 {
@@ -621,22 +600,15 @@ func (s *GraphQLExecutor) SolvePublicMutation(ctx context.Context, resolverName 
 				return nil, err
 			}
 
-			if param.Role.ID != "admin" {
-				switch permission.Delete {
-				case "none":
-					return nil, errors.New("update is not permitted")
-				case "auth":
-					if !param.Role.IsProjectUser {
-						return nil, errors.New("Authentication is required to Update a Document")
-					}
-					break
-				case "own":
-					if doc.Type == "user" && param.Role.IsProjectUser && param.UserID != doc.ID {
-						return nil, errors.New("you are not authorized to delete this document")
-					} else if doc.Meta.CreatedBy.IsProjectUser && doc.Meta.CreatedBy.ID != param.UserID {
-						return nil, errors.New("you are not authorized to delete this document")
-					}
-				}
+			ownerID := ""
+			isUserModel := doc.Type == "user"
+			if isUserModel {
+				ownerID = doc.ID
+			} else if doc.Meta != nil && doc.Meta.CreatedBy != nil && doc.Meta.CreatedBy.IsProjectUser {
+				ownerID = doc.Meta.CreatedBy.ID
+			}
+			if err := utility.AuthorizeModelDelete(param.Role, modelType.Name, ownerID, isUserModel, param.UserID); err != nil {
+				return nil, err
 			}
 
 			err = driver.DeleteDocumentFromProject(ctx, param)
@@ -795,7 +767,7 @@ func (s *GraphQLExecutor) HandlePayloadFormatting(ctx context.Context, param *mo
 					dbPayload[identifier] = processed
 				}
 			}
-		
+
 		case _const.ListField:
 
 			normalizeListSlice := func(v interface{}) ([]interface{}, bool) {
@@ -952,7 +924,7 @@ func (s *GraphQLExecutor) HandlePayloadFormatting(ctx context.Context, param *mo
 					dbPayload[identifier] = formattedInput
 				}
 			}
-		
+
 		case _const.ObjectField:
 			if userInput, ok := inputPayload[f.Identifier].(map[string]interface{}); ok && len(userInput) > 0 {
 				var oldUserInput map[string]interface{}
@@ -1048,4 +1020,59 @@ func (s *GraphQLExecutor) TrackUploadHistory(ctx context.Context, param *models.
 		return err
 	}*/
 	return nil
+}
+
+const executorQuotaCountCacheKey = "_plan_quota_counts"
+
+func enforceExecutorPlanCreateQuota(ctx context.Context, s *GraphQLExecutor, cache *models.ApplicationCache, param *models.CommonSystemParams, modelType *models.ModelType) error {
+	if param == nil || param.ActivePlan == nil || modelType == nil || s == nil {
+		return nil
+	}
+	limit := utility.PlanQuotaLimit(param.ActivePlan, utility.RecordsQuotaKey(modelType.Name))
+	if limit <= 0 {
+		return nil
+	}
+	if param.Ext == nil {
+		param.Ext = make(map[string]interface{})
+	}
+	raw, _ := param.Ext[executorQuotaCountCacheKey].(map[string]int)
+	if raw == nil {
+		raw = make(map[string]int)
+		param.Ext[executorQuotaCountCacheKey] = raw
+	}
+	count, ok := raw[modelType.Name]
+	if !ok {
+		driver, err := s.GetProjectDriver(ctx)
+		if err != nil {
+			return fmt.Errorf("plan quota check: %w", err)
+		}
+		cp := *param
+		cp.Model = modelType
+		cp.OnlyReturnCount = true
+		if cache != nil && cache.Project != nil && cache.Project.Schema != nil {
+			cp.ProjectSchemaModels = cache.Project.Schema.Models
+		}
+		result, err := driver.CountDocOfProject(ctx, &cp)
+		if err != nil {
+			return fmt.Errorf("plan quota check: %w", err)
+		}
+		switch v := result.(type) {
+		case int:
+			count = v
+		case int64:
+			count = int(v)
+		case float64:
+			count = int(v)
+		case map[string]interface{}:
+			if c, ok := v["count"].(float64); ok {
+				count = int(c)
+			} else if c, ok := v["count"].(int); ok {
+				count = c
+			} else if c, ok := v["count"].(int64); ok {
+				count = int(c)
+			}
+		}
+		raw[modelType.Name] = count
+	}
+	return utility.CheckPlanRecordsQuota(param.ActivePlan, modelType.Name, count)
 }

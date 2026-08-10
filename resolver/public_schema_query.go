@@ -142,6 +142,19 @@ func (s *GraphQLServer) SingleResourceResolverFn(p graphql.ResolveParams) (inter
 	if err != nil {
 		return nil, err
 	}
+
+	createdByID := ""
+	if doc != nil && doc.Meta != nil && doc.Meta.CreatedBy != nil {
+		createdByID = doc.Meta.CreatedBy.ID
+	}
+	// user documents: own means the document id is the authenticated user
+	if doc != nil && doc.Type == "user" && createdByID == "" {
+		createdByID = doc.ID
+	}
+	if err := utility.AuthorizeOwnDocumentRead(cache.Param.Role, modelType.Name, cache.Param.UserID, createdByID); err != nil {
+		return nil, err
+	}
+
 	return doc, nil
 }
 

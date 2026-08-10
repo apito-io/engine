@@ -31,7 +31,7 @@ func resolveConnectionPermission(permissions map[string]*models.APIPermission, c
 
 // modelReadAllowed reports whether the role may read documents of modelName.
 func modelReadAllowed(permissions map[string]*models.APIPermission, modelName string, role *models.Role) bool {
-	if role != nil && role.IsAdmin {
+	if role != nil && utility.RoleBypassesDataACL(role) {
 		return true
 	}
 	if ap, ok := permissions[modelName]; ok && ap != nil {
@@ -43,6 +43,24 @@ func modelReadAllowed(permissions map[string]*models.APIPermission, modelName st
 		}
 	}
 	return false
+}
+
+// connectionFieldAllowed decides whether a relation field should be attached to the parent type.
+// Target Read must not be none (unless admin). known_as edges also require parent read for non-admins.
+func connectionFieldAllowed(permissions map[string]*models.APIPermission, parentModel string, conn *models.ConnectionType, role *models.Role) bool {
+	if conn == nil {
+		return false
+	}
+	isAdmin := utility.RoleBypassesDataACL(role)
+	permission, ok := resolveConnectionPermission(permissions, conn, role)
+	targetReadOK := isAdmin || (ok && permission != nil && permission.Read != "none")
+	if !targetReadOK {
+		return false
+	}
+	if conn.KnownAs != "" && !isAdmin && !modelReadAllowed(permissions, parentModel, role) {
+		return false
+	}
+	return true
 }
 
 // connectionModelDisplayName returns KnownAs when set, otherwise the related model name.

@@ -92,11 +92,17 @@ type IncomingRequest struct {
 	FilteredModels    []*FilteredModel
 	FilteredFunctions []*ApitoFunction
 	IsPluginRequest   bool
+	// RootFields are the top-level GraphQL selection names as requested
+	// (e.g. myEffectivePermissions, studentList). Used so public auth queries
+	// can build a schema without requiring model/function filters.
+	RootFields []string
 }
 
 type CommonSystemParams struct {
 	Role          *Role  `json:"role,omitempty"`
 	Plan          string `json:"plan,omitempty"`
+	// ActivePlan is the request-scoped plan ceiling (not persisted). Set by pro SaaS clamp.
+	ActivePlan    *Plan  `json:"-"`
 	UserID        string `json:"user_id,omitempty"`
 	RelationModel string `json:"relation_model,omitempty"`
 	Email         string `json:"email,omitempty"`

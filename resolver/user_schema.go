@@ -7,8 +7,12 @@ import (
 // UserItemGraphQLObject is the open-core UserItem GraphQL type.
 var UserItemGraphQLObject *graphql.Object
 
-// RegisterUserSchema registers project end-user operations on the system GraphQL schema.
-func (s *GraphQLServer) RegisterUserSchema() {
+// ensureUserItemGraphQLObject builds the shared UserItem type without touching
+// system schema channels. Safe for public auth schema assembly and tests.
+func (s *GraphQLServer) ensureUserItemGraphQLObject() *graphql.Object {
+	if UserItemGraphQLObject != nil {
+		return UserItemGraphQLObject
+	}
 	userItem := graphql.NewObject(graphql.ObjectConfig{
 		Name: "UserItem",
 		Fields: graphql.Fields{
@@ -25,6 +29,12 @@ func (s *GraphQLServer) RegisterUserSchema() {
 	})
 	s.applyProjectUserItemFieldsHook(userItem)
 	UserItemGraphQLObject = userItem
+	return userItem
+}
+
+// RegisterUserSchema registers project end-user operations on the system GraphQL schema.
+func (s *GraphQLServer) RegisterUserSchema() {
+	userItem := s.ensureUserItemGraphQLObject()
 
 	loginUserPayload := graphql.NewObject(graphql.ObjectConfig{
 		Name: "LoginUserPayload",
@@ -78,29 +88,34 @@ func (s *GraphQLServer) RegisterUserSchema() {
 			"code":        &graphql.ArgumentConfig{Type: graphql.String},
 			"state":       &graphql.ArgumentConfig{Type: graphql.String},
 			"id_token":    &graphql.ArgumentConfig{Type: graphql.String},
+			// When false, Google/OAuth must find an existing account (no auto-provision / create).
+			// Omit or true: keep signup auto-provision when tenant_id is empty.
+			"signup": &graphql.ArgumentConfig{Type: graphql.Boolean},
 		},
 		Resolve: s.LoginUserResolverFn,
 	}
 	s.applyProjectUserGraphQLOperationFieldHook("loginUser", loginUserField)
 
-	s.SystemQueriesChan <- &graphql.Fields{
-		"searchUsers": searchUsersField,
-		"loginUser":   loginUserField,
-		"oauthState": &graphql.Field{
-			Type: oauthStatePayload,
-			Args: graphql.FieldConfigArgument{
-				"provider":   &graphql.ArgumentConfig{Type: graphql.NewNonNull(graphql.String)},
-				"project_id": &graphql.ArgumentConfig{Type: graphql.NewNonNull(graphql.String)},
+	if s.SystemQueriesChan != nil {
+		s.SystemQueriesChan <- &graphql.Fields{
+			"searchUsers": searchUsersField,
+			"loginUser":   loginUserField,
+			"oauthState": &graphql.Field{
+				Type: oauthStatePayload,
+				Args: graphql.FieldConfigArgument{
+					"provider":   &graphql.ArgumentConfig{Type: graphql.NewNonNull(graphql.String)},
+					"project_id": &graphql.ArgumentConfig{Type: graphql.NewNonNull(graphql.String)},
+				},
+				Resolve: s.OAuthStateResolverFn,
 			},
-			Resolve: s.OAuthStateResolverFn,
-		},
-		"googleOAuthState": &graphql.Field{
-			Type: googleOAuthStatePayload,
-			Args: graphql.FieldConfigArgument{
-				"project_id": &graphql.ArgumentConfig{Type: graphql.NewNonNull(graphql.String)},
+			"googleOAuthState": &graphql.Field{
+				Type: googleOAuthStatePayload,
+				Args: graphql.FieldConfigArgument{
+					"project_id": &graphql.ArgumentConfig{Type: graphql.NewNonNull(graphql.String)},
+				},
+				Resolve: s.GoogleOAuthStateResolverFn,
 			},
-			Resolve: s.GoogleOAuthStateResolverFn,
-		},
+		}
 	}
 
 	createUserField := &graphql.Field{
@@ -117,6 +132,21 @@ func (s *GraphQLServer) RegisterUserSchema() {
 	}
 	s.applyProjectUserGraphQLOperationFieldHook("createUser", createUserField)
 
+	// Public self-signup: same fields as createUser minus role (forced to
+	// default_registration_role). Callable with a non-admin project API key.
+	registerUserField := &graphql.Field{
+		Type: userItem,
+		Args: graphql.FieldConfigArgument{
+			"project_id": &graphql.ArgumentConfig{Type: graphql.NewNonNull(graphql.String)},
+			"password":   &graphql.ArgumentConfig{Type: graphql.NewNonNull(graphql.String)},
+			"email":      &graphql.ArgumentConfig{Type: graphql.String},
+			"phone":      &graphql.ArgumentConfig{Type: graphql.String},
+			"username":   &graphql.ArgumentConfig{Type: graphql.String},
+		},
+		Resolve: s.RegisterUserResolverFn,
+	}
+	s.applyProjectUserGraphQLOperationFieldHook("registerUser", registerUserField)
+
 	updateUserField := &graphql.Field{
 		Type: userItem,
 		Args: graphql.FieldConfigArgument{
@@ -130,23 +160,26 @@ func (s *GraphQLServer) RegisterUserSchema() {
 	}
 	s.applyProjectUserGraphQLOperationFieldHook("updateUser", updateUserField)
 
-	s.SystemMutationsChan <- &graphql.Fields{
-		"createUser": createUserField,
-		"updateUser": updateUserField,
-		"deleteUser": &graphql.Field{
-			Type: graphql.Boolean,
-			Args: graphql.FieldConfigArgument{
-				"user_id": &graphql.ArgumentConfig{Type: graphql.NewNonNull(graphql.String)},
+	if s.SystemMutationsChan != nil {
+		s.SystemMutationsChan <- &graphql.Fields{
+			"createUser":   createUserField,
+			"registerUser": registerUserField,
+			"updateUser":   updateUserField,
+			"deleteUser": &graphql.Field{
+				Type: graphql.Boolean,
+				Args: graphql.FieldConfigArgument{
+					"user_id": &graphql.ArgumentConfig{Type: graphql.NewNonNull(graphql.String)},
+				},
+				Resolve: s.DeleteUserResolverFn,
 			},
-			Resolve: s.DeleteUserResolverFn,
-		},
-		"resetUserPassword": &graphql.Field{
-			Type: graphql.Boolean,
-			Args: graphql.FieldConfigArgument{
-				"user_id":  &graphql.ArgumentConfig{Type: graphql.NewNonNull(graphql.String)},
-				"password": &graphql.ArgumentConfig{Type: graphql.NewNonNull(graphql.String)},
+			"resetUserPassword": &graphql.Field{
+				Type: graphql.Boolean,
+				Args: graphql.FieldConfigArgument{
+					"user_id":  &graphql.ArgumentConfig{Type: graphql.NewNonNull(graphql.String)},
+					"password": &graphql.ArgumentConfig{Type: graphql.NewNonNull(graphql.String)},
+				},
+				Resolve: s.ResetUserPasswordResolverFn,
 			},
-			Resolve: s.ResetUserPasswordResolverFn,
-		},
+		}
 	}
 }

@@ -13,6 +13,9 @@ const (
 	CapRolesRead  = "roles.read"
 	CapRolesWrite = "roles.write"
 
+	CapPlansRead  = "plans.read"
+	CapPlansWrite = "plans.write"
+
 	CapTenantsRead   = "tenants.read"
 	CapTenantsWrite  = "tenants.write"
 	CapTenantsDelete = "tenants.delete"
@@ -50,6 +53,9 @@ const (
 
 	CapDatabaseRead  = "database.read"
 	CapDatabaseWrite = "database.write"
+
+	CapAuthLogin    = "auth.login"
+	CapAuthRegister = "auth.register"
 )
 
 // Risk tiers for Console danger acknowledgements.
@@ -88,6 +94,8 @@ var registry = []Capability{
 	{ID: CapMembersWrite, Label: "Write members", Group: "Members", Risk: RiskMedium, Implies: []string{CapMembersRead}},
 	{ID: CapRolesRead, Label: "Read roles", Group: "Roles", Risk: RiskLow},
 	{ID: CapRolesWrite, Label: "Write roles", Group: "Roles", Risk: RiskHigh, Implies: []string{CapRolesRead}},
+	{ID: CapPlansRead, Label: "Read plans", Group: "Plans", Risk: RiskLow},
+	{ID: CapPlansWrite, Label: "Write plans", Group: "Plans", Risk: RiskHigh, Implies: []string{CapPlansRead}},
 	{ID: CapTenantsRead, Label: "Read tenants", Group: "Tenants", Risk: RiskLow},
 	{ID: CapTenantsWrite, Label: "Write tenants", Group: "Tenants", Risk: RiskMedium, Implies: []string{CapTenantsRead}},
 	{ID: CapTenantsDelete, Label: "Delete tenants", Group: "Tenants", Risk: RiskDanger, Danger: true, Implies: []string{CapTenantsRead}},
@@ -116,15 +124,17 @@ var registry = []Capability{
 	{ID: CapSettingsWrite, Label: "Write settings", Group: "Settings", Risk: RiskHigh, Implies: []string{CapSettingsRead}},
 	{ID: CapDatabaseRead, Label: "Read database", Group: "Database", Risk: RiskDanger, Danger: true},
 	{ID: CapDatabaseWrite, Label: "Write database", Group: "Database", Risk: RiskDanger, Danger: true, Implies: []string{CapDatabaseRead}},
+	{ID: CapAuthLogin, Label: "Login end-users", Group: "Auth", Risk: RiskLow},
+	{ID: CapAuthRegister, Label: "Public registerUser", Group: "Auth", Risk: RiskMedium},
 }
 
 var presets = []Preset{
 	{
-		ID:          "full_access",
-		Label:       "Full access",
-		Description: "All capabilities. Requires owner/admin and danger acknowledgement.",
-		Danger:      true,
-		DefaultDays: 30,
+		ID:           "full_access",
+		Label:        "Full access",
+		Description:  "All capabilities. Requires owner/admin and danger acknowledgement.",
+		Danger:       true,
+		DefaultDays:  30,
 		Capabilities: AllCapabilityIDs(),
 	},
 	{
@@ -133,7 +143,7 @@ var presets = []Preset{
 		Description: "Read projects, schema, data, functions, files, settings, audit.",
 		DefaultDays: 90,
 		Capabilities: []string{
-			CapProjectsRead, CapMembersRead, CapRolesRead, CapTenantsRead,
+			CapProjectsRead, CapMembersRead, CapRolesRead, CapPlansRead, CapTenantsRead,
 			CapSchemaRead, CapDataRead, CapFunctionsRead, CapFilesRead,
 			CapPluginsRead, CapSyncRead, CapAuditRead, CapSettingsRead,
 		},
@@ -172,9 +182,28 @@ var presets = []Preset{
 		Description: "Read-only tools for MCP assistants (default).",
 		DefaultDays: 90,
 		Capabilities: []string{
-			CapProjectsRead, CapMembersRead, CapRolesRead, CapTenantsRead,
+			CapProjectsRead, CapMembersRead, CapRolesRead, CapPlansRead, CapTenantsRead,
 			CapSchemaRead, CapDataRead, CapFunctionsRead, CapFilesRead,
 			CapPluginsRead, CapSettingsRead, CapAuditRead,
+		},
+	},
+	{
+		ID:          "sdk_bootstrap",
+		Label:       "SDK bootstrap",
+		Description: "Server/edge bootstrap for login/register/policy reads. Do not embed in mobile or public web.",
+		DefaultDays: 90,
+		Capabilities: []string{
+			CapProjectsRead, CapAuthLogin, CapAuthRegister, CapSettingsRead, CapDataRead,
+		},
+	},
+	{
+		ID:          "saas_tenant_ops",
+		Label:       "SaaS tenant ops (BFF)",
+		Description: "Server-only Protiva/Astro BFF catalog reads+writes (updateTenant, searchTenants). Never ship to browsers.",
+		DefaultDays: 90,
+		Capabilities: []string{
+			CapProjectsRead, CapTenantsRead, CapTenantsWrite, CapSettingsRead, CapDataRead,
+			CapAuthLogin, CapAuthRegister,
 		},
 	},
 	{
@@ -347,13 +376,37 @@ func DefaultOperationBindings() []OperationBinding {
 		{Surface: "system_graphql", Operation: "publishSchema", Capability: CapSchemaPublish},
 		{Surface: "system_graphql", Operation: "listRoles", Capability: CapRolesRead},
 		{Surface: "system_graphql", Operation: "upsertRole", Capability: CapRolesWrite},
+		{Surface: "system_graphql", Operation: "upsertRoleToProject", Capability: CapRolesWrite},
+		{Surface: "system_graphql", Operation: "duplicateRoleInProject", Capability: CapRolesWrite},
+		{Surface: "system_graphql", Operation: "deleteRoleFromProject", Capability: CapRolesWrite},
+		{Surface: "system_graphql", Operation: "deleteRole", Capability: CapRolesWrite},
+		{Surface: "system_graphql", Operation: "getProjectRoles", Capability: CapRolesRead},
+		{Surface: "system_graphql", Operation: "listPermissionsAndScopes", Capability: CapRolesRead},
+		{Surface: "system_graphql", Operation: "getProjectPlans", Capability: CapPlansRead},
+		{Surface: "system_graphql", Operation: "upsertPlanToProject", Capability: CapPlansWrite},
+		{Surface: "system_graphql", Operation: "duplicatePlanInProject", Capability: CapPlansWrite},
+		{Surface: "system_graphql", Operation: "deletePlanFromProject", Capability: CapPlansWrite},
+		{Surface: "system_graphql", Operation: "generateProjectToken", Capability: CapProjectsWrite},
+		{Surface: "system_graphql", Operation: "deleteProjectToken", Capability: CapProjectsWrite},
+		{Surface: "system_graphql", Operation: "currentProject", Capability: CapProjectsRead},
 		{Surface: "system_graphql", Operation: "listMembers", Capability: CapMembersRead},
 		{Surface: "system_graphql", Operation: "upsertMember", Capability: CapMembersWrite},
 		{Surface: "system_graphql", Operation: "listTenants", Capability: CapTenantsRead},
+		{Surface: "system_graphql", Operation: "getTenants", Capability: CapTenantsRead},
+		{Surface: "system_graphql", Operation: "searchTenants", Capability: CapTenantsRead},
+		{Surface: "system_graphql", Operation: "searchTenantsByDomain", Capability: CapTenantsRead},
 		{Surface: "system_graphql", Operation: "upsertTenant", Capability: CapTenantsWrite},
+		{Surface: "system_graphql", Operation: "createTenant", Capability: CapTenantsWrite},
+		{Surface: "system_graphql", Operation: "updateTenant", Capability: CapTenantsWrite},
 		{Surface: "system_graphql", Operation: "deleteTenant", Capability: CapTenantsDelete},
+		{Surface: "system_graphql", Operation: "softDeleteTenant", Capability: CapTenantsDelete},
+		{Surface: "system_graphql", Operation: "hardDeleteTenant", Capability: CapTenantsDelete},
+		{Surface: "system_graphql", Operation: "restoreTenant", Capability: CapTenantsWrite},
 		{Surface: "system_graphql", Operation: "getSettings", Capability: CapSettingsRead},
 		{Surface: "system_graphql", Operation: "updateSettings", Capability: CapSettingsWrite},
+		{Surface: "system_graphql", Operation: "loginUser", Capability: CapAuthLogin},
+		{Surface: "system_graphql", Operation: "registerUser", Capability: CapAuthRegister},
+		{Surface: "system_graphql", Operation: "createUser", Capability: CapMembersWrite},
 		{Surface: "system_graphql", Operation: "listFunctions", Capability: CapFunctionsRead},
 		{Surface: "system_graphql", Operation: "upsertFunction", Capability: CapFunctionsWrite},
 		{Surface: "system_graphql", Operation: "testFunction", Capability: CapFunctionsTest},

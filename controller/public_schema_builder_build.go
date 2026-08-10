@@ -402,66 +402,150 @@ func (st *publicSchemaBuildState) attachConnectionFields() {
 			relFields := st.commonFields[relKey]
 
 			// Admins see all connection fields. Staff roles may grant known_as keys (chef) while
-			// connection.Model is the base model (employee). When parent has read access, expose
-			// known_as relation fields so queries on the parent type can traverse those edges.
-			permission, ok := resolveConnectionPermission(permissions, connection, st.schemaRole)
-			parentCanRead := modelReadAllowed(permissions, definedModel.Name, st.schemaRole)
-			knownAsParentTraverse := connection.KnownAs != "" && parentCanRead
-			allowConn := st.schemaRole.IsAdmin || knownAsParentTraverse || (ok && permission != nil)
-			skipReadNone := ok && permission != nil && permission.Read == "none" && !st.schemaRole.IsAdmin && !knownAsParentTraverse
-			if allowConn {
-				if skipReadNone {
-					continue
+			// connection.Model is the base model (employee). Target Read must not be none unless
+			// admin — known_as parent traverse must not bypass a denied target model.
+			if !connectionFieldAllowed(permissions, definedModel.Name, connection, st.schemaRole) {
+				continue
+			}
+			if len(relFields) == 0 {
+				continue
+			}
+			switch connection.Relation {
+			case "has_one":
+
+				var modelName string
+				if connection.KnownAs != "" {
+					modelName = connection.KnownAs
+				} else {
+					modelName = connection.Model
 				}
-				if len(relFields) == 0 {
-					continue
+
+				st.allLoaders[modelName] = dataloader.NewBatchedLoader(g.gqlServer.DataLoaderFn)
+
+				// Public GraphQL field name: canonical snake model id (or known_as alias).
+				// Root queries stay lowerCamel (productList); nested relation nodes match model ids.
+				graphQLFieldName := utility.RelationFilterGraphQLKey(connection.Model, connection.KnownAs)
+				if graphQLFieldName != modelName {
+					st.allLoaders[graphQLFieldName] = st.allLoaders[modelName]
 				}
-				switch connection.Relation {
-				case "has_one":
 
-					var modelName string
-					if connection.KnownAs != "" {
-						modelName = connection.KnownAs
-					} else {
-						modelName = connection.Model
+				connRef := connection
+				_field := &graphql.Field{
+					Name: graphQLFieldName,
+					Type: graphql.NewObject(graphql.ObjectConfig{
+						Name:        definedModel.Name + "_has_one_" + modelName + "_connection",
+						Fields:      relFields,
+						Description: "has_one",
+					}),
+					Description: fmt.Sprintf("Has one %v", modelName),
+				}
+
+				_field.Resolve = func(p graphql.ResolveParams) (interface{}, error) {
+					source, ok := p.Source.(*types.DefaultDocumentStructure)
+					if !ok || source == nil {
+						return func() (interface{}, error) {
+							return nil, nil
+						}, nil
 					}
 
-					st.allLoaders[modelName] = dataloader.NewBatchedLoader(g.gqlServer.DataLoaderFn)
-
-					// Public GraphQL field name: canonical snake model id (or known_as alias).
-					// Root queries stay lowerCamel (productList); nested relation nodes match model ids.
-					graphQLFieldName := utility.RelationFilterGraphQLKey(connection.Model, connection.KnownAs)
-					if graphQLFieldName != modelName {
-						st.allLoaders[graphQLFieldName] = st.allLoaders[modelName]
+					// Loaders are registered as st.allLoaders[modelName] (KnownAs or connection.Model).
+					// p.Info.Path.Key is often the parent field (e.g. "food"), not the target model key — using it
+					// as the loader map key misses the batch loader and returns nil without hitting the driver.
+					lidPreferred := modelName
+					if pk, ok := p.Info.Path.Key.(string); ok && pk != "" {
+						lidPreferred = pk
 					}
 
-					connRef := connection
-					_field := &graphql.Field{
-						Name: graphQLFieldName,
-						Type: graphql.NewObject(graphql.ObjectConfig{
-							Name:        definedModel.Name + "_has_one_" + modelName + "_connection",
-							Fields:      relFields,
-							Description: "has_one",
-						}),
-						Description: fmt.Sprintf("Has one %v", modelName),
+					appCache, ok := utility.LegacyApplicationCache(p.Context)
+					if !ok {
+						return func() (interface{}, error) {
+							return nil, errors.New("application cache missing in context")
+						}, nil
+					}
+					loaders := appCache.Dataloaders
+					rootSelectionSet, ok := utility.LegacySelectionSet(p.Context)
+					if !ok {
+						return func() (interface{}, error) {
+							return nil, errors.New("selection set missing in context")
+						}, nil
+					}
+					key := models.NewResolverKey(source.ID, nil)
+					knownAs := _definedModel.KnownAs
+
+					// Match has_many: find the root field for this document (source.Type), then the nested field.
+					var selectionSet *ast.SelectionSet
+					for _, sel := range rootSelectionSet {
+						if val := sel.(*ast.Field); utility.SingularResourceName(val.Name) == source.Type {
+							for _, inner := range val.SelectionSet {
+								if _s := inner.(*ast.Field); utility.SingularResourceName(_s.Name) == utility.SingularResourceName(graphQLFieldName) {
+									selectionSet = &_s.SelectionSet
+									break
+								}
+							}
+							break
+						}
 					}
 
-					_field.Resolve = func(p graphql.ResolveParams) (interface{}, error) {
+					typeRelation := utility.WithRelationMeta(ctx, map[string]interface{}{
+						"project_id":    project.ID,
+						"relation_type": "has_one",
+						"resolveParam":  &p,
+						"connection":    connRef,
+						"selectionSet":  selectionSet,
+						"knownAs":       knownAs,
+						"parentModel":   definedModel.Name,
+					})
+					tx, closeContext := onecontext.Merge(p.Context, typeRelation)
+					defer closeContext()
+					var batch *dataloader.Loader
+					if v, ok := loaders[lidPreferred]; ok {
+						batch = v
+					} else if v, ok := loaders[modelName]; ok {
+						batch = v
+					}
+					if batch != nil {
+						thunk := batch.Load(tx, key)
+						return func() (interface{}, error) {
+							return thunk()
+						}, nil
+					}
+
+					return func() (interface{}, error) {
+						return nil, nil
+					}, nil
+				}
+
+				fields[graphQLFieldName] = _field
+			case "has_many":
+
+				var modelName string
+				if connection.KnownAs != "" {
+					modelName = connection.KnownAs
+				} else {
+					modelName = connection.Model
+				}
+
+				hmName := utility.RelationNestedListGraphQLKey(connection.Model, connection.KnownAs)
+				// Loaders stay keyed by MultipleResourceName for dataloader identity; field name is snake `_list`.
+				loaderKey := utility.MultipleResourceName(modelName)
+				st.allLoaders[loaderKey] = dataloader.NewBatchedLoader(g.gqlServer.DataLoaderFn)
+				st.allLoaders[hmName] = st.allLoaders[loaderKey]
+
+				fields[hmName] = &graphql.Field{
+					Type: graphql.NewList(graphql.NewObject(graphql.ObjectConfig{
+						Name:        definedModel.Name + "_has_many_" + utility.MultipleResourceName(definedModel.Name+"_"+modelName) + "_connections",
+						Fields:      relFields,
+						Description: "has_many",
+					})),
+					Args:        objects.BuildFilterArgument(st.localEnum, utility.MultipleResourceName(definedModel.Name+"_"+modelName), st.connectionParamArgs[relKey], st.whereArgs[relKey], st.whereRelationArgs[relKey], st.sortParam[relKey]),
+					Description: fmt.Sprintf("Has many %v", connection.Model),
+					Resolve: func(p graphql.ResolveParams) (interface{}, error) {
 						source, ok := p.Source.(*types.DefaultDocumentStructure)
 						if !ok || source == nil {
 							return func() (interface{}, error) {
 								return nil, nil
 							}, nil
 						}
-
-						// Loaders are registered as st.allLoaders[modelName] (KnownAs or connection.Model).
-						// p.Info.Path.Key is often the parent field (e.g. "food"), not the target model key — using it
-						// as the loader map key misses the batch loader and returns nil without hitting the driver.
-						lidPreferred := modelName
-						if pk, ok := p.Info.Path.Key.(string); ok && pk != "" {
-							lidPreferred = pk
-						}
-
 						appCache, ok := utility.LegacyApplicationCache(p.Context)
 						if !ok {
 							return func() (interface{}, error) {
@@ -476,14 +560,15 @@ func (st *publicSchemaBuildState) attachConnectionFields() {
 							}, nil
 						}
 						key := models.NewResolverKey(source.ID, nil)
+						fieldName := p.Info.FieldName
+						lid := utility.MultipleResourceName(fieldName)
 						knownAs := _definedModel.KnownAs
 
-						// Match has_many: find the root field for this document (source.Type), then the nested field.
 						var selectionSet *ast.SelectionSet
 						for _, sel := range rootSelectionSet {
 							if val := sel.(*ast.Field); utility.SingularResourceName(val.Name) == source.Type {
 								for _, inner := range val.SelectionSet {
-									if _s := inner.(*ast.Field); utility.SingularResourceName(_s.Name) == utility.SingularResourceName(graphQLFieldName) {
+									if _s := inner.(*ast.Field); _s.Name == fieldName || _s.Name == lid || _s.Name == hmName {
 										selectionSet = &_s.SelectionSet
 										break
 									}
@@ -494,129 +579,37 @@ func (st *publicSchemaBuildState) attachConnectionFields() {
 
 						typeRelation := utility.WithRelationMeta(ctx, map[string]interface{}{
 							"project_id":    project.ID,
-							"relation_type": "has_one",
+							"relation_type": "has_many",
 							"resolveParam":  &p,
-							"connection":    connRef,
+							"connection":    connection,
 							"selectionSet":  selectionSet,
 							"knownAs":       knownAs,
 							"parentModel":   definedModel.Name,
 						})
 						tx, closeContext := onecontext.Merge(p.Context, typeRelation)
 						defer closeContext()
-						var batch *dataloader.Loader
-						if v, ok := loaders[lidPreferred]; ok {
-							batch = v
-						} else if v, ok := loaders[modelName]; ok {
-							batch = v
-						}
-						if batch != nil {
-							thunk := batch.Load(tx, key)
+						if ld, ok := loaders[fieldName]; ok {
+							thunk := ld.Load(tx, key)
 							return func() (interface{}, error) {
 								return thunk()
 							}, nil
 						}
-
+						if ld, ok := loaders[lid]; ok {
+							thunk := ld.Load(tx, key)
+							return func() (interface{}, error) {
+								return thunk()
+							}, nil
+						}
+						if ld, ok := loaders[loaderKey]; ok {
+							thunk := ld.Load(tx, key)
+							return func() (interface{}, error) {
+								return thunk()
+							}, nil
+						}
 						return func() (interface{}, error) {
 							return nil, nil
 						}, nil
-					}
-
-					fields[graphQLFieldName] = _field
-				case "has_many":
-
-					var modelName string
-					if connection.KnownAs != "" {
-						modelName = connection.KnownAs
-					} else {
-						modelName = connection.Model
-					}
-
-					hmName := utility.RelationNestedListGraphQLKey(connection.Model, connection.KnownAs)
-					// Loaders stay keyed by MultipleResourceName for dataloader identity; field name is snake `_list`.
-					loaderKey := utility.MultipleResourceName(modelName)
-					st.allLoaders[loaderKey] = dataloader.NewBatchedLoader(g.gqlServer.DataLoaderFn)
-					st.allLoaders[hmName] = st.allLoaders[loaderKey]
-
-					fields[hmName] = &graphql.Field{
-						Type: graphql.NewList(graphql.NewObject(graphql.ObjectConfig{
-							Name:        definedModel.Name + "_has_many_" + utility.MultipleResourceName(definedModel.Name+"_"+modelName) + "_connections",
-							Fields:      relFields,
-							Description: "has_many",
-						})),
-						Args:        objects.BuildFilterArgument(st.localEnum, utility.MultipleResourceName(definedModel.Name+"_"+modelName), st.connectionParamArgs[relKey], st.whereArgs[relKey], st.whereRelationArgs[relKey], st.sortParam[relKey]),
-						Description: fmt.Sprintf("Has many %v", connection.Model),
-						Resolve: func(p graphql.ResolveParams) (interface{}, error) {
-							source, ok := p.Source.(*types.DefaultDocumentStructure)
-							if !ok || source == nil {
-								return func() (interface{}, error) {
-									return nil, nil
-								}, nil
-							}
-							appCache, ok := utility.LegacyApplicationCache(p.Context)
-							if !ok {
-								return func() (interface{}, error) {
-									return nil, errors.New("application cache missing in context")
-								}, nil
-							}
-							loaders := appCache.Dataloaders
-							rootSelectionSet, ok := utility.LegacySelectionSet(p.Context)
-							if !ok {
-								return func() (interface{}, error) {
-									return nil, errors.New("selection set missing in context")
-								}, nil
-							}
-							key := models.NewResolverKey(source.ID, nil)
-							fieldName := p.Info.FieldName
-							lid := utility.MultipleResourceName(fieldName)
-							knownAs := _definedModel.KnownAs
-
-							var selectionSet *ast.SelectionSet
-							for _, sel := range rootSelectionSet {
-								if val := sel.(*ast.Field); utility.SingularResourceName(val.Name) == source.Type {
-									for _, inner := range val.SelectionSet {
-										if _s := inner.(*ast.Field); _s.Name == fieldName || _s.Name == lid || _s.Name == hmName {
-											selectionSet = &_s.SelectionSet
-											break
-										}
-									}
-									break
-								}
-							}
-
-							typeRelation := utility.WithRelationMeta(ctx, map[string]interface{}{
-								"project_id":    project.ID,
-								"relation_type": "has_many",
-								"resolveParam":  &p,
-								"connection":    connection,
-								"selectionSet":  selectionSet,
-								"knownAs":       knownAs,
-								"parentModel":   definedModel.Name,
-							})
-							tx, closeContext := onecontext.Merge(p.Context, typeRelation)
-							defer closeContext()
-							if ld, ok := loaders[fieldName]; ok {
-								thunk := ld.Load(tx, key)
-								return func() (interface{}, error) {
-									return thunk()
-								}, nil
-							}
-							if ld, ok := loaders[lid]; ok {
-								thunk := ld.Load(tx, key)
-								return func() (interface{}, error) {
-									return thunk()
-								}, nil
-							}
-							if ld, ok := loaders[loaderKey]; ok {
-								thunk := ld.Load(tx, key)
-								return func() (interface{}, error) {
-									return thunk()
-								}, nil
-							}
-							return func() (interface{}, error) {
-								return nil, nil
-							}, nil
-						},
-					}
+					},
 				}
 			}
 		}

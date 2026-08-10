@@ -189,6 +189,7 @@ func InitRouter(cfg *models.Config) (*echo.Echo, error) {
 
 		accessTokenRoutes := systemRoutes.Group("/access-tokens")
 		{
+			accessTokenRoutes.GET("/me", authCtrl.GetAccessTokenMe)
 			accessTokenRoutes.GET("", authCtrl.ListAccessTokens)
 			accessTokenRoutes.POST("", authCtrl.CreateAccessToken)
 			accessTokenRoutes.POST("/revoke", authCtrl.RevokeAccessToken)

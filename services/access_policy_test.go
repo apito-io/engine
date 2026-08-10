@@ -69,6 +69,49 @@ func TestRequireDataGraphQLCapabilities(t *testing.T) {
 	))
 }
 
+func TestRequireSystemGraphQLCapabilities(t *testing.T) {
+	t.Setenv("APITO_ACCESS_POLICY_MODE", AccessPolicyEnforce)
+	e := echo.New()
+	newContext := func(capabilities ...string) echo.Context {
+		ctx := e.NewContext(
+			httptest.NewRequest("POST", "/system/graphql", nil),
+			httptest.NewRecorder(),
+		)
+		ctx.Set("access_principal", &models.AccessPrincipal{
+			TokenID:      "t1",
+			IssuerUserID: "u1",
+			Capabilities: capabilities,
+		})
+		return ctx
+	}
+
+	require.NoError(t, RequireSystemGraphQLCapabilities(
+		newContext(authz.CapProjectsRead),
+		`query { currentProject { id } }`,
+	))
+	require.Error(t, RequireSystemGraphQLCapabilities(
+		newContext(authz.CapProjectsRead),
+		`mutation { upsertRoleToProject(input: {}) { id } }`,
+	))
+	require.NoError(t, RequireSystemGraphQLCapabilities(
+		newContext(authz.CapRolesWrite),
+		`mutation { upsertRoleToProject(input: {}) { id } }`,
+	))
+	require.NoError(t, RequireSystemGraphQLCapabilities(
+		newContext(authz.CapProjectsWrite),
+		`mutation { generateProjectToken(name: "x") { token } }`,
+	))
+	require.NoError(t, RequireSystemGraphQLCapabilities(
+		newContext(authz.CapRolesRead),
+		`query { listPermissionsAndScopes }`,
+	))
+	// no principal → allow
+	require.NoError(t, RequireSystemGraphQLCapabilities(
+		e.NewContext(httptest.NewRequest("POST", "/system/graphql", nil), httptest.NewRecorder()),
+		`query { currentProject { id } }`,
+	))
+}
+
 func TestRequireSecuredRESTCapability(t *testing.T) {
 	t.Setenv("APITO_ACCESS_POLICY_MODE", AccessPolicyEnforce)
 	e := echo.New()

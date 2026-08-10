@@ -213,6 +213,45 @@ func (s *AccessTokenService) Mint(ctx context.Context, issuerUserID string, req 
 	return raw, record.ToPublic(), nil
 }
 
+// PublicForPrincipal returns AccessTokenPublic for the calling apt_ principal (self only).
+// Prefers in-memory cache from ValidateRaw; falls back to issuer inventory by TokenID.
+func (s *AccessTokenService) PublicForPrincipal(ctx context.Context, principal *models.AccessPrincipal) (*models.AccessTokenPublic, error) {
+	if principal == nil || strings.TrimSpace(principal.TokenID) == "" {
+		return nil, errors.New("missing access principal")
+	}
+	if rec := s.getCache(principal.TokenID); rec != nil {
+		return rec.ToPublic(), nil
+	}
+	user, err := s.db.GetSystemUser(ctx, principal.IssuerUserID)
+	if err != nil {
+		return nil, err
+	}
+	now := time.Now().UTC()
+	for _, t := range user.AccessTokens {
+		if t == nil || t.ID != principal.TokenID {
+			continue
+		}
+		pub := t.ToPublic()
+		if t.Status == models.AccessTokenStatusActive && isExpired(t.ExpiresAt, now) {
+			pub.Status = models.AccessTokenStatusExpired
+		}
+		return pub, nil
+	}
+	// Fallback projection from principal (no name/expires enrichment).
+	return &models.AccessTokenPublic{
+		ID:               principal.TokenID,
+		IssuerUserID:     principal.IssuerUserID,
+		Status:           models.AccessTokenStatusActive,
+		ProjectGrantMode: principal.ProjectGrantMode,
+		ProjectIDs:       append([]string(nil), principal.ProjectIDs...),
+		TenantGrantMode:  principal.TenantGrantMode,
+		TenantIDs:        cloneTenantIDs(principal.TenantIDs),
+		Capabilities:     append([]string(nil), principal.Capabilities...),
+		AllowedCIDRs:     append([]string(nil), principal.AllowedCIDRs...),
+		CapabilityCount:  len(principal.Capabilities),
+	}, nil
+}
+
 // List returns public tokens for issuer.
 func (s *AccessTokenService) List(ctx context.Context, issuerUserID string) ([]*models.AccessTokenPublic, error) {
 	user, err := s.db.GetSystemUser(ctx, issuerUserID)
@@ -344,6 +383,11 @@ func (s *AccessTokenService) ValidateRaw(ctx context.Context, raw string, client
 	claims := &models.TokenClaims{
 		UserID:        rec.IssuerUserID,
 		Email:         issuer.Email,
+		// Role "admin" is historical synthetic context for apt_ tokens so BuildSystemParam
+		// can resolve a system role. System GraphQL ACL for project data MUST use
+		// AccessPrincipal capabilities (RequireCapability), NOT Role.IsAdmin from this claim.
+		// Narrowing this to "" / "access_token" is deferred — it would change BuildSystemParam
+		// IsAdmin behavior for many resolvers still assuming admin today.
 		Role:          "admin",
 		TokenType:     "access_token",
 		TokenUniqueID: rec.ID,

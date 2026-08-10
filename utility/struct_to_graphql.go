@@ -45,18 +45,20 @@ func convertStruct(parent string, objectType reflect.Type) graphql.Fields {
 
 	for i := 0; i < objectType.NumField(); i++ {
 		currentField := objectType.Field(i)
-		fieldType := getFieldType(parent, currentField)
-		if getTagValue(currentField, "exclude") != "true" {
-			key := getJsonTagValue(currentField)
-			// if key doesn't have a value then it will be ignored. Or else Names must match /^[_a-zA-Z][_a-zA-Z0-9]*$/ but "%v" does not. error will occur
-			if key != "" {
-				fields[key] = &graphql.Field{
-					Name:              currentField.Name,
-					Type:              fieldType,
-					DeprecationReason: getTagValue(currentField, "deprecationReason"),
-					Description:       getTagValue(currentField, "description"),
-				}
-			}
+		if getTagValue(currentField, "exclude") == "true" {
+			continue
+		}
+		key := getJsonTagValue(currentField)
+		// Empty / json:"-" keys are omitted. Otherwise GraphQL rejects invalid names
+		// (e.g. Names must match /^[_a-zA-Z][_a-zA-Z0-9]*$/ but "-" does not).
+		if key == "" {
+			continue
+		}
+		fields[key] = &graphql.Field{
+			Name:              currentField.Name,
+			Type:              getFieldType(parent, currentField),
+			DeprecationReason: getTagValue(currentField, "deprecationReason"),
+			Description:       getTagValue(currentField, "description"),
 		}
 	}
 
@@ -140,5 +142,13 @@ func getJsonTagValue(objectType reflect.StructField) string {
 	if !ok {
 		return ""
 	}
-	return strings.TrimSuffix(value, ",omitempty")
+	// Standard encoding/json: "-" means omit the field entirely.
+	if value == "-" {
+		return ""
+	}
+	name := strings.Split(value, ",")[0]
+	if name == "" || name == "-" {
+		return ""
+	}
+	return name
 }

@@ -6,8 +6,10 @@ import (
 	"crypto/aes"
 	"crypto/cipher"
 	"crypto/rand"
+	"crypto/sha256"
 	"encoding/base32"
 	"encoding/binary"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"io"
@@ -25,13 +27,25 @@ var (
 	ErrInvalidKey     = errors.New("invalid key format")
 	ErrExpiredKey     = errors.New("key has expired")
 	ErrInvalidPayload = errors.New("invalid payload")
+	ErrRoleTooLong    = errors.New("role name exceeds maximum length of 64 characters")
 )
+
+const (
+	projectTokenPayloadV2Magic byte = 0x02
+	projectTokenMaxRoleLen          = 64
+	projectTokenPrefixDisplayLen    = 12
+)
+
+// TokenBlacklistChecker is the subset of system DB used when validating ak_ tokens.
+type TokenBlacklistChecker interface {
+	CheckTokenBlacklisted(ctx context.Context, tokenId string) error
+}
 
 // ProjectKeyManager handles API key operations with optimized performance
 type ProjectKeyManager struct {
 	cipher cipher.Block
 	gcm    cipher.AEAD
-	driver interfaces.ApitoSystemDB
+	driver TokenBlacklistChecker
 }
 
 func NewProjectKeyManager(cfg *models.Config, driver interfaces.ApitoSystemDB) (*ProjectKeyManager, error) {
@@ -79,7 +93,24 @@ func NewProjectKeyManagerNoDB(cfg *models.Config) (*ProjectKeyManager, error) {
 	}, nil
 }
 
+// TokenPrefix returns the first ~12 characters of an ak_ token for safe display.
+func TokenPrefix(token string) string {
+	if len(token) <= projectTokenPrefixDisplayLen {
+		return token
+	}
+	return token[:projectTokenPrefixDisplayLen]
+}
+
+// TokenFingerprint returns the sha256 hex digest of the full token secret.
+func TokenFingerprint(token string) string {
+	sum := sha256.Sum256([]byte(token))
+	return hex.EncodeToString(sum[:])
+}
+
 func (m *ProjectKeyManager) GenerateKey(payload *models.TokenClaims) (string, error) {
+	if len(payload.Role) > projectTokenMaxRoleLen {
+		return "", ErrRoleTooLong
+	}
 
 	if payload.TokenUniqueID == "" {
 		payload.TokenUniqueID = utility.RandomStringGenerator(12)
@@ -87,8 +118,11 @@ func (m *ProjectKeyManager) GenerateKey(payload *models.TokenClaims) (string, er
 
 	data := make([]byte, 0, 256) // Initial capacity, will grow if needed
 
-	// Role (fixed 16 bytes)
-	data = append(data, stringToFixedBytes(payload.Role, 16)...)
+	// v2: magic + length-prefixed role (max 64), then same fields as v1
+	data = append(data, projectTokenPayloadV2Magic)
+	roleBytes := []byte(payload.Role)
+	data = append(data, byte(len(roleBytes)))
+	data = append(data, roleBytes...)
 
 	userWire, err := userIDToWireBytes(payload.UserID)
 	if err != nil {
@@ -136,6 +170,58 @@ func (m *ProjectKeyManager) GenerateKey(payload *models.TokenClaims) (string, er
 	return fmt.Sprintf("ak_%s", base32.StdEncoding.WithPadding(base32.NoPadding).EncodeToString(encrypted)), nil
 }
 
+// encodeProjectTokenPayloadV1 encodes the legacy fixed-16-byte role payload (tests / compat helpers).
+func encodeProjectTokenPayloadV1(payload *models.TokenClaims) ([]byte, error) {
+	data := make([]byte, 0, 256)
+	data = append(data, stringToFixedBytes(payload.Role, 16)...)
+
+	userWire, err := userIDToWireBytes(payload.UserID)
+	if err != nil {
+		return nil, err
+	}
+	data = append(data, userWire...)
+
+	projectIdBytes := []byte(payload.ProjectID)
+	if len(projectIdBytes) > 255 {
+		return nil, errors.New("ProjectId too long")
+	}
+	data = append(data, byte(len(projectIdBytes)))
+	data = append(data, projectIdBytes...)
+
+	if len(payload.TokenUniqueID) != 12 {
+		return nil, errors.New("TokenUniqueID must be 12 characters")
+	}
+	data = append(data, stringToFixedBytes(payload.TokenUniqueID, 12)...)
+	data = append(data, stringToFixedBytes(payload.TokenType, 8)...)
+
+	expBytes := make([]byte, 8)
+	binary.LittleEndian.PutUint64(expBytes, uint64(payload.ExpireAt))
+	data = append(data, expBytes...)
+	data = append(data, encodeScopesAsBytes(payload.Scopes)...)
+	return data, nil
+}
+
+func (m *ProjectKeyManager) sealAndEncode(data []byte) (string, error) {
+	nonce := make([]byte, m.gcm.NonceSize())
+	if _, err := io.ReadFull(rand.Reader, nonce); err != nil {
+		return "", err
+	}
+	encrypted := m.gcm.Seal(nonce, nonce, data, nil)
+	return fmt.Sprintf("ak_%s", base32.StdEncoding.WithPadding(base32.NoPadding).EncodeToString(encrypted)), nil
+}
+
+// GenerateKeyV1ForTest mints a legacy v1-encoded ak_ token (for backward-compat tests only).
+func (m *ProjectKeyManager) GenerateKeyV1ForTest(payload *models.TokenClaims) (string, error) {
+	if payload.TokenUniqueID == "" {
+		payload.TokenUniqueID = utility.RandomStringGenerator(12)
+	}
+	data, err := encodeProjectTokenPayloadV1(payload)
+	if err != nil {
+		return "", err
+	}
+	return m.sealAndEncode(data)
+}
+
 func (m *ProjectKeyManager) Validate(ctx context.Context, key string, skipDBCheck bool) (*models.TokenClaims, error) {
 	if len(key) < 3 || key[:3] != "ak_" {
 		return nil, ErrInvalidKey
@@ -160,12 +246,30 @@ func (m *ProjectKeyManager) Validate(ctx context.Context, key string, skipDBChec
 	payload := &models.TokenClaims{}
 	offset := 0
 
-	// Role (16 bytes)
-	if offset+16 > len(data) {
+	if len(data) == 0 {
 		return nil, ErrInvalidPayload
 	}
-	payload.Role = string(bytes.TrimRight(data[offset:offset+16], "\x00"))
-	offset += 16
+
+	if data[0] == projectTokenPayloadV2Magic {
+		offset = 1
+		if offset >= len(data) {
+			return nil, ErrInvalidPayload
+		}
+		roleLen := int(data[offset])
+		offset++
+		if roleLen > projectTokenMaxRoleLen || offset+roleLen > len(data) {
+			return nil, ErrInvalidPayload
+		}
+		payload.Role = string(data[offset : offset+roleLen])
+		offset += roleLen
+	} else {
+		// v1: Role (fixed 16 bytes)
+		if offset+16 > len(data) {
+			return nil, ErrInvalidPayload
+		}
+		payload.Role = string(bytes.TrimRight(data[offset:offset+16], "\x00"))
+		offset += 16
+	}
 
 	// UserId (16 bytes)
 	if offset+16 > len(data) {
@@ -194,9 +298,12 @@ func (m *ProjectKeyManager) Validate(ctx context.Context, key string, skipDBChec
 	offset += 12
 
 	if !skipDBCheck {
-		err = m.driver.CheckTokenBlacklisted(ctx, payload.TokenUniqueID)
-		if err != nil {
-			return nil, err
+		// NoDB managers (driver nil) skip blacklist gracefully.
+		if m.driver != nil {
+			err = m.driver.CheckTokenBlacklisted(ctx, payload.TokenUniqueID)
+			if err != nil {
+				return nil, err
+			}
 		}
 	}
 
@@ -211,7 +318,7 @@ func (m *ProjectKeyManager) Validate(ctx context.Context, key string, skipDBChec
 	if offset+8 > len(data) {
 		return nil, ErrInvalidPayload
 	}
-	payload.ExpireAt = int64(binary.LittleEndian.Uint64(data[offset:offset+8]))
+	payload.ExpireAt = int64(binary.LittleEndian.Uint64(data[offset : offset+8]))
 	offset += 8
 
 	// Scopes (remaining data)
@@ -233,7 +340,8 @@ func (m *ProjectKeyManager) ValidateAndSetContext(c echo.Context, token string) 
 
 	ctx := c.Request().Context()
 
-	tokenObj, err := m.Validate(ctx, token, true)
+	// Always request blacklist check; Validate skips it when driver is nil (NoDB).
+	tokenObj, err := m.Validate(ctx, token, false)
 	if err != nil {
 		return nil, err
 	}

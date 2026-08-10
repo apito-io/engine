@@ -467,6 +467,13 @@ func (t *ApitoTokenService) ApitoTokenHandler(next echo.HandlerFunc) echo.Handle
 					ctx.Set("scopes", principal.Capabilities)
 					ctx.Set("capabilities", principal.Capabilities)
 				}
+			} else if strings.HasPrefix(rawToken, "ak_") {
+				// Project API keys on /system/graphql with X-Use-Cookies: false
+				ctx.Set("auth_plane", "project_api_key")
+				verifiedToken, err = t.apiKeyManager.ValidateAndSetContext(ctx, rawToken)
+				if err != nil {
+					return ctx.JSON(http.StatusForbidden, map[string]interface{}{"message": ae.InvalidToken})
+				}
 			} else {
 				ctx.Set("auth_plane", "id_token_bearer")
 				verifiedToken, err = t.authService.VerifyIDToken(ctx.Request().Context(), rawToken)

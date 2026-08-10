@@ -3,6 +3,7 @@ package resolver
 import (
 	"context"
 	"errors"
+	"strings"
 	"testing"
 
 	"github.com/apito-io/engine/models"
@@ -103,5 +104,36 @@ func TestDuplicateRoleClonePreservesPermissionsWithoutAdmin(t *testing.T) {
 	}
 	if copy.APIPermissions["employee"].Read != "all" {
 		t.Fatal("permissions must be copied")
+	}
+}
+
+func TestApplyRoleUpsertIsAdminRejectsGrant(t *testing.T) {
+	role := &models.Role{IsAdmin: false}
+	err := applyRoleUpsertIsAdmin(role, map[string]interface{}{"is_admin": true})
+	if err == nil {
+		t.Fatal("expected rejection when granting is_admin")
+	}
+	if !strings.Contains(err.Error(), "cannot grant is_admin") {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func TestApplyRoleUpsertIsAdminClearsNonSystem(t *testing.T) {
+	role := &models.Role{IsAdmin: true}
+	if err := applyRoleUpsertIsAdmin(role, map[string]interface{}{"is_admin": false}); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if role.IsAdmin {
+		t.Fatal("expected IsAdmin cleared")
+	}
+}
+
+func TestApplyRoleUpsertIsAdminKeepsSystemGenerated(t *testing.T) {
+	role := &models.Role{IsAdmin: true, SystemGenerated: true}
+	if err := applyRoleUpsertIsAdmin(role, map[string]interface{}{"is_admin": false}); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !role.IsAdmin {
+		t.Fatal("system_generated admin flag must not be cleared")
 	}
 }

@@ -15,7 +15,7 @@ func (s *GraphQLServer) BuildServerQueriesAndMutations() {
 
 	privateSchemaObjects := objects.GetSchemaObjects(s.SystemDriver, s.SystemDataloaders)
 	privateSchemaObjects.ObjectModels = privateSchemaObjects.InitPrivateObjects()
-	registerProjectSettingsGraphQLFields(privateSchemaObjects.ObjectModels)
+	s.registerProjectSettingsGraphQLFields(privateSchemaObjects.ObjectModels)
 	s.PrivateSchemObjects = privateSchemaObjects
 
 	if s.Cfg.SchemaObjectsExtensionHook != nil {
@@ -119,6 +119,11 @@ func (s *GraphQLServer) BuildServerQueriesAndMutations() {
 				},
 			}),
 			Resolve: s.ListRoleScopesResolverFn,
+		},
+		"getProjectPlans": &graphql.Field{
+			Name: "GetProjectPlans",
+			Type: graphql.NewList(privateSchemaObjects.PlanObject),
+			Resolve: s.GetProjectPlansResolverFn,
 		},
 		"modelDocumentCounts": &graphql.Field{
 			Name: "ModelDocumentCounts",
@@ -879,7 +884,10 @@ func (s *GraphQLServer) BuildServerQueriesAndMutations() {
 			}),
 			Args: graphql.FieldConfigArgument{
 				"token": &graphql.ArgumentConfig{
-					Type: graphql.NewNonNull(graphql.String),
+					Type: graphql.String, // optional when token_id is provided (legacy full-secret revoke)
+				},
+				"token_id": &graphql.ArgumentConfig{
+					Type: graphql.String, // preferred revoke key (matches ProjectToken.token_id)
 				},
 				"duration": &graphql.ArgumentConfig{
 					Type: graphql.NewNonNull(graphql.String),
@@ -1271,6 +1279,47 @@ func (s *GraphQLServer) BuildServerQueriesAndMutations() {
 			},
 			Resolve: s.UpsertRoleToProjectResolverFn,
 		},
+		"upsertPlanToProject": &graphql.Field{
+			Name: "UpsertPlanToProject",
+			Type: privateSchemaObjects.PlanObject,
+			Args: graphql.FieldConfigArgument{
+				"id": &graphql.ArgumentConfig{
+					Type: graphql.NewNonNull(graphql.String),
+				},
+				"name": &graphql.ArgumentConfig{
+					Type: graphql.String,
+				},
+				"description": &graphql.ArgumentConfig{
+					Type: graphql.String,
+				},
+				"api_permissions": &graphql.ArgumentConfig{
+					Type: scaler.ScalarJSON,
+				},
+				"logic_executions": &graphql.ArgumentConfig{
+					Type: graphql.NewList(graphql.String),
+				},
+				"quotas": &graphql.ArgumentConfig{
+					Type: scaler.ScalarJSON,
+				},
+			},
+			Resolve: s.UpsertPlanToProjectResolverFn,
+		},
+		"duplicatePlanInProject": &graphql.Field{
+			Name: "DuplicatePlanInProject",
+			Type: privateSchemaObjects.PlanObject,
+			Args: graphql.FieldConfigArgument{
+				"source_id": &graphql.ArgumentConfig{
+					Type: graphql.NewNonNull(graphql.String),
+				},
+				"new_id": &graphql.ArgumentConfig{
+					Type: graphql.NewNonNull(graphql.String),
+				},
+				"name": &graphql.ArgumentConfig{
+					Type: graphql.String,
+				},
+			},
+			Resolve: s.DuplicatePlanInProjectResolverFn,
+		},
 		"duplicateRoleInProject": &graphql.Field{
 			Name: "DuplicateRoleInProject",
 			Type: privateSchemaObjects.RoleObject,
@@ -1427,6 +1476,16 @@ func (s *GraphQLServer) BuildServerQueriesAndMutations() {
 				},
 			},
 			Resolve: s.DeleteRoleResolverFn,
+		},
+		"deletePlanFromProject": &graphql.Field{
+			Name: "DeletePlanFromProject",
+			Type: graphql.NewList(privateSchemaObjects.PlanObject),
+			Args: graphql.FieldConfigArgument{
+				"id": &graphql.ArgumentConfig{
+					Type: graphql.NewNonNull(graphql.String),
+				},
+			},
+			Resolve: s.DeletePlanFromProjectResolverFn,
 		},
 		"upsertFieldToModel": &graphql.Field{
 			Name: "UpsertFieldToModel",

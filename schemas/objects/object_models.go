@@ -127,6 +127,7 @@ func (s *SchemaObjects) GetProjectDetailsObject(userDefinedSchemaObj, pluginDeta
 			"plugins":                      &graphql.Field{Type: graphql.NewList(pluginDetailsObj)},
 			"settings":                     &graphql.Field{Type: settingsObj},
 			"roles":                        &graphql.Field{Type: scaler.ScalarJSON},
+			"plans":                        &graphql.Field{Type: scaler.ScalarJSON},
 			"tokens":                       &graphql.Field{Type: graphql.NewList(apiTokenObj)},
 			"driver":                       &graphql.Field{Type: driverCredObj},
 			"project_template":             &graphql.Field{Type: graphql.String},
@@ -339,6 +340,21 @@ func (s *SchemaObjects) GetDocModelTypeObject() *graphql.Object {
 func (s *SchemaObjects) GetRoleObject() *graphql.Object {
 	obj, _ := utility.GetGraphQLObject(models.Role{})
 	return obj
+}
+
+func (s *SchemaObjects) GetPlanObject() *graphql.Object {
+	return graphql.NewObject(graphql.ObjectConfig{
+		Name: "Plan",
+		Fields: graphql.Fields{
+			"id":               &graphql.Field{Type: graphql.String},
+			"name":             &graphql.Field{Type: graphql.String},
+			"description":      &graphql.Field{Type: graphql.String},
+			"api_permissions":  &graphql.Field{Type: scaler.ScalarJSON},
+			"logic_executions": &graphql.Field{Type: graphql.NewList(graphql.String)},
+			"quotas":           &graphql.Field{Type: scaler.ScalarJSON},
+			"system_generated": &graphql.Field{Type: graphql.Boolean},
+		},
+	})
 }
 
 // be-careful this creates panic so if you need this then create one

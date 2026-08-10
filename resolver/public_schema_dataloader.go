@@ -99,6 +99,10 @@ func (s *GraphQLServer) DataLoaderFn(ctx context.Context, keys dataloader.Keys) 
 		return handleError(ae.ModelTypeNotFound)
 	}
 
+	if err := utility.AuthorizeModelRead(cache.Param.Role, modelType.Name); err != nil {
+		return handleError(err)
+	}
+
 	connection := map[string]interface{}{
 		"to_model":        parentType,     // issue
 		"model":           modelType.Name, // comment

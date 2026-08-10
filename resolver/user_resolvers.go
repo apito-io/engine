@@ -149,14 +149,17 @@ func (s *GraphQLServer) SearchUsersResolverFn(p graphql.ResolveParams) (interfac
 
 // LoginUserResolverFn handles general (password) or Google OAuth code flow and returns a project-scoped API token.
 func (s *GraphQLServer) LoginUserResolverFn(p graphql.ResolveParams) (interface{}, error) {
+	router, ok := p.Context.Value("router").(echo.Context)
+	if !ok {
+		return nil, errors.New("router context missing")
+	}
+	if err := requireAccessCapability(router, CapAuthLogin); err != nil {
+		return nil, err
+	}
 	if hooks := s.projectUserHooks(); hooks != nil {
 		if res, stop, err := s.runProjectUserHook(hooks.LoginUser, p); stop {
 			return res, err
 		}
-	}
-	router, ok := p.Context.Value("router").(echo.Context)
-	if !ok {
-		return nil, errors.New("router context missing")
 	}
 	cache, err := s.GetApplicationCache(router)
 	if err != nil {
@@ -314,16 +317,62 @@ func (s *GraphQLServer) LoginUserResolverFn(p graphql.ResolveParams) (interface{
 	}
 }
 
-// CreateUserResolverFn creates a project end-user with a bcrypt password.
+// RegisterUserResolverFn is the public self-signup path for general (password) auth.
+// It does not require project admin. Role is always the project's default registration
+// role (never an elevated/admin role from client args). Use CreateUser for admin CRUD.
+func (s *GraphQLServer) RegisterUserResolverFn(p graphql.ResolveParams) (interface{}, error) {
+	router, ok := p.Context.Value("router").(echo.Context)
+	if !ok {
+		return nil, errors.New("router context missing")
+	}
+	if err := requireAccessCapability(router, CapAuthRegister); err != nil {
+		return nil, err
+	}
+	if hooks := s.projectUserHooks(); hooks != nil {
+		if res, stop, err := s.runProjectUserHook(hooks.RegisterUser, p); stop {
+			return res, err
+		}
+	}
+	cache, err := s.GetApplicationCache(router)
+	if err != nil {
+		return nil, err
+	}
+	if cache.Project == nil {
+		return nil, errors.New("no project loaded in cache")
+	}
+	ctx := cache.Ctx
+	if ctx == nil {
+		ctx = p.Context
+	}
+	if err := requireProjectArg(p.Args, cache.Project.ID); err != nil {
+		return nil, err
+	}
+	authProject := cache.Project
+	if s.SystemDriver != nil {
+		if fresh, ferr := s.SystemDriver.GetProject(ctx, cache.Project.ID); ferr == nil && fresh != nil {
+			authProject = fresh
+		}
+	}
+	if !models.GeneralAuthEffective(authProject) {
+		return nil, errors.New("general authentication is disabled for this project")
+	}
+	return s.createProjectEndUser(cache, authProject, p, /*forceRegistrationDefault*/ true)
+}
+
+// CreateUserResolverFn creates a project end-user with a bcrypt password (project admin only).
 func (s *GraphQLServer) CreateUserResolverFn(p graphql.ResolveParams) (interface{}, error) {
+	router, ok := p.Context.Value("router").(echo.Context)
+	if !ok {
+		return nil, errors.New("router context missing")
+	}
+	// apt_ synthetic admin still needs members.write — login-scoped ak_ has no principal (no-op).
+	if err := requireAccessCapability(router, CapMembersWrite); err != nil {
+		return nil, err
+	}
 	if hooks := s.projectUserHooks(); hooks != nil {
 		if res, stop, err := s.runProjectUserHook(hooks.CreateUser, p); stop {
 			return res, err
 		}
-	}
-	router, ok := p.Context.Value("router").(echo.Context)
-	if !ok {
-		return nil, errors.New("router context missing")
 	}
 	cache, err := s.GetApplicationCache(router)
 	if err != nil {
@@ -342,6 +391,19 @@ func (s *GraphQLServer) CreateUserResolverFn(p graphql.ResolveParams) (interface
 	if err := requireProjectArg(p.Args, cache.Project.ID); err != nil {
 		return nil, err
 	}
+	return s.createProjectEndUser(cache, cache.Project, p, /*forceRegistrationDefault*/ false)
+}
+
+func (s *GraphQLServer) createProjectEndUser(
+	cache *models.ApplicationCache,
+	authProject *models.Project,
+	p graphql.ResolveParams,
+	forceRegistrationDefault bool,
+) (interface{}, error) {
+	ctx := cache.Ctx
+	if ctx == nil {
+		ctx = p.Context
+	}
 	svc, err := s.ProjectUserService(cache, ctx)
 	if err != nil {
 		return nil, err
@@ -354,6 +416,16 @@ func (s *GraphQLServer) CreateUserResolverFn(p graphql.ResolveParams) (interface
 	phoneNorm := models.NormalizeUserPhoneKey(strings.TrimSpace(getArgString(p.Args, "phone")))
 	if phoneNorm == "" {
 		return nil, errors.New("phone is required")
+	}
+	if forceRegistrationDefault {
+		switch models.GeneralIdentifierMethod(authProject) {
+		case "phone":
+			// phone already required above
+		default:
+			if emailLower == "" {
+				return nil, errors.New("email is required")
+			}
+		}
 	}
 	uid := utility.NewID()
 	username, err := svc.ResolveCreateUsername(uid, getArgString(p.Args, "username"), "")
@@ -370,7 +442,15 @@ func (s *GraphQLServer) CreateUserResolverFn(p graphql.ResolveParams) (interface
 	if err != nil {
 		return nil, err
 	}
-	role := ResolveNewUserRole(cache.Project, getArgString(p.Args, "role"))
+	var role string
+	if forceRegistrationDefault {
+		role, err = ResolveForcedRegistrationRole(authProject)
+		if err != nil {
+			return nil, err
+		}
+	} else {
+		role = ResolveNewUserRole(authProject, getArgString(p.Args, "role"))
+	}
 	user := &models.User{
 		ID:        uid,
 		ProjectID: cache.Project.ID,

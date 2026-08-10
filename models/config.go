@@ -199,6 +199,26 @@ type Config struct {
 	// project end-user operations (createUser, searchUsers, …). Type: resolver.ProjectUserGraphQLOperationFieldHook.
 	ProjectUserGraphQLOperationFieldHook interface{} `env:"-"`
 
+	// ExtendPublicAuthQueryFieldsHook lets the host append extra public auth query fields
+	// (e.g. myTenant). Type: resolver.ExtendPublicAuthQueryFieldsHook. Open-core does not name host fields.
+	ExtendPublicAuthQueryFieldsHook interface{} `env:"-"`
+
+	// ProjectAuthenticationSettingsFieldsHook extends ProjectAuthenticationSettings output shape.
+	// Type: resolver.ProjectAuthenticationSettingsFieldsHook. Open-core does not name host fields.
+	ProjectAuthenticationSettingsFieldsHook interface{} `env:"-"`
+
+	// UpdateProjectAuthenticationInputFieldsHook extends UpdateProjectAuthenticationInput.
+	// Type: resolver.UpdateProjectAuthenticationInputFieldsHook.
+	UpdateProjectAuthenticationInputFieldsHook interface{} `env:"-"`
+
+	// ProjectAuthenticationSettingsSnapshotHook enriches authentication_settings snapshot maps.
+	// Type: resolver.ProjectAuthenticationSettingsSnapshotHook.
+	ProjectAuthenticationSettingsSnapshotHook interface{} `env:"-"`
+
+	// AfterUpdateProjectAuthenticationSettingsHook persists host-only input after base auth save.
+	// Type: resolver.AfterUpdateProjectAuthenticationSettingsHook.
+	AfterUpdateProjectAuthenticationSettingsHook interface{} `env:"-"`
+
 	// ProjectUserAPITokenHook lets the host adjust API token type/scopes for app end-user login.
 	// Open-core default: tokenType "user", scopes ["project:<projectID>"].
 	ProjectUserAPITokenHook func(cache *ApplicationCache, userID, role string) (tokenType string, scopes []string) `env:"-"`
@@ -208,6 +228,10 @@ type Config struct {
 
 	// LoadProjectCacheHook allows the pro layer to modify a project after loading from the system DB.
 	LoadProjectCacheHook func(ctx context.Context, project *Project) `env:"-"`
+
+	// PlanDeleteGuardHook runs before deletePlanFromProject. Pro uses it to reject deletes when
+	// any catalog tenant still references the plan slug. Return a non-nil error to block.
+	PlanDeleteGuardHook func(ctx context.Context, projectID, planSlug string) error `env:"-"`
 
 	// RealtimeTopicHook lets the host rewrite a realtime subscription topic before
 	// publish/subscribe (e.g. inject a tenant scope prefix). Open-core builds a

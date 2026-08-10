@@ -12,13 +12,14 @@ import (
 	"strings"
 	"time"
 
-	"github.com/apito-io/wsgraphql/v1"
-	"github.com/apito-io/wsgraphql/v1/compat/gorillaws"
 	apifn "github.com/apito-io/engine/functions"
 	"github.com/apito-io/engine/models"
 	"github.com/apito-io/engine/resolver"
-	"github.com/apito-io/engine/telemetry"
 	"github.com/apito-io/engine/scaler"
+	"github.com/apito-io/engine/services"
+	"github.com/apito-io/engine/telemetry"
+	"github.com/apito-io/wsgraphql/v1"
+	"github.com/apito-io/wsgraphql/v1/compat/gorillaws"
 	"github.com/getsentry/sentry-go"
 	"github.com/gorilla/websocket"
 	"github.com/labstack/echo/v4"
@@ -750,13 +751,16 @@ func (g *GraphCtrl) exePublicGraphql(i echo.Context, req *models.GraphQLIncoming
 
 	token := i.Get("token")
 
-	//loaderCtx := context.WithValue(ctx, "loaders", cache.Dataloaders)
-	reqCtx := utility.WithSelectionSet(ctx, xx.SelectionSet)
-	cacheCtx := utility.WithApplicationCache(ctx, cache)
-	projectID := context.WithValue(ctx, "project_id", cache.Param.ProjectID)
-	userID := context.WithValue(ctx, "user_id", cache.Param.UserID)
-	tokenCtx := context.WithValue(ctx, "token", token)
-	requestVar := context.WithValue(ctx, "variableValues", req.Variables)
+	// Public model resolvers use ApplicationCache on ctx. Auth roots
+	// (myEffectivePermissions, myTenant, …) also need echo.Context as "router"
+	// — same injection used by system GraphQL and subscriptions.
+	routerCtx := context.WithValue(ctx, "router", i)
+	reqCtx := utility.WithSelectionSet(routerCtx, xx.SelectionSet)
+	cacheCtx := utility.WithApplicationCache(routerCtx, cache)
+	projectID := context.WithValue(routerCtx, "project_id", cache.Param.ProjectID)
+	userID := context.WithValue(routerCtx, "user_id", cache.Param.UserID)
+	tokenCtx := context.WithValue(routerCtx, "token", token)
+	requestVar := context.WithValue(routerCtx, "variableValues", req.Variables)
 
 	ctx, closeContext := onecontext.Merge(reqCtx, cacheCtx, userID, projectID, tokenCtx, requestVar)
 	defer closeContext()
@@ -842,6 +846,14 @@ func (g *GraphCtrl) SystemGraphQL(i echo.Context) error {
 		return i.JSON(http.StatusBadRequest, &models.HttpResponse{
 			Message: "Invalid Json",
 			Code:    http.StatusBadRequest,
+		})
+	}
+
+	if err := services.RequireSystemGraphQLCapabilities(i, req.Query); err != nil {
+		code := http.StatusForbidden
+		return i.JSON(code, &models.HttpResponse{
+			Message: err.Error(),
+			Code:    uint32(code),
 		})
 	}
 

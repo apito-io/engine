@@ -2,12 +2,12 @@ package resolver
 
 import "github.com/tailor-platform/graphql"
 
+// ExtendPublicAuthQueryFieldsHook lets the host append fields to the public auth query set.
+type ExtendPublicAuthQueryFieldsHook func(fields graphql.Fields)
+
 // PublicAuthQueryFields returns static auth query fields appended to the public GraphQL schema.
 func (s *GraphQLServer) PublicAuthQueryFields() graphql.Fields {
-	if UserItemGraphQLObject == nil {
-		s.RegisterUserSchema()
-	}
-	userItem := UserItemGraphQLObject
+	userItem := s.ensureUserItemGraphQLObject()
 	loginUserPayload := graphql.NewObject(graphql.ObjectConfig{
 		Name: "PublicLoginUserPayload",
 		Fields: graphql.Fields{
@@ -38,12 +38,13 @@ func (s *GraphQLServer) PublicAuthQueryFields() graphql.Fields {
 			"code":        &graphql.ArgumentConfig{Type: graphql.String},
 			"state":       &graphql.ArgumentConfig{Type: graphql.String},
 			"id_token":    &graphql.ArgumentConfig{Type: graphql.String},
+			"signup":      &graphql.ArgumentConfig{Type: graphql.Boolean},
 		},
 		Resolve: s.LoginUserResolverFn,
 	}
 	s.applyProjectUserGraphQLOperationFieldHook("loginUser", loginUserField)
 
-	return graphql.Fields{
+	fields := graphql.Fields{
 		"loginUser": loginUserField,
 		"oauthState": &graphql.Field{
 			Type: oauthStatePayload,
@@ -60,5 +61,23 @@ func (s *GraphQLServer) PublicAuthQueryFields() graphql.Fields {
 			},
 			Resolve: s.GoogleOAuthStateResolverFn,
 		},
+		"myEffectivePermissions": &graphql.Field{
+			Type:        effectivePermissionsPayloadType(),
+			Description: "Effective app-user permissions after tenant plan ceiling (scopes, quotas, grace).",
+			Resolve:     s.MyEffectivePermissionsResolverFn,
+		},
 	}
+	s.applyExtendPublicAuthQueryFieldsHook(fields)
+	return fields
+}
+
+func (s *GraphQLServer) applyExtendPublicAuthQueryFieldsHook(fields graphql.Fields) {
+	if s == nil || s.Cfg == nil || s.Cfg.ExtendPublicAuthQueryFieldsHook == nil || fields == nil {
+		return
+	}
+	hook, ok := s.Cfg.ExtendPublicAuthQueryFieldsHook.(ExtendPublicAuthQueryFieldsHook)
+	if !ok || hook == nil {
+		return
+	}
+	hook(fields)
 }

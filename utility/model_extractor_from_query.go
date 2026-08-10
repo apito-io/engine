@@ -23,8 +23,12 @@ func ExtractModelNames(schema *models.ProjectSchema, queryDoc *ast.QueryDocument
 
 		modelNames := findModelNames(_modelNames, op.SelectionSet, []*models.FilteredModel{})
 		var _functions []*models.ApitoFunction
+		var rootFields []string
 		for _, root := range op.SelectionSet {
 			_field := root.(*ast.Field)
+			if _field.Name != "" {
+				rootFields = append(rootFields, _field.Name)
+			}
 			if len(_field.Arguments) > 0 {
 				for _, arg := range _field.Arguments {
 					if arg.Name == "relation" {
@@ -71,6 +75,7 @@ func ExtractModelNames(schema *models.ProjectSchema, queryDoc *ast.QueryDocument
 			FilteredModels:    models.FilterUniqueStrings(modelNames),
 			FilteredFunctions: _functions,
 			IsPluginRequest:   isPluginRequest,
+			RootFields:        rootFields,
 		})
 	}
 	return request, isPluginRequest, nil

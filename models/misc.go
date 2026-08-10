@@ -56,9 +56,19 @@ type DriverCredentials struct {
 type ProjectToken struct {
 	ProjectID string `bun:"project_id,type:uuid" json:"project_id,omitempty" firestore:"project_id,omitempty" bson:"project_id,omitempty"`
 	Name      string `bun:",nullzero" json:"name,omitempty" firestore:"name,omitempty" bson:"name,omitempty"`
-	Token     string `bun:",nullzero" json:"token,omitempty" firestore:"token,omitempty" bson:"token,omitempty"`
-	Role      string `bun:",nullzero" json:"role,omitempty" firestore:"role,omitempty" bson:"role,omitempty"`
-	Expire    string `bun:",nullzero" json:"expire,omitempty" firestore:"expire,omitempty" bson:"expire,omitempty"`
+	// Token is deprecated/legacy: older rows stored the full ak_ secret. New mints must leave this empty
+	// and persist TokenID / TokenPrefix / TokenFingerprint instead. Never write the full secret going forward.
+	Token string `bun:",nullzero" json:"token,omitempty" firestore:"token,omitempty" bson:"token,omitempty"`
+	// TokenID is the unique id matching TokenClaims.TokenUniqueID (used for revoke / blacklist).
+	TokenID string `bun:",nullzero" json:"token_id,omitempty" firestore:"token_id,omitempty" bson:"token_id,omitempty"`
+	// TokenPrefix is the first ~12 chars of the ak_ secret for display (e.g. ak_ABCDEF12).
+	TokenPrefix string `bun:",nullzero" json:"token_prefix,omitempty" firestore:"token_prefix,omitempty" bson:"token_prefix,omitempty"`
+	// TokenFingerprint is sha256 hex of the full secret for lookup without storing the secret.
+	TokenFingerprint string `bun:",nullzero" json:"token_fingerprint,omitempty" firestore:"token_fingerprint,omitempty" bson:"token_fingerprint,omitempty"`
+	Role             string `bun:",nullzero" json:"role,omitempty" firestore:"role,omitempty" bson:"role,omitempty"`
+	Expire           string `bun:",nullzero" json:"expire,omitempty" firestore:"expire,omitempty" bson:"expire,omitempty"`
+	// CreatedAt is set when the token is minted (RFC3339). Empty on legacy rows.
+	CreatedAt string `bun:",nullzero" json:"created_at,omitempty" firestore:"created_at,omitempty" bson:"created_at,omitempty"`
 }
 
 type SyncToken struct {

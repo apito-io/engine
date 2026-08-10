@@ -21,6 +21,7 @@ type ProjectUserGraphQLOperationFieldHook func(operation string, field *graphql.
 type ProjectUserGraphQLHooks struct {
 	SearchUsers       ProjectUserGraphQLHook
 	LoginUser         ProjectUserGraphQLHook
+	RegisterUser      ProjectUserGraphQLHook
 	CreateUser        ProjectUserGraphQLHook
 	UpdateUser        ProjectUserGraphQLHook
 	DeleteUser        ProjectUserGraphQLHook

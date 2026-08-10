@@ -34,6 +34,26 @@ func requireProjectAdmin(cache *models.ApplicationCache) error {
 	return errors.New("admin role required")
 }
 
+// applyRoleUpsertIsAdmin enforces that API role upsert cannot grant is_admin.
+// Passing is_admin=true is always rejected. Passing is_admin=false clears IsAdmin
+// only when the role is not system_generated.
+func applyRoleUpsertIsAdmin(role *models.Role, args map[string]interface{}) error {
+	if role == nil {
+		return errors.New("role is required")
+	}
+	val, ok := args["is_admin"].(bool)
+	if !ok {
+		return nil
+	}
+	if val {
+		return errors.New("cannot grant is_admin via role upsert; use the built-in admin role")
+	}
+	if !role.SystemGenerated {
+		role.IsAdmin = false
+	}
+	return nil
+}
+
 // requireFunctionManage gates function list/upsert/delete/test/deploy/history/rollback.
 // Today: owner/admin or project_admin. Centralized so a future logic.manage team
 // permission can be added without touching each resolver.
@@ -99,6 +119,11 @@ const (
 	CapProjectsWrite   = authz.CapProjectsWrite
 	CapPluginsWrite    = authz.CapPluginsWrite
 	CapRolesWrite      = authz.CapRolesWrite
+	CapPlansRead       = authz.CapPlansRead
+	CapPlansWrite      = authz.CapPlansWrite
+	CapMembersWrite    = authz.CapMembersWrite
+	CapAuthLogin       = authz.CapAuthLogin
+	CapAuthRegister    = authz.CapAuthRegister
 )
 
 // GetArgString reads a string GraphQL argument.
@@ -155,6 +180,24 @@ func ResolveNewUserRole(project *models.Project, roleArg string) string {
 		return r
 	}
 	return models.RegistrationDefaultRole(project)
+}
+
+// ResolveForcedRegistrationRole returns the project's default registration role with public-signup guards.
+func ResolveForcedRegistrationRole(authProject *models.Project) (string, error) {
+	role := models.RegistrationDefaultRole(authProject)
+	if role == "" || role == "none" {
+		return "", errors.New("default_registration_role is not configured for this project")
+	}
+	if strings.EqualFold(role, "admin") {
+		return "", errors.New("default_registration_role: admin role cannot be used for public registration")
+	}
+	// Soft-validate when roles are loaded; skip when cache lacks Roles map.
+	if authProject != nil && authProject.Roles != nil {
+		if err := models.ValidateRegistrationDefaultRole(authProject, role); err != nil {
+			return "", err
+		}
+	}
+	return role, nil
 }
 
 // NormalizeUserUsernameArg normalizes an optional create/update username argument.
