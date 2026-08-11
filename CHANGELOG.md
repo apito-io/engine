@@ -2,6 +2,20 @@
 
 Notable changes to **open-core** only. Release tags use `v1.x` (for example `v1.5.4`, `v1.6.0`).
 
+## [1.8.13] - 2026-08-11
+
+### Added
+
+- **Idle tenant project settings** — `idle_tenant_retention_days` (default/min **90**) and `auto_soft_delete_idle_tenants` on `ProjectSettings` + `UpdateSettings` GraphQL input. Helper `EffectiveIdleTenantRetentionDays`.
+- **Plan monetization / seed** — plan system flags and related GraphQL plan mutations / seed test updates.
+- **Physical schema health** — interfaces + resolver/services for project physical schema health checks.
+
+## [1.8.12] - 2026-08-11
+
+### Notes
+
+- Tag pinned by engine Studio prep (see engine `changelogs/2026-08-11.md`). Changelog catch-up for prior pin.
+
 ## [1.8.11] - 2026-08-07
 
 ### Fixed
@@ -22,8 +36,6 @@ Notable changes to **open-core** only. Release tags use `v1.x` (for example `v1.
 
 ### Fixed
 - `upsertConnectionToModel` always normalizes connection `Type` to `forward`/`backward` on update (flipped metadata no longer sticky).
-
-## [Unreleased]
 
 ## [1.8.7] — 2026-08-04
 

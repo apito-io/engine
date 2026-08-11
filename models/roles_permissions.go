@@ -47,41 +47,85 @@ type Plan struct {
 	// Quotas keys: max_app_users, max_records.<model>, storage_mb. Zero / missing = unlimited.
 	Quotas          map[string]int `json:"quotas,omitempty" firestore:"quotas,omitempty" bson:"quotas,omitempty"`
 	SystemGenerated bool           `json:"system_generated,omitempty" firestore:"system_generated,omitempty" bson:"system_generated,omitempty"`
+
+	// Monetization (ApitoProjectPayment) — optional list price + store SKUs. Not used by ApitoPayment (platform Paddle).
+	Currency       string  `json:"currency,omitempty" firestore:"currency,omitempty" bson:"currency,omitempty"`               // derived from default prices[] row
+	PriceMonthly   float64 `json:"price_monthly,omitempty" firestore:"price_monthly,omitempty" bson:"price_monthly,omitempty"` // derived from default prices[] row
+	PlayProductID  string  `json:"play_product_id,omitempty" firestore:"play_product_id,omitempty" bson:"play_product_id,omitempty"` // legacy; prefer ProviderProducts
+	PlayBasePlanID string  `json:"play_base_plan_id,omitempty" firestore:"play_base_plan_id,omitempty" bson:"play_base_plan_id,omitempty"`
+	PaddlePriceID  string  `json:"paddle_price_id,omitempty" firestore:"paddle_price_id,omitempty" bson:"paddle_price_id,omitempty"`
+
+	// Prices is the source of truth for multi-currency list prices.
+	Prices []PlanPrice `json:"prices,omitempty" firestore:"prices,omitempty" bson:"prices,omitempty"`
+	// ProviderProducts links this plan to store/catalog IDs (google_play, paddle, stripe, …).
+	ProviderProducts []PlanProviderProduct `json:"provider_products,omitempty" firestore:"provider_products,omitempty" bson:"provider_products,omitempty"`
 }
 
-// DefaultSeededPlans returns fully-permissive starter plans so deploying
-// plan enforcement changes nothing until an operator tightens free.
+// PlanPrice is one currency amount for a tenant SaaS plan.
+type PlanPrice struct {
+	Currency string  `json:"currency,omitempty" firestore:"currency,omitempty" bson:"currency,omitempty"`
+	Amount   float64 `json:"amount,omitempty" firestore:"amount,omitempty" bson:"amount,omitempty"`
+	Default  bool    `json:"default,omitempty" firestore:"default,omitempty" bson:"default,omitempty"`
+}
+
+// PlanProviderProduct maps a billing provider to this plan's product_id (common name).
+type PlanProviderProduct struct {
+	Provider  string `json:"provider,omitempty" firestore:"provider,omitempty" bson:"provider,omitempty"`
+	ProductID string `json:"product_id,omitempty" firestore:"product_id,omitempty" bson:"product_id,omitempty"`
+	VariantID string `json:"variant_id,omitempty" firestore:"variant_id,omitempty" bson:"variant_id,omitempty"`
+}
+
+// DefaultSeededPlans returns the only system-generated starter plan: free.
+// Any other tiers are created per project via Console, MCP upsert_plan, or
+// product upsert scripts — never product-specific logic in open-core.
 func DefaultSeededPlans() map[string]*Plan {
 	all := &APIPermission{Read: "all", Create: "all", Update: "all", Delete: "all"}
-	mk := func(id, name, desc string) *Plan {
-		return &Plan{
-			ID:              id,
-			Name:            name,
-			Description:     desc,
+	return map[string]*Plan{
+		"free": {
+			ID:              "free",
+			Name:            "Free",
+			Description:     "Default starter plan — fully permissive until customized",
 			APIPermissions:  map[string]*APIPermission{"*": all},
 			LogicExecutions: []string{"*"},
 			Quotas:          map[string]int{},
 			SystemGenerated: true,
-		}
-	}
-	return map[string]*Plan{
-		"free":      mk("free", "Free", "Default starter plan — fully permissive until customized"),
-		"paid":      mk("paid", "Paid", "Paid plan — fully permissive until customized"),
-		"paid_plus": mk("paid_plus", "Paid Plus", "Paid Plus plan — fully permissive until customized"),
-		"ultra":     mk("ultra", "Ultra", "Ultra plan — fully permissive until customized"),
+		},
 	}
 }
 
-// EnsureProjectPlansSeeds merges missing system-generated starter plans into project.Plans.
-func EnsureProjectPlansSeeds(project *Project) {
+// EnsureProjectPlansSeeds guarantees free exists as the required system default.
+// Legacy non-free plans still flagged system_generated are demoted to custom so
+// operators can delete or reshape them (Console / MCP / scripts).
+// Returns true when the in-memory project was mutated (caller should persist).
+func EnsureProjectPlansSeeds(project *Project) (changed bool) {
 	if project == nil {
-		return
+		return false
 	}
 	if project.Plans == nil {
 		project.Plans = make(map[string]*Plan)
+		changed = true
+	}
+	omit := make(map[string]struct{}, len(project.PlanSeedOmissions))
+	for _, id := range project.PlanSeedOmissions {
+		id = NormalizePlanSlug(id)
+		if id == "" || id == "free" {
+			continue
+		}
+		omit[id] = struct{}{}
 	}
 	for id, seed := range DefaultSeededPlans() {
-		if _, ok := project.Plans[id]; ok {
+		if _, skipped := omit[id]; skipped {
+			continue
+		}
+		if existing, ok := project.Plans[id]; ok && existing != nil {
+			if existing.ID != id {
+				existing.ID = id
+				changed = true
+			}
+			if !existing.SystemGenerated {
+				existing.SystemGenerated = true
+				changed = true
+			}
 			continue
 		}
 		cp := *seed
@@ -105,7 +149,67 @@ func EnsureProjectPlansSeeds(project *Project) {
 			}
 		}
 		project.Plans[id] = &cp
+		changed = true
 	}
+	// Demote any non-free plan still flagged system_generated (legacy seeds).
+	for id, pl := range project.Plans {
+		if pl == nil {
+			continue
+		}
+		slug := NormalizePlanSlug(id)
+		if slug == "" {
+			slug = NormalizePlanSlug(pl.ID)
+		}
+		if slug == "free" {
+			if pl.ID != "free" {
+				pl.ID = "free"
+				changed = true
+			}
+			if !pl.SystemGenerated {
+				pl.SystemGenerated = true
+				changed = true
+			}
+			continue
+		}
+		if pl.SystemGenerated {
+			pl.SystemGenerated = false
+			changed = true
+		}
+	}
+	return changed
+}
+
+// MarkPlanSeedOmitted records that a default seed slug was removed by the operator.
+func MarkPlanSeedOmitted(project *Project, slug string) {
+	if project == nil {
+		return
+	}
+	slug = NormalizePlanSlug(slug)
+	if slug == "" || slug == "free" {
+		return
+	}
+	for _, id := range project.PlanSeedOmissions {
+		if NormalizePlanSlug(id) == slug {
+			return
+		}
+	}
+	project.PlanSeedOmissions = append(project.PlanSeedOmissions, slug)
+}
+
+// ClearPlanSeedOmission allows a previously deleted seed slug to be re-created / upserted.
+func ClearPlanSeedOmission(project *Project, slug string) {
+	if project == nil || len(project.PlanSeedOmissions) == 0 {
+		return
+	}
+	slug = NormalizePlanSlug(slug)
+	out := project.PlanSeedOmissions[:0]
+	for _, id := range project.PlanSeedOmissions {
+		if NormalizePlanSlug(id) == slug {
+			continue
+		}
+		out = append(out, id)
+	}
+	project.PlanSeedOmissions = out
 }
 
 // NormalizePlanSlug lowercases and normalizes common aliases (paid+ → paid_plus).

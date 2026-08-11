@@ -145,6 +145,28 @@ func (s *GraphQLServer) BuildServerQueriesAndMutations() {
 			})),
 			Resolve: s.ModelDocumentCountsResolverFn,
 		},
+		"modelPhysicalHealth": &graphql.Field{
+			Name:        "ModelPhysicalHealth",
+			Description: "Read-only: compare published logical fields to physical table columns (no DDL).",
+			Args: graphql.FieldConfigArgument{
+				"model_name": &graphql.ArgumentConfig{
+					Type: graphql.NewNonNull(graphql.String),
+				},
+			},
+			Type:    modelPhysicalHealthGQL,
+			Resolve: s.ModelPhysicalHealthResolverFn,
+		},
+		"projectPhysicalHealth": &graphql.Field{
+			Name:        "ProjectPhysicalHealth",
+			Description: "Read-only: physical health for many models on the base project DB. Empty model_names = all models (capped).",
+			Args: graphql.FieldConfigArgument{
+				"model_names": &graphql.ArgumentConfig{
+					Type: graphql.NewList(graphql.NewNonNull(graphql.String)),
+				},
+			},
+			Type:    graphql.NewNonNull(graphql.NewList(graphql.NewNonNull(modelPhysicalHealthGQL))),
+			Resolve: s.ProjectPhysicalHealthResolverFn,
+		},
 		"getUser": &graphql.Field{
 			Name: "GetLoggedInUser",
 			Args: graphql.FieldConfigArgument{
@@ -973,6 +995,9 @@ func (s *GraphQLServer) BuildServerQueriesAndMutations() {
 				"description": &graphql.ArgumentConfig{
 					Type: graphql.String,
 				},
+				"project_icon": &graphql.ArgumentConfig{
+					Type: graphql.String,
+				},
 				"project_secret_key": &graphql.ArgumentConfig{
 					Type: graphql.String,
 				},
@@ -997,6 +1022,14 @@ func (s *GraphQLServer) BuildServerQueriesAndMutations() {
 							},
 							"default_function_plugin": &graphql.InputObjectFieldConfig{
 								Type: graphql.String,
+							},
+							"idle_tenant_retention_days": &graphql.InputObjectFieldConfig{
+								Type:        graphql.Int,
+								Description: "Days without login before a tenant is idle (minimum 90, default 90)",
+							},
+							"auto_soft_delete_idle_tenants": &graphql.InputObjectFieldConfig{
+								Type:        graphql.Boolean,
+								Description: "When true, daily job soft-deletes free-tier idle tenants (never hard-deletes)",
 							},
 						},
 					}),
@@ -1299,6 +1332,27 @@ func (s *GraphQLServer) BuildServerQueriesAndMutations() {
 					Type: graphql.NewList(graphql.String),
 				},
 				"quotas": &graphql.ArgumentConfig{
+					Type: scaler.ScalarJSON,
+				},
+				"currency": &graphql.ArgumentConfig{
+					Type: graphql.String,
+				},
+				"price_monthly": &graphql.ArgumentConfig{
+					Type: graphql.Float,
+				},
+				"play_product_id": &graphql.ArgumentConfig{
+					Type: graphql.String,
+				},
+				"play_base_plan_id": &graphql.ArgumentConfig{
+					Type: graphql.String,
+				},
+				"paddle_price_id": &graphql.ArgumentConfig{
+					Type: graphql.String,
+				},
+				"prices": &graphql.ArgumentConfig{
+					Type: scaler.ScalarJSON,
+				},
+				"provider_products": &graphql.ArgumentConfig{
 					Type: scaler.ScalarJSON,
 				},
 			},

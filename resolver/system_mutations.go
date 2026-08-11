@@ -573,6 +573,14 @@ func (s *GraphQLServer) UpdateProjectResolverFn(p graphql.ResolveParams) (interf
 		project.Description = val
 	}
 
+	if _, ok := p.Args["project_icon"]; ok {
+		if val, ok := p.Args["project_icon"].(string); ok {
+			project.ProjectIcon = strings.TrimSpace(val)
+		} else {
+			project.ProjectIcon = ""
+		}
+	}
+
 	if driver, ok := p.Args["driver"].(map[string]interface{}); ok {
 
 		if project.Driver == nil {
@@ -659,6 +667,30 @@ func (s *GraphQLServer) UpdateProjectResolverFn(p graphql.ResolveParams) (interf
 
 		if val, ok := settings["default_locale"].(string); ok {
 			project.Settings.DefaultLocale = val
+		}
+
+		if val, ok := settings["idle_tenant_retention_days"]; ok && val != nil {
+			days := 0
+			switch n := val.(type) {
+			case int:
+				days = n
+			case int32:
+				days = int(n)
+			case int64:
+				days = int(n)
+			case float64:
+				days = int(n)
+			default:
+				return nil, errors.New("idle_tenant_retention_days must be an integer")
+			}
+			if days < models.MinIdleTenantRetentionDays {
+				return nil, fmt.Errorf("idle_tenant_retention_days must be at least %d", models.MinIdleTenantRetentionDays)
+			}
+			project.Settings.IdleTenantRetentionDays = days
+		}
+
+		if val, ok := settings["auto_soft_delete_idle_tenants"].(bool); ok {
+			project.Settings.AutoSoftDeleteIdleTenants = val
 		}
 
 	}

@@ -650,6 +650,11 @@ func (s *GraphQLServer) LoadProjectCache(ctx context.Context, projectID string) 
 		if err != nil {
 			return nil, err
 		}
+		if models.EnsureProjectPlansSeeds(_project) {
+			if uerr := s.SystemDriver.UpdateProject(ctx, _project, false); uerr != nil {
+				return nil, uerr
+			}
+		}
 
 		// Local plugin cache removed - using HashiCorp plugins only
 		_, err = s.ProjectCache.SaveProject(ctx, _project)

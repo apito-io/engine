@@ -120,6 +120,7 @@ func (s *SchemaObjects) GetProjectDetailsObject(userDefinedSchemaObj, pluginDeta
 			"id":                           &graphql.Field{Type: graphql.String},
 			"name":                         &graphql.Field{Type: graphql.String},
 			"description":                  &graphql.Field{Type: graphql.String},
+			"project_icon":                 &graphql.Field{Type: graphql.String},
 			"schema":                       &graphql.Field{Type: userDefinedSchemaObj},
 			"created_at":                   &graphql.Field{Type: graphql.String},
 			"updated_at":                   &graphql.Field{Type: graphql.String},
@@ -353,6 +354,13 @@ func (s *SchemaObjects) GetPlanObject() *graphql.Object {
 			"logic_executions": &graphql.Field{Type: graphql.NewList(graphql.String)},
 			"quotas":           &graphql.Field{Type: scaler.ScalarJSON},
 			"system_generated": &graphql.Field{Type: graphql.Boolean},
+			"currency":          &graphql.Field{Type: graphql.String},
+			"price_monthly":     &graphql.Field{Type: graphql.Float},
+			"play_product_id":   &graphql.Field{Type: graphql.String},
+			"play_base_plan_id": &graphql.Field{Type: graphql.String},
+			"paddle_price_id":   &graphql.Field{Type: graphql.String},
+			"prices":            &graphql.Field{Type: scaler.ScalarJSON},
+			"provider_products": &graphql.Field{Type: scaler.ScalarJSON},
 		},
 	})
 }

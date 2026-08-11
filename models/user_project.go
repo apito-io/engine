@@ -87,6 +87,26 @@ type ProjectSettings struct {
 	DefaultFunctionPlugin string `bun:",nullzero" json:"default_function_plugin,omitempty" firestore:"default_function_plugin,omitempty" bson:"default_function_plugin,omitempty"`
 
 	DefaultLocale string `bun:",nullzero" json:"default_locale,omitempty" firestore:"default_locale,omitempty" bson:"default_locale,omitempty"`
+
+	// IdleTenantRetentionDays is the inactivity window (days) for idle tenant listing / auto soft-delete.
+	// Default and minimum are 90. Zero/unset is treated as 90 when reading.
+	IdleTenantRetentionDays int `bun:"idle_tenant_retention_days,notnull,default:90" json:"idle_tenant_retention_days,omitempty" firestore:"idle_tenant_retention_days,omitempty" bson:"idle_tenant_retention_days,omitempty"`
+	// AutoSoftDeleteIdleTenants enables daily soft-delete of free-tier idle tenants (never hard-delete).
+	AutoSoftDeleteIdleTenants bool `bun:"auto_soft_delete_idle_tenants,notnull,default:false" json:"auto_soft_delete_idle_tenants,omitempty" firestore:"auto_soft_delete_idle_tenants,omitempty" bson:"auto_soft_delete_idle_tenants,omitempty"`
+}
+
+// MinIdleTenantRetentionDays is the lowest allowed idle_tenant_retention_days value.
+const MinIdleTenantRetentionDays = 90
+
+// EffectiveIdleTenantRetentionDays returns retention days (default/clamp floor 90).
+func EffectiveIdleTenantRetentionDays(s *ProjectSettings) int {
+	if s == nil || s.IdleTenantRetentionDays <= 0 {
+		return MinIdleTenantRetentionDays
+	}
+	if s.IdleTenantRetentionDays < MinIdleTenantRetentionDays {
+		return MinIdleTenantRetentionDays
+	}
+	return s.IdleTenantRetentionDays
 }
 
 type SavedPluginDetails struct {
@@ -105,6 +125,8 @@ type Project struct {
 
 	Name        string                `json:"name,omitempty" firestore:"name,omitempty" bson:"name,omitempty"`
 	Description string                `json:"description,omitempty" firestore:"description,omitempty" bson:"description,omitempty"`
+	// ProjectIcon is an optional branding URL (or media file URL) for invoices / receipts.
+	ProjectIcon string                `json:"project_icon,omitempty" firestore:"project_icon,omitempty" bson:"project_icon,omitempty"`
 	Schema      *ProjectSchema        `bun:"rel:belongs-to,join:id=project_id" json:"schema,omitempty" firestore:"schema,omitempty" bson:"schema,omitempty"`
 	CreatedAt   string                `json:"created_at,omitempty" firestore:"created_at,omitempty" bson:"created_at,omitempty"`
 	UpdatedAt   string                `json:"updated_at,omitempty" firestore:"updated_at,omitempty" bson:"updated_at,omitempty"`
@@ -117,7 +139,11 @@ type Project struct {
 	Roles      map[string]*Role   `bun:"type:jsonb" json:"roles,omitempty" protobuf_key:"bytes,1,opt,name=key,proto3" protobuf_val:"bytes,2,opt,name=value,proto3" firestore:"roles,omitempty" bson:"roles,omitempty"`
 	// Plans are project-defined permission ceilings keyed by slug (free/paid/…).
 	// Assigned per tenant via pro_tenants.plan_tier. Nil/empty is treated as fully permissive.
-	Plans      map[string]*Plan   `bun:"type:jsonb" json:"plans,omitempty" firestore:"plans,omitempty" bson:"plans,omitempty"`
+	// Only free is system_generated; other tiers are operator-owned customs.
+	Plans map[string]*Plan `bun:"type:jsonb" json:"plans,omitempty" firestore:"plans,omitempty" bson:"plans,omitempty"`
+	// PlanSeedOmissions lists default seed slugs the operator removed so EnsureProjectPlansSeeds
+	// does not recreate them. Free is never omitted. Legacy paid_* seeds are no longer re-seeded.
+	PlanSeedOmissions []string `bun:"type:jsonb" json:"plan_seed_omissions,omitempty" firestore:"plan_seed_omissions,omitempty" bson:"plan_seed_omissions,omitempty"`
 	Driver     *DriverCredentials `bun:"rel:belongs-to,join:id=project_id" json:"driver,omitempty"  firestore:"driver,omitempty" bson:"driver,omitempty"`
 	TempBanned bool               `json:"temp_banned,omitempty" firestore:"temp_banned,omitempty" bson:"temp_banned,omitempty"`
 
