@@ -60,7 +60,7 @@ func (svc *ProjectUserService) ResolveUserForGoogleLogin(
 		return nil, errors.New("multiple users matched this google subject")
 	}
 	if len(candidates) == 1 && candidates[0] != nil {
-		return candidates[0], nil
+		return svc.backfillGoogleEmailIfEmpty(candidates[0], email, googleSubLookupTenantID)
 	}
 
 	if !emailVerified {
@@ -69,10 +69,8 @@ func (svc *ProjectUserService) ResolveUserForGoogleLogin(
 
 	emailLower := NormalizeUserEmail(email)
 	if emailLower == "" {
-		if createFn == nil {
-			return nil, errors.New("google token missing email")
-		}
-		return createFn()
+		// Never create Google users without email (shared-DB SaaS orphans / 403s).
+		return nil, errors.New("google token missing email")
 	}
 
 	byEmail, err := svc.ListByEmailWithFallback(emailLookupTenantID, emailLower)
@@ -113,4 +111,31 @@ func (svc *ProjectUserService) ResolveUserForGoogleLogin(
 	default:
 		return nil, errors.New("multiple users matched this email")
 	}
+}
+
+// backfillGoogleEmailIfEmpty updates a google_sub hit when the token has email but the row does not.
+func (svc *ProjectUserService) backfillGoogleEmailIfEmpty(
+	user *models.User,
+	email, lookupTenantID string,
+) (*models.User, error) {
+	if user == nil {
+		return nil, errors.New("user not found")
+	}
+	emailLower := NormalizeUserEmail(email)
+	if emailLower == "" || strings.TrimSpace(user.Email) != "" {
+		return user, nil
+	}
+	user.Email = emailLower
+	linkTenant := svc.linkTenantIDForUser(user.ID, lookupTenantID)
+	if err := svc.UpdateUserRecord(user, linkTenant); err != nil {
+		return nil, fmt.Errorf("backfill google email: %w", err)
+	}
+	refreshed, err := svc.GetUserWithFallback(user.ID, linkTenant)
+	if err != nil {
+		return nil, err
+	}
+	if refreshed == nil {
+		return user, nil
+	}
+	return refreshed, nil
 }

@@ -2,6 +2,13 @@
 
 Notable changes to **open-core** only. Release tags use `v1.x` (for example `v1.5.4`, `v1.6.0`).
 
+## [1.8.15] - 2026-08-12
+
+### Fixed
+
+- **Google login** — refuse create when ID token has no email (stops empty-email orphan users).
+- **Google login** — when an existing `google_sub` row has empty email, backfill from the token before minting.
+
 ## [1.8.14] - 2026-08-12
 
 ### Changed

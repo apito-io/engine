@@ -1,3 +1,12 @@
+## 2026-08-12 — Google login: refuse empty email + backfill
+
+- **Changed:** `ResolveUserForGoogleLogin` errors on missing email (no
+  `createFn` path); backfills email when `google_sub` hit has empty email.
+- **Why:** Shared-DB SaaS (Kisti) was creating blank Google users → 403.
+- **Affected:** `resolver/user_google_login.go` + tests. Tag **v1.8.15**.
+
+---
+
 ## 2026-08-10 — Roles/permissions + ak_ lifecycle harden
 
 - **Changed:** Project-admin gates on role/token CRUD; `ProjectToken`

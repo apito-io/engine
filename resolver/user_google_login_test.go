@@ -80,11 +80,40 @@ func TestResolveUserForGoogleLogin_LinkExistingEmail(t *testing.T) {
 	require.Equal(t, "hash", row.Secret)
 }
 
-func TestResolveUserForGoogleLogin_RejectUnverifiedEmail(t *testing.T) {
+func TestResolveUserForGoogleLogin_RejectMissingEmailOnCreate(t *testing.T) {
 	svc, _ := newMemProjectUserService(t)
-	_, err := svc.ResolveUserForGoogleLogin("sub-x", "x@example.com", false, "", "", nil)
+	created := false
+	_, err := svc.ResolveUserForGoogleLogin("sub-no-email", "", true, "", "", func() (*models.User, error) {
+		created = true
+		return &models.User{ID: "should-not"}, nil
+	})
 	require.Error(t, err)
-	require.Contains(t, err.Error(), "google email not verified")
+	require.Contains(t, err.Error(), "google token missing email")
+	require.False(t, created)
+}
+
+func TestResolveUserForGoogleLogin_BackfillEmailOnGoogleSubHit(t *testing.T) {
+	svc, store := newMemProjectUserService(t)
+	ctx := context.Background()
+	_, err := store.CreateProjectAuthUser(ctx, &models.ProjectAuthUser{
+		ID:        "u-orphan",
+		Username:  "u_orphan",
+		Email:     "",
+		GoogleSub: "sub-orphan",
+		Role:      "vendor",
+		Provider:  models.UserProviderGoogle,
+		Status:    models.UserStatusActive,
+	})
+	require.NoError(t, err)
+
+	user, err := svc.ResolveUserForGoogleLogin("sub-orphan", "recovered@example.com", true, "", "", nil)
+	require.NoError(t, err)
+	require.Equal(t, "u-orphan", user.ID)
+	require.Equal(t, "recovered@example.com", user.Email)
+
+	row, err := store.GetProjectAuthUser(ctx, "u-orphan")
+	require.NoError(t, err)
+	require.Equal(t, "recovered@example.com", row.Email)
 }
 
 func TestResolveUserForGoogleLogin_RejectConflictingGoogleSub(t *testing.T) {
