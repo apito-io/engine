@@ -38,6 +38,7 @@ func TestResolvePreset_SdkBootstrap(t *testing.T) {
 	require.True(t, HasCapability(caps, CapAuthRegister))
 	require.True(t, HasCapability(caps, CapSettingsRead))
 	require.True(t, HasCapability(caps, CapDataRead))
+	require.True(t, HasCapability(caps, CapPlansRead))
 	require.False(t, HasCapability(caps, CapMembersWrite))
 	require.False(t, HasCapability(caps, CapSchemaWrite))
 	require.False(t, HasCapability(caps, CapSyncWrite))

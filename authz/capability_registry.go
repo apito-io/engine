@@ -194,6 +194,8 @@ var presets = []Preset{
 		DefaultDays: 90,
 		Capabilities: []string{
 			CapProjectsRead, CapAuthLogin, CapAuthRegister, CapSettingsRead, CapDataRead,
+			// Mobile/SDK Plans UI needs catalog (prices + provider_products) before purchase.
+			CapPlansRead,
 		},
 	},
 	{

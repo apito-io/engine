@@ -2,6 +2,14 @@
 
 Notable changes to **open-core** only. Release tags use `v1.x` (for example `v1.5.4`, `v1.6.0`).
 
+## [1.8.14] - 2026-08-12
+
+### Changed
+
+- **`getProjectPlans`** — requires `CapPlansRead` only (no project-admin); login/SDK keys can load prices + `provider_products`.
+- **Login capability preset** — includes `CapPlansRead`.
+- **`NormalizePlanSlug`** — maps legacy `pro` / `business` → `paid`.
+
 ## [1.8.13] - 2026-08-11
 
 ### Added

@@ -220,6 +220,8 @@ func NormalizePlanSlug(raw string) string {
 	switch trimmed {
 	case "paid+", "paidplus":
 		return "paid_plus"
+	case "pro", "business": // legacy display slugs → canonical paid
+		return "paid"
 	case "":
 		return "free"
 	default:

@@ -152,14 +152,13 @@ func (s *GraphQLServer) GetProjectPlansResolverFn(p graphql.ResolveParams) (inte
 		v      = p.Context.Value
 		router = v("router").(echo.Context)
 	)
+	// CapPlansRead only — mobile/SDK login keys must load catalog (prices, provider_products)
+	// without a full project-admin token. Upsert/delete still require plans.write + admin.
 	if err := requireAccessCapability(router, CapPlansRead); err != nil {
 		return nil, err
 	}
 	cache, err := s.GetApplicationCache(router)
 	if err != nil {
-		return nil, err
-	}
-	if err := requireProjectAdmin(cache); err != nil {
 		return nil, err
 	}
 	if models.EnsureProjectPlansSeeds(cache.Project) {
