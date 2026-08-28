@@ -130,6 +130,9 @@ type CommonSystemParams struct {
 
 	IsSystemRequest                 bool `json:"is_system_request,omitempty"`
 	IsEntireCollectionSearchRequest bool `json:"is_entire_collection_search_request,omitempty"`
+	// AllowUnscopedSystemUserList lets searchPlatformAccounts list system_users
+	// without an email/name filter. Team invite searchSystemUsers must not set this.
+	AllowUnscopedSystemUserList bool `json:"-"`
 	IsDataloaderRequest             bool `json:"is_dataloader_request,omitempty"`
 	IsIntersectionResult            bool `json:"is_intersection_result,omitempty"`
 

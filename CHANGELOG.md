@@ -2,6 +2,15 @@
 
 Notable changes to **open-core** only. Release tags use `v1.x` (for example `v1.5.4`, `v1.6.0`).
 
+## [1.8.16] - 2026-08-22
+
+### Added
+
+- **`SystemUser.IsSuperAdmin`** — persisted `is_super_admin` column (distinct from bootstrap `IsAdmin` and project `Role.IsAdmin`).
+- **`TokenClaims.IsSuperAdmin`** — copied from JWT `is_super_admin` (`"true"` / `true` / `"1"`) and stamped on `apt_` from the issuer row. Never set on `ak_`.
+- JWT mint sets `is_super_admin` only from the persisted flag (not `IsAdmin` alone). `is_admin` remains for legacy profile claims.
+- `SetTokenClaimsToRouter` stores the claims pointer so operator gates can require the token claim **and** the DB flag.
+
 ## [1.8.15] - 2026-08-12
 
 ### Fixed

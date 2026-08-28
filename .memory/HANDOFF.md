@@ -1,19 +1,19 @@
-# Handoff — open-core 2026-08-09
+# Handoff — open-core 2026-08-22
 
 ## Done (uncommitted)
 
-- RegisterUser hook + auth caps + `sdk_bootstrap`
-- Resolver gates: login→auth.login, register→auth.register,
-  createUser→members.write (+ admin)
-- `token.go`: ak_ + cookies=false → apiKeyManager path
-- Tests: authz preset, `auth_bootstrap_security_test.go`
+- `SystemUser.IsSuperAdmin` + `TokenClaims.IsSuperAdmin`
+- JWT mint `is_super_admin` from persisted flag; parse `"true"` / `true` / `"1"`
+- `AccessTokenService.ValidateRaw` stamps issuer flag; `ak_` round-trip false
+- `SetTokenClaimsToRouter` stores claims pointer
+- `AllowUnscopedSystemUserList` / `HasSystemUserSearchFilter`
 
 ## Next
 
-- Restart consumers (engine) with replace
-- Confirm tag v1.8.12 after smoke
+- Tag **v1.8.16** first in hasher cascade (awaiting execute; engine pin after)
 
 ## Do not
 
-- Narrow synthetic admin globally (deferred)
+- Mint `is_super_admin` from `IsAdmin` alone
 - Auto-tag without ask
+

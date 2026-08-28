@@ -2,23 +2,21 @@
 
 ## Working on
 
-- **Scoped bootstrap (2026-08-09, uncommitted):** `RegisterUser` hook on
-  `ProjectUserGraphQLHooks`; caps `auth.login`/`auth.register`; preset
-  `sdk_bootstrap`; login/register/createUser gates; `token.go` fix so
-  `ak_` + `X-Use-Cookies: false` uses apiKeyManager (not VerifyIDToken).
-  Engine must restart after rebuild.
+- **Platform super-admin (2026-08-22, uncommitted):** changelog **1.8.16**.
+  `SystemUser.IsSuperAdmin`, `TokenClaims.IsSuperAdmin`, JWT mint from
+  the flag only, `apt_` stamped at validate-time, `ak_` never.
+  `AllowUnscopedSystemUserList` + search helpers.
 
 ## Released
 
-- **v1.8.11 (tagged 2026-08-07):** `upsertModelData` supplied-`_id` insert.
-- **v1.8.10:** Multi-provider OAuth + `oauth_sub`.
-- **v1.8.9:** relation Type normalize.
+- **v1.8.15:** Google login refuse empty email + backfill.
+- **v1.8.11:** `upsertModelData` supplied-`_id` insert.
 
 ## Next
 
-1. Tag after smoke + user confirm (likely v1.8.12)
-2. Do not ship synthetic-admin rewrite yet (deferred)
+1. Tag **v1.8.16** first in hasher cascade (awaiting execute)
+2. Do not ship synthetic-admin rewrite (still deferred)
 
 ## Last Updated
 
-2026-08-09
+2026-08-28

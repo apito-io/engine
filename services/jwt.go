@@ -7,7 +7,6 @@ import (
 	"errors"
 	"fmt"
 	"io/ioutil"
-	"strconv"
 	"strings"
 	"time"
 
@@ -163,50 +162,11 @@ func (s *JWTService) VerifyIDToken(ctx context.Context, token string) (*models.T
 
 	var tokenClaims models.TokenClaims
 	if claims, ok := tokenObj.Claims.(jwt.MapClaims); ok && tokenObj.Valid {
-
 		if jti, ok := claims["jti"].(string); ok {
 			_jti = jti
 		}
-
-		// user id is set by access token not id token
-		if user, ok := claims["account"].(string); ok {
-			tokenClaims.UserID = user
-			//ctx.Set("user", user)
-		} else {
-			return nil, errors.New("invalid token, without user")
-		}
-
-		// rest is set using id token
-		if project, ok := claims["project_id"].(string); ok {
-			tokenClaims.ProjectID = project
-			//ctx.Set("project", project)
-		}
-
-		if role, ok := claims["project_role"].(string); ok {
-			tokenClaims.Role = role
-			//ctx.Set("role", role)
-		}
-
-		if paymentDueDate, ok := claims["payment_due_date"].(string); ok {
-			tokenClaims.PaymentDueDate = paymentDueDate
-			//ctx.Set("role", role)
-		}
-
-		if val, ok := claims["project_access"].(string); ok {
-			access := strings.Split(val, ",")
-			tokenClaims.AccessPermissions = access
-			//ctx.Set("project_access", access)
-		}
-
-		if email, ok := claims["email"].(string); ok {
-			tokenClaims.Email = email
-			//ctx.Set("email", email)
-		}
-
-		if val, ok := claims["read_only"].(string); ok {
-			readOnly, _ := strconv.ParseBool(val)
-			tokenClaims.IsReadOnly = readOnly
-			//ctx.Set("read_only", readOnly)
+		if err := applyIDTokenMapClaims(claims, &tokenClaims); err != nil {
+			return nil, err
 		}
 	}
 
@@ -346,12 +306,7 @@ func (s *JWTService) GenerateLoginIDToken(ctx context.Context, projectWithRoles 
 	claims["email"] = user.Email
 	claims["account"] = user.ID
 
-	if user.IsAdmin {
-		claims["is_super_admin"] = "true"
-		claims["is_admin"] = "true"
-	} else {
-		claims["is_super_admin"] = "false"
-	}
+	stampPlatformAdminClaims(claims, user)
 
 	// by default everyone is admin in their account
 	claims["project_role"] = "admin"
@@ -640,4 +595,64 @@ func getPublicKey(path string) *rsa.PublicKey {
 		return nil
 	}
 	return rsaPub
+}
+
+func stampPlatformAdminClaims(claims jwt.MapClaims, user *models.SystemUser) {
+	if claims == nil || user == nil {
+		return
+	}
+	if user.IsSuperAdmin {
+		claims["is_super_admin"] = "true"
+	} else {
+		claims["is_super_admin"] = "false"
+	}
+	if user.IsAdmin {
+		claims["is_admin"] = "true"
+	}
+}
+
+func applyIDTokenMapClaims(claims jwt.MapClaims, tokenClaims *models.TokenClaims) error {
+	if tokenClaims == nil {
+		return errors.New("token claims required")
+	}
+	user, ok := claims["account"].(string)
+	if !ok || strings.TrimSpace(user) == "" {
+		return errors.New("invalid token, without user")
+	}
+	tokenClaims.UserID = user
+
+	if project, ok := claims["project_id"].(string); ok {
+		tokenClaims.ProjectID = project
+	}
+	if role, ok := claims["project_role"].(string); ok {
+		tokenClaims.Role = role
+	}
+	if paymentDueDate, ok := claims["payment_due_date"].(string); ok {
+		tokenClaims.PaymentDueDate = paymentDueDate
+	}
+	if val, ok := claims["project_access"].(string); ok {
+		tokenClaims.AccessPermissions = strings.Split(val, ",")
+	}
+	if email, ok := claims["email"].(string); ok {
+		tokenClaims.Email = email
+	}
+	if val, ok := claims["read_only"].(string); ok {
+		tokenClaims.IsReadOnly = parseTruthyClaim(val)
+	}
+	tokenClaims.IsSuperAdmin = parseTruthyClaim(claims["is_super_admin"])
+	return nil
+}
+
+func parseTruthyClaim(v interface{}) bool {
+	switch t := v.(type) {
+	case bool:
+		return t
+	case string:
+		normalized := strings.TrimSpace(strings.ToLower(t))
+		return normalized == "true" || normalized == "1"
+	case float64:
+		return t == 1
+	default:
+		return false
+	}
 }

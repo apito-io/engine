@@ -78,6 +78,9 @@ func TestGenerateKeyV2LongRoleRoundTrip(t *testing.T) {
 	if got.TokenUniqueID != claims.TokenUniqueID {
 		t.Fatalf("token id mismatch")
 	}
+	if got.IsSuperAdmin {
+		t.Fatal("ak_ must never carry is_super_admin")
+	}
 }
 
 func TestGenerateKeyRejectsRoleTooLong(t *testing.T) {

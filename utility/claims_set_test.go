@@ -23,6 +23,10 @@ func TestAccessTokenClaimsNeverSelectImplicitProject(t *testing.T) {
 	require.NoError(t, err)
 	require.Nil(t, ctx.Get("project"))
 	require.Equal(t, "user-1", ctx.Get("user"))
+	require.Equal(t, false, ctx.Get("is_super_admin"))
+	got, ok := ctx.Get(EchoTokenClaimsKey).(*models.TokenClaims)
+	require.True(t, ok)
+	require.False(t, got.IsSuperAdmin)
 }
 
 func TestSessionClaimsKeepCanonicalProjectHeaderBehavior(t *testing.T) {

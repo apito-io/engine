@@ -1,3 +1,15 @@
+## 2026-08-22 — Platform super-admin claim (1.8.16 unreleased)
+
+- **Changed:** `SystemUser.IsSuperAdmin` + `TokenClaims.IsSuperAdmin`.
+  JWT/`apt_` mint from the persisted flag only; never on `ak_`.
+  `AllowUnscopedSystemUserList` for platform account search.
+- **Why:** `IsAdmin` is bootstrap/profile, not platform operator.
+- **Affected:** `models/user_project.go`, `models/api_token.go`,
+  `services/jwt.go`, `services/access_token_service.go`,
+  `utility/claims_set.go`. Ask before tag **v1.8.16**.
+
+---
+
 ## 2026-08-12 — Google login: refuse empty email + backfill
 
 - **Changed:** `ResolveUserForGoogleLogin` errors on missing email (no

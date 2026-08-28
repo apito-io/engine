@@ -18,6 +18,10 @@ type TokenClaims struct {
 	IsProjectUser bool `json:"is_project_user"`
 	IsReadOnly    bool `json:"is_read_only"`
 
+	// IsSuperAdmin is the platform-operator claim. Set on console JWTs and apt_
+	// tokens from the issuer row; never set on project ak_ tokens.
+	IsSuperAdmin bool `json:"is_super_admin"`
+
 	AccessPermissions []string `json:"access_permissions"`
 
 	TokenType      string `json:"token_type"`       // access_token or id_token

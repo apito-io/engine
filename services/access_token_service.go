@@ -394,6 +394,7 @@ func (s *AccessTokenService) ValidateRaw(ctx context.Context, raw string, client
 		ProjectIDs:    append([]string(nil), rec.ProjectIDs...),
 		Scopes:        append([]string(nil), rec.Capabilities...),
 		ExpireAt:      expiryUnix(rec.ExpiresAt),
+		IsSuperAdmin:  issuer.IsSuperAdmin,
 	}
 	return claims, principal, nil
 }

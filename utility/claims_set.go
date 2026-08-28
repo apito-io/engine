@@ -8,6 +8,9 @@ import (
 	"github.com/labstack/echo/v4"
 )
 
+// EchoTokenClaimsKey is the Echo context key for the parsed TokenClaims pointer.
+const EchoTokenClaimsKey = "token_claims"
+
 func resolveProjectIDFromClaims(ctx echo.Context, tokenClaims *models.TokenClaims) string {
 	if tokenClaims == nil {
 		return ""
@@ -72,6 +75,8 @@ func SetTokenClaimsToRouter(ctx echo.Context, tokenClaims *models.TokenClaims) e
 		}
 
 		ctx.Set("read_only", tokenClaims.IsReadOnly)
+		ctx.Set("is_super_admin", tokenClaims.IsSuperAdmin)
+		ctx.Set(EchoTokenClaimsKey, tokenClaims)
 
 		if tokenClaims.IsProjectUser ||
 			tokenClaims.TokenType == "user" ||

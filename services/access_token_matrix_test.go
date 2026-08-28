@@ -125,6 +125,7 @@ func TestAccessTokenMintValidateRevokeMatrix(t *testing.T) {
 	claims, principal, err := svc.ValidateRaw(context.Background(), raw, "127.0.0.1", "test")
 	require.NoError(t, err)
 	require.Equal(t, "user1", claims.UserID)
+	require.False(t, claims.IsSuperAdmin)
 	require.Empty(t, claims.ProjectID, "apt_ project scope must come from the canonical request header")
 	require.True(t, authz.HasCapability(principal.Capabilities, authz.CapSyncWrite))
 
@@ -246,4 +247,24 @@ func TestRetiredTokenRejected(t *testing.T) {
 	_, _, err := svc.ValidateRaw(context.Background(), "cli-legacy-token", "", "")
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "TOKEN_FORMAT_RETIRED")
+}
+
+func TestValidateRaw_StampsIssuerSuperAdmin(t *testing.T) {
+	db := newMemDB()
+	db.users["admin"] = &models.SystemUser{
+		ID: "admin", Email: "admin@apito.io", IsActive: true, IsSuperAdmin: true,
+	}
+	db.roles["admin|projA"] = "admin"
+	svc := NewAccessTokenService(&models.Config{}, db)
+	raw, _, err := svc.Mint(context.Background(), "admin", &models.CreateAccessTokenRequest{
+		Name:              "ops",
+		Preset:            "cli_sync",
+		ProjectGrantMode:  models.AccessTokenProjectGrantSelected,
+		ProjectIDs:        []string{"projA"},
+		AcknowledgeDanger: true,
+	})
+	require.NoError(t, err)
+	claims, _, err := svc.ValidateRaw(context.Background(), raw, "", "")
+	require.NoError(t, err)
+	require.True(t, claims.IsSuperAdmin)
 }

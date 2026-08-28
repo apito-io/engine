@@ -47,6 +47,10 @@ type SystemUser struct {
 
 	IsAdmin bool `json:"is_admin,omitempty" firestore:"is_admin,omitempty" bson:"is_admin,omitempty"`
 
+	// IsSuperAdmin is the platform-operator bit (canonical: admin@apito.io). Distinct from
+	// IsAdmin (bootstrap/profile) and from project Role.IsAdmin.
+	IsSuperAdmin bool `bun:"is_super_admin" json:"is_super_admin,omitempty" firestore:"is_super_admin,omitempty" bson:"is_super_admin,omitempty"`
+
 	RefreshToken    string `json:"refresh_token,omitempty" firestore:"refresh_token,omitempty" bson:"refresh_token,omitempty"`
 	AccessToken     string `json:"access_token,omitempty" firestore:"access_token,omitempty" bson:"access_token,omitempty"`
 	ReadOnlyProject bool   `json:"read_only_project,omitempty" firestore:"read_only_project,omitempty" bson:"read_only_project,omitempty"`
