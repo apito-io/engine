@@ -2,6 +2,12 @@
 
 Notable changes to **open-core** only. Release tags use `v1.x` (for example `v1.5.4`, `v1.6.0`).
 
+## [1.8.17] - 2026-08-29
+
+### Added
+
+- `PaddleWebhookSecret` (`PADDLE_WEBHOOK_SECRET`) for Paddle Billing HMAC on `/payment/webhook`. Classic IPN still uses the RSA public key.
+
 ## [1.8.16] - 2026-08-22
 
 ### Added

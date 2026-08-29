@@ -347,6 +347,10 @@ type Config struct {
 	// Open-core does not mount that route; deployments that add one should set this in production.
 	SystemMetricsToken string `env:"SYSTEM_METRICS_TOKEN" env-default:""`
 
+	// PaddleWebhookSecret is the Billing notification destination endpoint_secret_key
+	// (Paddle-Signature HMAC). Classic IPN still uses the RSA public key, not this.
+	PaddleWebhookSecret string `env:"PADDLE_WEBHOOK_SECRET" env-default:""`
+
 	// OTELExporterOTLPEndpoint optional OTLP HTTP endpoint for traces. Empty disables OTLP trace export for builds that wire a TracerProvider.
 	OTELExporterOTLPEndpoint string `env:"OTEL_EXPORTER_OTLP_ENDPOINT" env-default:""`
 }
