@@ -2,11 +2,17 @@
 
 Notable changes to **open-core** only. Release tags use `v1.x` (for example `v1.5.4`, `v1.6.0`).
 
+## [1.8.18] - 2026-08-29
+
+### Removed
+
+- Dropped `PaddleWebhookSecret` from `Config`. Hosted-provider secrets live on pro `ProConfig`, not open-core.
+
 ## [1.8.17] - 2026-08-29
 
-### Added
+### Added (reverted in 1.8.18)
 
-- `PaddleWebhookSecret` (`PADDLE_WEBHOOK_SECRET`) for Paddle Billing HMAC on `/payment/webhook`. Classic IPN still uses the RSA public key.
+- Briefly added a payment webhook secret field; that belongs in pro, not this module.
 
 ## [1.8.16] - 2026-08-22
 
