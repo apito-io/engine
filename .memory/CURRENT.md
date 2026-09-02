@@ -1,20 +1,20 @@
 # open-core — Current
 
-## Working on
+## Now (tagged)
 
-- **Platform super-admin tagged v1.8.16 (2026-08-28).** First in
-  hasher cascade. Engine pin is **v2.4.41**.
+- **v1.8.19** — `RewriteProjectPermissionKeys` + partner capability
+  bindings (`searchPartners` / `createPartner` / `updatePartner`).
+  Engine **v2.4.48**.
 
 ## Released
 
+- **v1.8.18:** dropped `PaddleWebhookSecret` from `Config`.
 - **v1.8.16:** `IsSuperAdmin` + JWT `is_super_admin` (not `IsAdmin`).
-- **v1.8.15:** Google login refuse empty email + backfill.
-- **v1.8.11:** `upsertModelData` supplied-`_id` insert.
 
-## Next
+## Do not
 
-1. Do not ship synthetic-admin rewrite (still deferred)
+- Mint `is_super_admin` from `IsAdmin` alone.
 
 ## Last Updated
 
-2026-08-28
+2026-09-02

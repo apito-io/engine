@@ -46,6 +46,57 @@ func LookupAPIPermission(role *models.Role, modelName string) (*models.APIPermis
 	return nil, false
 }
 
+// MoveAPIPermissionKey renames a permission map entry from oldName to newName.
+// If newName already exists, the old key is dropped so the newer grant wins.
+func MoveAPIPermissionKey(perms map[string]*models.APIPermission, oldName, newName string) {
+	if perms == nil {
+		return
+	}
+	oldName = strings.TrimSpace(oldName)
+	newName = strings.TrimSpace(newName)
+	if oldName == "" || newName == "" || oldName == newName {
+		return
+	}
+	srcKey := oldName
+	old, ok := perms[oldName]
+	if !ok {
+		camel := CamelFromAny(oldName)
+		if camel != oldName {
+			if ap, found := perms[camel]; found {
+				old, ok, srcKey = ap, true, camel
+			}
+		}
+	}
+	if !ok || old == nil {
+		return
+	}
+	if _, exists := perms[newName]; !exists {
+		perms[newName] = old
+	}
+	if srcKey != newName {
+		delete(perms, srcKey)
+	}
+}
+
+// RewriteProjectPermissionKeys updates role and plan API permission keys after a model rename.
+// Public GraphQL hides relation fields (e.g. variant_list) when the staff role still grants
+// the old model id (tag) and the schema now uses the new id (variant).
+func RewriteProjectPermissionKeys(project *models.Project, oldName, newName string) {
+	if project == nil {
+		return
+	}
+	for _, role := range project.Roles {
+		if role != nil {
+			MoveAPIPermissionKey(role.APIPermissions, oldName, newName)
+		}
+	}
+	for _, plan := range project.Plans {
+		if plan != nil {
+			MoveAPIPermissionKey(plan.APIPermissions, oldName, newName)
+		}
+	}
+}
+
 // RoleBypassesDataACL is true for project admin (IsAdmin or id admin/owner),
 // unless a tenant plan ceiling has been applied (PlanClamped).
 func RoleBypassesDataACL(role *models.Role) bool {

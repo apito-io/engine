@@ -1,3 +1,15 @@
+## 2026-09-02 — permission rewrite + partner caps (v1.8.19)
+
+- **Changed:** `RewriteProjectPermissionKeys` / `MoveAPIPermissionKey`;
+  `renameModel` + naming v2 migration use them. Capability registry
+  binds `searchPartners` / `createPartner` / `updatePartner`.
+- **Why:** Schema publish stages rename without open-core `renameModel`,
+  so staff roles kept old model ids. Partners GraphQL needs authz.
+- **Affected:** `utility/permission_builder.go`, `resolver/system_mutations.go`,
+  `authz/capability_registry.go`. Tagged **v1.8.19**.
+
+---
+
 ## 2026-08-22 — Platform super-admin claim (1.8.16 unreleased)
 
 - **Changed:** `SystemUser.IsSuperAdmin` + `TokenClaims.IsSuperAdmin`.
@@ -19,7 +31,7 @@
 
 ---
 
-## 2026-08-10 — Roles/permissions + ak_ lifecycle harden
+## 2026-08-10 — Roles/permissions + ak\_ lifecycle harden
 
 - **Changed:** Project-admin gates on role/token CRUD; `ProjectToken`
   metadata (`token_id`/`prefix`/`fingerprint`) + blacklist on validate;
@@ -35,7 +47,7 @@
 
 ---
 
-## 2026-08-09 — Scoped bootstrap: RegisterUser + auth caps + ak_ token path
+## 2026-08-09 — Scoped bootstrap: RegisterUser + auth caps + ak\_ token path
 
 - **Changed:** `RegisterUser` on GraphQL hooks; caps `auth.login` /
   `auth.register`; preset `sdk_bootstrap`; gates on login/register/
@@ -63,11 +75,12 @@
 - Tag **v1.8.9**.
 
 ---
-## 2026-08-07 — v1.8.11 upsertModelData inserts with supplied _id
+
+## 2026-08-07 — v1.8.11 upsertModelData inserts with supplied \_id
 
 - **Fixed:** `UpsertModelDataFnFn` supplied-`_id` branch was update-only; missing
   doc returned `document <id> not found` (sqlite) or `document does not belongs
-  to <model>` (postgres/mysql/mariadb empty-doc + nil error). Now falls through
+to <model>` (postgres/mysql/mariadb empty-doc + nil error). Now falls through
   to insert with that id, preserving cross-environment id parity.
 - **Why:** `apito sync --type content` to an empty destination aborted on the
   first row; relation sync depends on source ids existing on the destination.
@@ -77,6 +90,7 @@
   `resolver/system_mutations.go`. Tag **v1.8.11**.
 
 ---
+
 # open-core — AI Changelog
 
 ## 2026-08-05 — v1.8.8 FieldIsSortable

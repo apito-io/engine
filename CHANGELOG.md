@@ -2,6 +2,13 @@
 
 Notable changes to **open-core** only. Release tags use `v1.x` (for example `v1.5.4`, `v1.6.0`).
 
+## [1.8.19] - 2026-09-02
+
+### Added
+
+- `RewriteProjectPermissionKeys` / `MoveAPIPermissionKey` — rewrite role and plan API permission keys after a model rename (schema publish + `renameModel`).
+- Capability bindings for `searchPartners` / `createPartner` / `updatePartner`.
+
 ## [1.8.18] - 2026-08-29
 
 ### Removed

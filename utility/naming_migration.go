@@ -99,21 +99,8 @@ func MigrateProjectSchemaToNamingV2(project *models.Project) (bool, error) {
 		}
 	}
 
-	if project.Roles != nil {
-		for _, role := range project.Roles {
-			if role == nil || role.APIPermissions == nil {
-				continue
-			}
-			newPerms := make(map[string]*models.APIPermission, len(role.APIPermissions))
-			for k, v := range role.APIPermissions {
-				if neu, ok := rename[k]; ok {
-					newPerms[neu] = v
-				} else {
-					newPerms[k] = v
-				}
-			}
-			role.APIPermissions = newPerms
-		}
+	for oldName, newName := range rename {
+		RewriteProjectPermissionKeys(project, oldName, newName)
 	}
 
 	project.Schema.NamingSchemaVersion = NamingSchemaVersionV2

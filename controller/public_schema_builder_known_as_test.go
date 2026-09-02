@@ -205,3 +205,78 @@ func TestPublicSchemaBuilder_knownAsRelation_skipsWhenTargetReadNone(t *testing.
 		require.NotEqual(t, "chef", fm["name"], "chef must not be exposed when target Read is none")
 	}
 }
+
+func TestPublicSchemaBuilder_omitsHasManyWhenRoleLacksTargetModel(t *testing.T) {
+	ensureUserItemGraphQLObject()
+	p := baseProject("proj-rename-perm")
+	p.Schema = &models.ProjectSchema{
+		Models: []*models.ModelType{
+			{
+				Name: "variant",
+				Fields: []*models.FieldInfo{
+					{Identifier: "identifier", InputType: _const.StringInput, FieldType: "string"},
+				},
+			},
+			{
+				Name: "category",
+				Fields: []*models.FieldInfo{
+					{Identifier: "name", InputType: _const.StringInput, FieldType: "string"},
+				},
+				Connections: []*models.ConnectionType{
+					{Model: "variant", Relation: "has_many"},
+					{Model: "import", Relation: "has_many"},
+				},
+			},
+			{
+				Name: "import",
+				Fields: []*models.FieldInfo{
+					{Identifier: "title", InputType: _const.StringInput, FieldType: "string"},
+				},
+			},
+		},
+	}
+	cache := &models.ApplicationCache{
+		Project: p,
+		Param: &models.CommonSystemParams{
+			ProjectID: p.ID,
+			Role: &models.Role{
+				ID:      "manager",
+				IsAdmin: false,
+				APIPermissions: map[string]*models.APIPermission{
+					"category": {Read: "all", Create: "all", Update: "all", Delete: "none"},
+					"tag":      {Read: "all", Create: "all", Update: "all", Delete: "none"},
+					"import":   {Read: "all", Create: "all", Update: "all", Delete: "none"},
+				},
+			},
+		},
+	}
+	g := &GraphCtrl{cfg: &models.Config{}, gqlServer: &resolver.GraphQLServer{}}
+	out, err := g.publicSchemaBuilder(context.Background(), cache)
+	require.NoError(t, err)
+
+	schema, err := graphql.NewSchema(graphql.SchemaConfig{
+		Query: graphql.NewObject(graphql.ObjectConfig{
+			Name:   "QueryType",
+			Fields: out.RawSchemas.Queries,
+		}),
+		Mutation: graphql.NewObject(graphql.ObjectConfig{
+			Name:   "MutationType",
+			Fields: out.RawSchemas.Mutations,
+		}),
+		Types: []graphql.Type{graphql.String, graphql.Int, graphql.Float, graphql.Boolean, graphql.ID},
+	})
+	require.NoError(t, err)
+
+	result := graphql.Do(graphql.Params{
+		Schema:        schema,
+		RequestString: `{ __type(name: "CategoryList") { fields { name } } }`,
+	})
+	require.Empty(t, result.Errors)
+	fields := result.Data.(map[string]interface{})["__type"].(map[string]interface{})["fields"].([]interface{})
+	names := map[string]bool{}
+	for _, f := range fields {
+		names[f.(map[string]interface{})["name"].(string)] = true
+	}
+	require.True(t, names["import_list"], "import_list should exist when manager grants import")
+	require.False(t, names["variant_list"], "variant_list must be omitted when manager still grants tag, not variant")
+}

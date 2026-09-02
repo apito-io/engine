@@ -1669,6 +1669,7 @@ func (s *GraphQLServer) renameModel(cache *models.ApplicationCache, project *mod
 
 		// rename
 		modelToRename.Name = newModelName
+		utility.RewriteProjectPermissionKeys(project, modelName, newModelName)
 
 		// call rename model in database
 		err = driver.RenameModel(cache.Ctx, project, modelName, newModelName)

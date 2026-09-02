@@ -6,6 +6,56 @@ import (
 	"github.com/apito-io/engine/models"
 )
 
+func TestMoveAPIPermissionKey_renamesAndDropsOld(t *testing.T) {
+	perms := map[string]*models.APIPermission{
+		"tag": {Read: "all", Create: "all", Update: "all", Delete: "none"},
+	}
+	MoveAPIPermissionKey(perms, "tag", "variant")
+	if _, ok := perms["tag"]; ok {
+		t.Fatal("old key tag must be removed")
+	}
+	got := perms["variant"]
+	if got == nil || got.Read != "all" || got.Create != "all" {
+		t.Fatalf("variant grant = %#v", got)
+	}
+}
+
+func TestMoveAPIPermissionKey_keepsExistingNewKey(t *testing.T) {
+	perms := map[string]*models.APIPermission{
+		"tag":     {Read: "all", Create: "none", Update: "none", Delete: "none"},
+		"variant": {Read: "all", Create: "all", Update: "all", Delete: "none"},
+	}
+	MoveAPIPermissionKey(perms, "tag", "variant")
+	if _, ok := perms["tag"]; ok {
+		t.Fatal("old key tag must be removed")
+	}
+	if perms["variant"].Create != "all" {
+		t.Fatalf("must not overwrite existing variant grant: %#v", perms["variant"])
+	}
+}
+
+func TestRewriteProjectPermissionKeys_rolesAndPlans(t *testing.T) {
+	project := &models.Project{
+		Roles: map[string]*models.Role{
+			"manager": {APIPermissions: map[string]*models.APIPermission{
+				"tag": {Read: "all", Create: "all", Update: "all", Delete: "none"},
+			}},
+		},
+		Plans: map[string]*models.Plan{
+			"ultra": {APIPermissions: map[string]*models.APIPermission{
+				"tag": {Read: "all", Create: "all", Update: "all", Delete: "none"},
+			}},
+		},
+	}
+	RewriteProjectPermissionKeys(project, "tag", "variant")
+	if project.Roles["manager"].APIPermissions["variant"] == nil {
+		t.Fatal("manager must grant variant after rename")
+	}
+	if project.Plans["ultra"].APIPermissions["variant"] == nil {
+		t.Fatal("plan must grant variant after rename")
+	}
+}
+
 func TestValidateScopeRejectsCustomLogic(t *testing.T) {
 	if _, ok := ValidateScope("custom_logic"); ok {
 		t.Fatal("custom_logic must be rejected by ValidateScope")
