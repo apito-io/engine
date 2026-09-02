@@ -19,6 +19,11 @@ type UserProject struct {
 	ProjectID   string      `bun:"type:uuid,pk" json:"project_id" bson:"project_id,omitempty"`
 	Role        string      `bun:"role,type:text,nullzero" json:"role,omitempty" bson:"role,omitempty"`
 	Permissions string      `bun:"permissions,type:text,nullzero" json:"permissions,omitempty" bson:"permissions,omitempty"`
+	InviteStatus    string `bun:"invite_status,type:text,nullzero" json:"invite_status,omitempty" bson:"invite_status,omitempty"`
+	InvitedAt       string `bun:"invited_at,type:text,nullzero" json:"invited_at,omitempty" bson:"invited_at,omitempty"`
+	AcceptedAt      string `bun:"accepted_at,type:text,nullzero" json:"accepted_at,omitempty" bson:"accepted_at,omitempty"`
+	InviteExpiresAt string `bun:"invite_expires_at,type:text,nullzero" json:"invite_expires_at,omitempty" bson:"invite_expires_at,omitempty"`
+	InviteToken     string `bun:"invite_token,type:text,nullzero" json:"-" bson:"invite_token,omitempty"`
 	User        *SystemUser `bun:"rel:belongs-to,join:user_id=id" bson:"user,omitempty"`
 	Project     *Project    `bun:"rel:belongs-to,join:project_id=id" bson:"project,omitempty"`
 }

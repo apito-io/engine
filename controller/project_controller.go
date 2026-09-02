@@ -120,7 +120,7 @@ func (a *AuthController) ProjectCreation(c echo.Context) error {
 
 	var createdProject int32
 	for _, p := range projects {
-		if p.Role == "team" { // if team project then skip
+		if models.IsCollaboratorMembershipRole(p.Role) {
 			continue
 		}
 		createdProject++
@@ -147,7 +147,6 @@ func (a *AuthController) ProjectCreation(c echo.Context) error {
 		XKey:         projectID,
 		ID:           projectID,
 		Name:         projectName,
-		Organization: user.DefaultOrganization,
 		// generate a project secret key and add default role
 		Roles: map[string]*models.Role{ // default role
 			"admin": {
@@ -159,7 +158,6 @@ func (a *AuthController) ProjectCreation(c echo.Context) error {
 			Locals: []string{"en"},
 		},
 		ProjectSecretKey: utility.RandomStringGenerator(25),
-		Teams:            []*models.Team{user.DefaultTeam},
 	}
 
 	// optional
@@ -243,68 +241,6 @@ func (a *AuthController) ProjectCreation(c echo.Context) error {
 
 	if user.CurrentProjectID == "" {
 		user.CurrentProjectID = _project.ID
-	}
-
-	var _teamID string
-	// inject default team and organization
-	if user.DefaultTeam == nil {
-		_teamID = utility.NewID()
-		_team := &models.Team{
-			XKey:        _teamID,
-			ID:          _teamID,
-			Name:        "Default",
-			Description: "Default Team",
-			CreatedBy:   user.ID,
-			Users: []*models.SystemUser{
-				{
-					ID:      user.ID,
-					Role:    "admin",
-					IsAdmin: true,
-				},
-			},
-		}
-
-		user.DefaultTeam = &models.Team{
-			ID: _teamID,
-		}
-		_, err = a.graphQLServer.SystemDriver.CreateTeam(ctx, _team)
-		if err != nil {
-			return c.JSON(http.StatusInternalServerError, &models.HttpResponse{
-				Message: captureInternalServerError(err).Error(),
-				Code:    http.StatusInternalServerError,
-			})
-		}
-	}
-	if user.DefaultOrganization == nil {
-		_id := utility.NewID()
-		_org := &models.Organization{
-			XKey:        _id,
-			ID:          _id,
-			Name:        "Default",
-			Description: "Default Organization",
-			Teams: []*models.Team{
-				{
-					ID: _teamID,
-				},
-			},
-			Users: []*models.SystemUser{
-				{
-					ID:      user.ID,
-					Role:    "admin",
-					IsAdmin: true,
-				},
-			},
-		}
-		user.DefaultOrganization = &models.Organization{
-			ID: _id,
-		}
-		_, err = a.graphQLServer.SystemDriver.CreateOrganization(ctx, _org)
-		if err != nil {
-			return c.JSON(http.StatusInternalServerError, &models.HttpResponse{
-				Message: captureInternalServerError(err).Error(),
-				Code:    http.StatusInternalServerError,
-			})
-		}
 	}
 
 	err = a.graphQLServer.SystemDriver.UpdateSystemUser(ctx, user, true)

@@ -2,8 +2,8 @@
 
 ## Released
 
-- **v1.8.19** on `main` — permission-key rewrite + partner capability
-  bindings. Engine **v2.4.48** requires this tag.
+- **v1.8.20** on `main` — invites + EmailSender + section catalog.
+  Engine **v2.4.49** requires this tag.
 
 ## Do not
 

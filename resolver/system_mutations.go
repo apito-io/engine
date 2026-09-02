@@ -709,71 +709,53 @@ func (s *GraphQLServer) UpdateProjectResolverFn(p graphql.ResolveParams) (interf
 
 		if val, ok := val["role"].(string); ok {
 			req.Role = val
-		} else {
-			return nil, errors.New("role is Required")
 		}
-
-		if val, ok := val["team_id"].(string); ok {
-			req.TeamID = val
-		} /*else {
-			return nil, errors.New("user ID is Required")
-		}*/
+		req.Role = models.NormalizeMembershipRole(req.Role, false)
 
 		if vals, ok := val["administrative_permissions"].([]interface{}); ok {
 			var permissions []string
 			for _, v := range vals {
 				permissions = append(permissions, v.(string))
 			}
-			req.Permissions = permissions
+			req.Permissions = models.MembershipPermissions(permissions, false)
 		}
 
-		user, err := s.SystemDriver.GetSystemUserByEmail(cache.Ctx, req.Email)
+		user, created, err := s.resolveOrCreateSystemUserByEmail(cache.Ctx, req.Email, projectId)
 		if err != nil {
 			return nil, err
 		}
 
-		if user == nil { // new user
-			_tempPass := utility.RandomStringGenerator(10)
-			registerRequest := &models.RegisterRequest{
-				User: &models.SystemUser{
-					Email:            req.Email,
-					RegisterProvider: "system",
-					TempPassword:     _tempPass,
-					CurrentProjectID: projectId,
-				},
-			}
-			user, err = s.AuthService.Signup(cache.Ctx, registerRequest)
-			if err != nil {
-				return nil, err
-			}
-			user, err = s.SystemDriver.CreateSystemUser(cache.Ctx, user)
-			if err != nil {
-				return nil, err
-			}
+		req.UserID = user.ID
+
+		adminCheck, err := s.SystemDriver.CheckProjectWithRoles(cache.Ctx, param.UserID, req.ProjectID)
+		if err != nil {
+			return nil, err
+		}
+		if err := requireWorkspaceMemberAdmin(adminCheck); err != nil {
+			return nil, err
 		}
 
-		req.UserID = user.ID
+		rawToken, tokenHash, err := models.NewInviteToken()
+		if err != nil {
+			return nil, err
+		}
+		existing, _ := s.lookupUserProjectGrant(cache.Ctx, user.ID, req.ProjectID)
+		models.StampInviteOnRequest(&req, existing, tokenHash, time.Now().UTC(), s.inviteTTL())
 
 		err = s.SystemDriver.AddATeamMemberToProject(cache.Ctx, &req)
 		if err != nil {
 			return nil, err
 		}
 
-		if strings.TrimSpace(s.Cfg.ResendAPIKey) != "" {
-			go func(_user *models.SystemUser) {
-				ctx := context.Background()
-				req := &models.EmailSendRequest{
-					AppURL:       s.Cfg.CORSOrigin,
-					Sender:       "no-reply@apito.io",
-					Recipients:   []string{_user.Email},
-					TempPassword: _user.TempPassword,
-					ProjectName:  project.Name,
-				}
-				if err := services.SendTeamAddEmail(ctx, s.Cfg.ResendAPIKey, req); err != nil {
-					fmt.Println(err.Error())
-				}
-			}(user)
+		tempPass := ""
+		if created {
+			tempPass = user.TempPassword
 		}
+		inviteNames := []string{}
+		if project != nil && strings.TrimSpace(project.Name) != "" {
+			inviteNames = []string{project.Name}
+		}
+		s.sendTeamInviteEmail(user, inviteNames, tempPass, models.AcceptInviteURL(s.corsOrigin(), rawToken))
 	}
 
 	if val, ok := p.Args["remove_team_member"].(map[string]interface{}); ok {
@@ -783,7 +765,14 @@ func (s *GraphQLServer) UpdateProjectResolverFn(p graphql.ResolveParams) (interf
 		} else {
 			return nil, errors.New("member ID is Required")
 		}
-		err := s.SystemDriver.RemoveATeamMemberFromProject(cache.Ctx, param.ProjectID, memberId)
+		adminCheck, err := s.SystemDriver.CheckProjectWithRoles(cache.Ctx, param.UserID, projectId)
+		if err != nil {
+			return nil, err
+		}
+		if err := requireWorkspaceMemberAdmin(adminCheck); err != nil {
+			return nil, err
+		}
+		err = s.SystemDriver.RemoveATeamMemberFromProject(cache.Ctx, projectId, memberId)
 		if err != nil {
 			return nil, err
 		}

@@ -18,7 +18,6 @@ import (
 	"github.com/apito-io/engine/database/cache"
 	"github.com/apito-io/engine/database/kv"
 	"github.com/apito-io/engine/database/realtime"
-	"gitlab.com/apito.io/open_driver/system"
 	"github.com/apito-io/engine/executor"
 	apifn "github.com/apito-io/engine/functions"
 	"github.com/apito-io/engine/interfaces"
@@ -31,6 +30,7 @@ import (
 	svg "github.com/h2non/go-is-svg"
 	"github.com/labstack/echo/v4"
 	"github.com/tailor-platform/graphql"
+	"gitlab.com/apito.io/open_driver/system"
 	"gopkg.in/h2non/filetype.v1"
 )
 
@@ -106,6 +106,7 @@ type GraphQLServer struct {
 
 	//S3          *storage_driver.S3
 	AuthService services.AuthServiceInterface
+	Mailer      services.EmailSender
 	//JwtService         *services.JWTService
 	ProjectDBConnPools *sync.Map
 
@@ -129,8 +130,8 @@ type GraphQLServer struct {
 	//LocalPluginGraphQLSchemas chan *extensions.ThirdPartyGraphQLSchemas
 	//LocalPluginRoutes chan []*extensions.ThirdPartyRESTApi
 
-	RealtimeBus         interfaces.RealtimeBus
-	KVService           interfaces.KeyValueServiceInterface
+	RealtimeBus interfaces.RealtimeBus
+	KVService   interfaces.KeyValueServiceInterface
 
 	// FunctionRuntime dispatches Apito Functions (deno/wasm). Nil disables platform functions.
 	FunctionRuntime *apifn.RuntimeManager
@@ -166,6 +167,7 @@ func BuildGraphQL(ctx context.Context, cfg *models.Config, extensionRouter *echo
 
 		KVService:   kvStorage,
 		RealtimeBus: realtimeBus,
+		Mailer:      services.NewEmailSender(cfg),
 
 		//GraphQLExecutor:    _executor,
 		ProjectDBConnPools:  &sync.Map{},
@@ -270,7 +272,7 @@ func BuildGraphQL(ctx context.Context, cfg *models.Config, extensionRouter *echo
 
 		tokenService := services.GetJWTServiceWithRedis(cfg, srv.KVService)
 
-		authService, err = services.NewLocalAuthService(cfg, tokenService)
+		authService, err = services.NewLocalAuthService(cfg, tokenService, srv.KVService, srv.Mailer)
 		if err != nil {
 			fmt.Println(err.Error())
 		}
@@ -391,6 +393,9 @@ func BuildGraphQL(ctx context.Context, cfg *models.Config, extensionRouter *echo
 
 		fmt.Println("initializing apito token service")
 		tokenWg.Wait() // depends on systemDb & part of apito token service
+		if la, ok := srv.AuthService.(*services.LocalAuthService); ok {
+			la.SetSystemDriver(systemDB)
+		}
 		apitoTokenService, err := services.NewApitoTokenService(cfg, srv.AuthService, systemDB)
 		if err != nil {
 			panic(err)
@@ -723,7 +728,7 @@ func (s *GraphQLServer) ApplyNamingV2AfterProjectLoad(ctx context.Context, proje
 		}
 		if migrator, ok := drv.(utility.NamingV2PhysicalMigrator); ok {
 			if err := migrator.ApplyNamingV2PhysicalMigration(sub, project.ID, pairs, perModel, relationTenantModel); err != nil {
-				 return fmt.Errorf("naming v2 physical migration: %w", err)
+				return fmt.Errorf("naming v2 physical migration: %w", err)
 			}
 		}
 	}

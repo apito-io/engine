@@ -1,4 +1,17 @@
+## 2026-09-02 — invites + EmailSender (v1.8.20)
+
+- **Changed:** `EmailSender` interface; Cloudflare REST + Resend + noop.
+  Invite mail on `inviteWorkspaceMember` and `add_team_member`. LocalAuth
+  forget/confirm via KV 6-digit code.
+- **Why:** Resend-only send, workspace invite never mailed, reset stubbed.
+- **Affected:** `services/email*.go`, `services/local_auth.go`,
+  `resolver/graphql_server.go`, `resolver/workspace_members.go`,
+  `models/config.go`. Empty CF creds → noop.
+
+---
+
 ## 2026-09-02 — permission rewrite + partner caps (v1.8.19)
+
 
 - **Changed:** `RewriteProjectPermissionKeys` / `MoveAPIPermissionKey`;
   `renameModel` + naming v2 migration use them. Capability registry

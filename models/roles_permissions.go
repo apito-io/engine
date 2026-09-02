@@ -13,6 +13,12 @@ type TeamMemberAddRequest struct {
 	Role        string   `json:"role,omitempty" firestore:"role,omitempty" bson:"role,omitempty"`
 	TeamID      string   `json:"team_id,omitempty" firestore:"team_id,omitempty" bson:"team_id,omitempty"`
 	Permissions []string `json:"permissions,omitempty" firestore:"permissions,omitempty" bson:"permissions,omitempty"`
+	// Invite fields are written only when InviteStatus is set (invite path).
+	InviteStatus    string `json:"invite_status,omitempty"`
+	InviteTokenHash string `json:"-"`
+	InvitedAt       string `json:"invited_at,omitempty"`
+	InviteExpiresAt string `json:"invite_expires_at,omitempty"`
+	AcceptedAt      string `json:"accepted_at,omitempty"`
 }
 
 type APIPermission struct {

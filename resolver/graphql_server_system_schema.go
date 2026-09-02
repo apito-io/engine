@@ -469,47 +469,11 @@ func (s *GraphQLServer) BuildServerQueriesAndMutations() {
 			Type:    graphql.NewList(privateSchemaObjects.SystemUserObject),
 			Resolve: s.ListProjectTeams,
 		},
-		"teams": &graphql.Field{
-			Name: "GetTeamMembersOfAProject",
-			Args: graphql.FieldConfigArgument{
-				"_id": &graphql.ArgumentConfig{
-					Type: graphql.String,
-				},
-				"filter": args.FilterArg,
-				"where": &graphql.ArgumentConfig{
-					Type: graphql.NewInputObject(graphql.InputObjectConfig{
-						Name: "TeamsWhereFilterArgObject",
-						Fields: graphql.InputObjectConfigFieldMap{
-							"name": &graphql.InputObjectFieldConfig{
-								Type: args.CommonFilter,
-							},
-						},
-					}),
-				},
-			},
-			Type:    graphql.NewList(privateSchemaObjects.TeamObject),
-			Resolve: s.GetTeamsResolverFn,
-		},
-		"organizations": &graphql.Field{
-			Name: "GetUserOrganizations",
-			Args: graphql.FieldConfigArgument{
-				"_id": &graphql.ArgumentConfig{
-					Type: graphql.String,
-				},
-				"filter": args.FilterArg,
-				"where": &graphql.ArgumentConfig{
-					Type: graphql.NewInputObject(graphql.InputObjectConfig{
-						Name: "OrganizationsWhereFilterArgObject",
-						Fields: graphql.InputObjectConfigFieldMap{
-							"name": &graphql.InputObjectFieldConfig{
-								Type: args.CommonFilter,
-							},
-						},
-					}),
-				},
-			},
-			Type:    graphql.NewList(privateSchemaObjects.OrganizationObject),
-			Resolve: s.GetOrganizationsResolverFn,
+		"workspaceMembers": &graphql.Field{
+			Name:        "WorkspaceMembers",
+			Description: "Console operators grouped by user across projects the caller can administer",
+			Type:        graphql.NewList(workspaceMemberObject(workspaceMemberGrantObject())),
+			Resolve:     s.WorkspaceMembersResolverFn,
 		},
 		/*		"getPhotos": &graphql.Field{
 					Name: "ListAllDataOfAMedia",
@@ -748,7 +712,11 @@ func (s *GraphQLServer) BuildServerQueriesAndMutations() {
 				Resolve: server.SwitchProjectResolverFn,
 			},*/
 	}
+	wmMut := s.workspaceMemberMutationFields()
 	s.SystemMutationsChan <- &graphql.Fields{
+		"inviteWorkspaceMember": wmMut["inviteWorkspaceMember"],
+		"updateWorkspaceMember": wmMut["updateWorkspaceMember"],
+		"removeWorkspaceMember": wmMut["removeWorkspaceMember"],
 		// This the mutation that sends messages to the server.
 		"send": &graphql.Field{
 			Args: graphql.FieldConfigArgument{

@@ -1,8 +1,26 @@
 package models
 
-var GlobalPermissions = []string{"contents", "models", "plugins", "media", "logic", "settings",
-	"api_explorer", "usages", "addons", "extensions", "teams", "webhook",
-	"api_secrets", "roles"}
+// GlobalPermissions is the canonical console-section catalog stored on
+// user_projects.permissions. Keys must match console CONSOLE_SECTIONS.
+//
+// Maps to live project console nav + settings sub-pages (2026). Dropped the
+// 2024 leftovers: teams (now workspace /teams), addons, extensions (use
+// plugins), usages (billing is /subscriptions).
+var GlobalPermissions = []string{
+	"contents",
+	"models",
+	"users",
+	"media",
+	"database",
+	"api_explorer",
+	"auth",
+	"logic",
+	"plugins",
+	"settings",
+	"webhook",
+	"api_secrets",
+	"roles",
+}
 
 type SchemaBuildPermission struct {
 	CanQuery        bool
@@ -44,6 +62,4 @@ func BuildPermissions(role string) *SchemaBuildPermission {
 	default:
 		return nil
 	}
-
-	return nil
 }

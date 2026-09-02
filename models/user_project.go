@@ -44,6 +44,8 @@ type SystemUser struct {
 
 	ProjectAssignedRole      string   `json:"project_assigned_role,omitempty" bson:"project_assigned_role,omitempty"`
 	ProjectAccessPermissions []string `json:"project_access_permissions,omitempty" bson:"project_access_permissions,omitempty"`
+	InviteStatus             string   `json:"invite_status,omitempty" bun:"-" bson:"-"`
+	InviteExpiresAt          string   `json:"invite_expires_at,omitempty" bun:"-" bson:"-"`
 
 	IsAdmin bool `json:"is_admin,omitempty" firestore:"is_admin,omitempty" bson:"is_admin,omitempty"`
 
@@ -181,8 +183,10 @@ type SyncProject struct {
 }
 
 type ProjectWithRoles struct {
-	User        *SystemUser `json:"user,omitempty" firestore:"user,omitempty" bson:"user,omitempty"`
-	Project     *Project    `json:"project,omitempty" firestore:"project" bson:"project,omitempty"`
-	Role        string      `json:"role,omitempty" firestore:"role,omitempty" bson:"role,omitempty"`
-	Permissions []string    `json:"permissions,omitempty" firestore:"permissions,omitempty" bson:"permissions,omitempty"`
+	User            *SystemUser `json:"user,omitempty" firestore:"user,omitempty" bson:"user,omitempty"`
+	Project         *Project    `json:"project,omitempty" firestore:"project" bson:"project,omitempty"`
+	Role            string      `json:"role,omitempty" firestore:"role,omitempty" bson:"role,omitempty"`
+	Permissions     []string    `json:"permissions,omitempty" firestore:"permissions,omitempty" bson:"permissions,omitempty"`
+	InviteStatus    string      `json:"invite_status,omitempty" firestore:"invite_status,omitempty" bson:"invite_status,omitempty"`
+	InviteExpiresAt string      `json:"invite_expires_at,omitempty" firestore:"invite_expires_at,omitempty" bson:"invite_expires_at,omitempty"`
 }

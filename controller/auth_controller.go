@@ -10,10 +10,6 @@ import (
 	"time"
 
 	_const "github.com/apito-io/engine/const"
-	"golang.org/x/crypto/bcrypt"
-	"gitlab.com/apito.io/open_driver/project/bbolt"
-	"gitlab.com/apito.io/open_driver/project/mongo"
-	"gitlab.com/apito.io/open_driver/project"
 	ae "github.com/apito-io/engine/err"
 	"github.com/apito-io/engine/models"
 	"github.com/apito-io/engine/resolver"
@@ -22,6 +18,10 @@ import (
 	"github.com/ilyakaznacheev/cleanenv"
 	"github.com/labstack/echo/v4"
 	"github.com/tailor-platform/graphql"
+	"gitlab.com/apito.io/open_driver/project"
+	"gitlab.com/apito.io/open_driver/project/bbolt"
+	"gitlab.com/apito.io/open_driver/project/mongo"
+	"golang.org/x/crypto/bcrypt"
 )
 
 type AuthController struct {
@@ -873,7 +873,7 @@ func (a *AuthController) ForgetPasswordConfirmedV2(c echo.Context) error {
 		})
 	}
 
-	err := a.graphQLServer.AuthService.ConfirmForgetPassword(nil, registerRequest)
+	err := a.graphQLServer.AuthService.ConfirmForgetPassword(c.Request().Context(), registerRequest)
 	// handle possible exceptions
 	if err != nil {
 		return c.JSON(http.StatusBadRequest, &models.HttpResponse{

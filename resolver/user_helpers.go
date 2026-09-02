@@ -122,6 +122,7 @@ const (
 	CapPlansRead       = authz.CapPlansRead
 	CapPlansWrite      = authz.CapPlansWrite
 	CapMembersWrite    = authz.CapMembersWrite
+	CapMembersRead     = authz.CapMembersRead
 	CapAuthLogin       = authz.CapAuthLogin
 	CapAuthRegister    = authz.CapAuthRegister
 )

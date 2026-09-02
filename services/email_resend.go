@@ -14,6 +14,19 @@ import (
 
 const resendAPIURL = "https://api.resend.com/emails"
 
+type resendEmailSender struct {
+	cfg    *models.Config
+	apiKey string
+}
+
+func (s *resendEmailSender) Send(ctx context.Context, req *models.EmailSendRequest) error {
+	if s == nil {
+		return fmt.Errorf("RESEND_API_KEY is not configured")
+	}
+	fillSender(s.cfg, req)
+	return SendResendEmail(ctx, s.apiKey, req)
+}
+
 type resendEmailPayload struct {
 	From    string   `json:"from"`
 	To      []string `json:"to"`
@@ -34,6 +47,9 @@ func SendResendEmail(ctx context.Context, apiKey string, req *models.EmailSendRe
 	from := strings.TrimSpace(req.Sender)
 	if from == "" {
 		from = "no-reply@apito.io"
+	}
+	if name := strings.TrimSpace(req.SenderName); name != "" && !strings.Contains(from, "<") {
+		from = fmt.Sprintf("%s <%s>", name, from)
 	}
 	body, err := json.Marshal(resendEmailPayload{
 		From:    from,
@@ -63,79 +79,12 @@ func SendResendEmail(ctx context.Context, apiKey string, req *models.EmailSendRe
 	return nil
 }
 
-// SendTeamAddEmail sends the project team invite email via Resend.
+// SendTeamAddEmail composes the invite template and sends via Resend.
+// Prefer GraphQLServer.Mailer + ComposeTeamInvite for new code.
 func SendTeamAddEmail(ctx context.Context, apiKey string, req *models.EmailSendRequest) error {
 	if req == nil {
 		return fmt.Errorf("email request is required")
 	}
-	req.Subject = "Welcome to Apito.io! You've been added to a new project"
-	if req.TempPassword != "" {
-		req.TextBody = fmt.Sprintf(`
-Hi,
-
-Welcome to the %s project! You have been added to the project. Your temporary password is: %s.
-
-Please log in and change your password as soon as possible.
-
-This is an automated email, please do not reply. If you need assistance, contact your administrator.
-
-Best regards,
-Apito.io Team
-`, req.ProjectName, req.TempPassword)
-		req.HtmlBody = fmt.Sprintf(`<!DOCTYPE html>
-<html lang="en">
-<head><meta charset="UTF-8"><title>Welcome to Apito.io</title></head>
-<body style="font-family:Arial,sans-serif;background:#f4f4f4;margin:0;padding:0">
-<div style="max-width:600px;margin:0 auto;background:#fff;border:1px solid #ddd;border-top:10px solid #EA3A60">
-<div style="text-align:center;padding:40px 0">
-<img width="50" height="50" src="https://apito.io/img/logo.png" alt="Apito.io Logo">
-<h1 style="font-size:28px;color:#000;margin:20px 0 10px">Welcome to %s</h1>
-</div>
-<div style="padding:20px;text-align:center">
-<p>Hi,</p>
-<p>You have been added to the project, and here is your temporary login password:</p>
-<p><strong>Password: %s</strong></p>
-<p>Please log in and change your password as soon as possible.</p>
-<p style="color:#EA3A60;font-weight:bold">This is an automated email, please do not reply.</p>
-</div>
-<div style="background:#f4f4f4;padding:10px;text-align:center;font-size:12px;color:#888">
-<p>Best regards,<br>Apito.io Team</p>
-</div>
-</div>
-</body>
-</html>`, req.ProjectName, req.TempPassword)
-	} else {
-		req.TextBody = fmt.Sprintf(`
-Hi,
-
-Welcome to the %s project! You have been added to the project.
-
-This is an automated email, please do not reply. If you need assistance, contact your administrator.
-
-Best regards,
-Apito.io Team
-`, req.ProjectName)
-		req.HtmlBody = fmt.Sprintf(`<!DOCTYPE html>
-<html lang="en">
-<head><meta charset="UTF-8"><title>Welcome to Apito.io</title></head>
-<body style="font-family:Arial,sans-serif;background:#f4f4f4;margin:0;padding:0">
-<div style="max-width:600px;margin:0 auto;background:#fff;border:1px solid #ddd;border-top:10px solid #EA3A60">
-<div style="text-align:center;padding:40px 0">
-<img width="50" height="50" src="https://apito.io/img/logo.png" alt="Apito.io Logo">
-<h1 style="font-size:28px;color:#000;margin:20px 0 10px">Welcome to %s</h1>
-</div>
-<div style="padding:20px;text-align:center">
-<p>Hi,</p>
-<p>You have been added to the project.</p>
-<p>Please log in with your existing email and password.</p>
-<p style="color:#EA3A60;font-weight:bold">This is an automated email, please do not reply.</p>
-</div>
-<div style="background:#f4f4f4;padding:10px;text-align:center;font-size:12px;color:#888">
-<p>Best regards,<br>Apito.io Team</p>
-</div>
-</div>
-</body>
-</html>`, req.ProjectName)
-	}
+	ComposeTeamInvite(req)
 	return SendResendEmail(ctx, apiKey, req)
 }

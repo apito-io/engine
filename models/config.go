@@ -106,7 +106,15 @@ type Config struct {
 	FreeCloudDefaultS3ForcePathStyle bool    `env:"FREE_CLOUD_DEFAULT_S3_FORCE_PATH_STYLE" env-default:"true"`
 	FreeCloudStorageLimitGB          float64 `env:"FREE_CLOUD_STORAGE_LIMIT_GB" env-default:"0.5"`
 
-	// Resend API key for transactional email (team invites, etc.).
+	// Transactional email. EMAIL_PROVIDER: cloudflare (default) | resend | noop.
+	EmailProvider       string `env:"EMAIL_PROVIDER" env-default:"cloudflare"`
+	CloudflareAPIToken  string `env:"CLOUDFLARE_API_TOKEN" env-default:""`
+	CloudflareAccountID string `env:"CLOUDFLARE_ACCOUNT_ID" env-default:""`
+	EmailFrom           string `env:"EMAIL_FROM" env-default:"no-reply@apito.io"`
+	EmailFromName       string `env:"EMAIL_FROM_NAME" env-default:"Apito"`
+	// InviteExpireDays is how long a workspace invite stays valid (default 7).
+	InviteExpireDays int `env:"INVITE_EXPIRE_DAYS" env-default:"7"`
+	// Resend API key when EMAIL_PROVIDER=resend.
 	ResendAPIKey string `env:"RESEND_API_KEY" env-default:""`
 
 	// Admin password reset: secret required to call POST /admin/reset-password (e.g. set in ~/.apito/bin/.env)

@@ -2,6 +2,27 @@
 
 Notable changes to **open-core** only. Release tags use `v1.x` (for example `v1.5.4`, `v1.6.0`).
 
+## [Unreleased]
+
+## [1.8.20] - 2026-09-02
+
+### Added
+
+- Workspace member GraphQL: `workspaceMembers`, `inviteWorkspaceMember`, `updateWorkspaceMember`, `removeWorkspaceMember`. Grants live on `user_projects`. Membership role is `team` (default) or `admin`.
+- `NormalizeMembershipRole` / `IsCollaboratorMembershipRole` so collaborator grants skip owned-project quota.
+- Invite lifecycle: `invite_status` / token / expiry on `user_projects`. Public `GET/POST /auth/v2/invite/:token`.
+- `EmailSender` (Cloudflare REST default, Resend, noop). Team invite lists every project; password reset sends a 6-digit KV code.
+
+### Changed
+
+- `updateProject(add_team_member/remove_team_member)` is a one-project compatibility adapter. Role is optional and normalized; caller must administer the project.
+- Console section catalog: keep current engine sections; drop stale teams/addons/extensions/usages keys.
+- Invite mail heading is `You're invited`; body lists project names. Logo is `https://apito.io/favicon-192x192.png`.
+
+### Removed
+
+- System GraphQL `teams` / `organizations` queries. Named Team/Organization graph is retired.
+
 ## [1.8.19] - 2026-09-02
 
 ### Added

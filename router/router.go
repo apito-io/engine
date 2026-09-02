@@ -152,6 +152,8 @@ func InitRouter(cfg *models.Config) (*echo.Echo, error) {
 		authV2Routes.POST("/verify/email", authCtrl.VerifyV2)
 		authV2Routes.POST("/forget/password/request", authCtrl.ForgetPasswordRequestV2)
 		authV2Routes.POST("/forget/password/verify", authCtrl.ForgetPasswordConfirmedV2)
+		authV2Routes.GET("/invite/:token", authCtrl.GetWorkspaceInviteV2)
+		authV2Routes.POST("/invite/:token/accept", authCtrl.AcceptWorkspaceInviteV2)
 
 		//authV2Routes.POST("/verify/email/resend", authCtrl.ResendVerificationEmailV2)
 	}

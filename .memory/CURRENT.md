@@ -1,15 +1,9 @@
 # open-core — Current
 
-## Now (tagged)
+## Live
 
-- **v1.8.19** — `RewriteProjectPermissionKeys` + partner capability
-  bindings (`searchPartners` / `createPartner` / `updatePartner`).
-  Engine **v2.4.48**.
-
-## Released
-
-- **v1.8.18:** dropped `PaddleWebhookSecret` from `Config`.
-- **v1.8.16:** `IsSuperAdmin` + JWT `is_super_admin` (not `IsAdmin`).
+- **v1.8.20** — workspace invites, Cloudflare email, console section
+  catalog. Engine **v2.4.49**.
 
 ## Do not
 
