@@ -182,6 +182,13 @@ func (s *GraphQLServer) triggerFunction(ctx context.Context, f *models.ApitoFunc
 		fmt.Println(err.Error())
 		sentry.CaptureException(err)
 		sentry.Flush(time.Second * 2)
+		if cache != nil && cache.Project != nil {
+			s.NotifyEventSinkPlugins(detachedCtx, cache.Project.ID, "error", map[string]interface{}{
+				"source":   "function",
+				"function": f.Name,
+				"error":    err.Error(),
+			})
+		}
 	}
 	//return result, nil
 }

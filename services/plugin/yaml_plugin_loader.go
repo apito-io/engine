@@ -22,7 +22,12 @@ type YAMLPluginConfig struct {
 
 // YAMLUIConfig represents the UI configuration in YAML
 type YAMLUIConfig struct {
-	EntryPath string `yaml:"entry_path"`
+	EntryPath    string `yaml:"entry_path"`
+	Official     bool   `yaml:"official"`
+	BundleURL    string `yaml:"bundle_url"`
+	BundleSHA256 string `yaml:"bundle_sha256"`
+	Publisher    string `yaml:"publisher"`
+	Signed       bool   `yaml:"signed"`
 }
 
 // YAMLPlugin represents a single plugin configuration in YAML
@@ -32,7 +37,8 @@ type YAMLPlugin struct {
 	Title            string              `yaml:"title"`
 	Icon             string              `yaml:"icon"`
 	Description      string              `yaml:"description"`
-	Type             string              `yaml:"type"`
+	Type             string              `yaml:"type"` // deprecated; use capabilities
+	Capabilities     []string            `yaml:"capabilities"`
 	Role             string              `yaml:"role"`
 	ExportedVariable string              `yaml:"exported_variable"`
 	Enable           bool                `yaml:"enable"`
@@ -44,6 +50,7 @@ type YAMLPlugin struct {
 	BinaryPath       string              `yaml:"binary_path"`
 	HandshakeConfig  YAMLHandshakeConfig `yaml:"handshake_config"`
 	UIConfig         *YAMLUIConfig       `yaml:"ui_config,omitempty"`
+	Contributions    *Contributions      `yaml:"contributions,omitempty"`
 	EnvVars          []YAMLEnvVar        `yaml:"env_vars"`
 }
 
@@ -102,6 +109,13 @@ func LoadHashiCorpPluginRegistryFromYAML(cfg *models.Config) (map[string]*protob
 		if err != nil {
 			return nil, fmt.Errorf("failed to convert plugin %s: %w", pluginDir, err)
 		}
+		if config.Plugin.UIConfig != nil {
+			SetPluginUIManifest(config.Plugin.ID, SealUIBundle(
+				config.Plugin.ID,
+				filepath.Join(cfg.PluginPath, pluginDir),
+				config.Plugin.UIConfig,
+			))
+		}
 
 		// Use plugin ID from config as the key
 		plugins[config.Plugin.ID] = pluginDetails
@@ -118,11 +132,32 @@ func convertYAMLPluginToProtobuf(yamlPlugin YAMLPlugin) (*protobuff.PluginDetail
 		return nil, err
 	}
 
-	// Convert type string to enum
-	pluginType, err := convertTypeStringToEnum(yamlPlugin.Type)
-	if err != nil {
-		return nil, err
+	if err := RejectLegacyProjectTypeInDev(yamlPlugin.Type, yamlPlugin.Capabilities); err != nil {
+		return nil, fmt.Errorf("plugin %s: %w", yamlPlugin.ID, err)
 	}
+
+	caps := NormalizeCapabilities(yamlPlugin.Capabilities)
+	if len(caps) == 0 {
+		caps, err = CapabilitiesFromLegacyType(yamlPlugin.Type)
+		if err != nil {
+			return nil, fmt.Errorf("plugin %s: %w", yamlPlugin.ID, err)
+		}
+		if strings.EqualFold(yamlPlugin.Type, "project") || strings.EqualFold(yamlPlugin.Type, "external") {
+			fmt.Printf("plugin %s: type: project is deprecated; treating as capabilities %v\n", yamlPlugin.ID, caps)
+		}
+	}
+	SetPluginCapabilities(yamlPlugin.ID, caps)
+	if yamlPlugin.UIConfig != nil {
+		SetPluginUIManifest(yamlPlugin.ID, UIManifest{
+			EntryPath:    yamlPlugin.UIConfig.EntryPath,
+			Official:     yamlPlugin.UIConfig.Official,
+			BundleURL:    yamlPlugin.UIConfig.BundleURL,
+			BundleSHA256: yamlPlugin.UIConfig.BundleSHA256,
+			Publisher:    yamlPlugin.UIConfig.Publisher,
+			Signed:       yamlPlugin.UIConfig.Signed,
+		})
+	}
+	SetPluginContributions(yamlPlugin.ID, NormalizeContributions(yamlPlugin.Contributions))
 
 	// Convert environment variables
 	var envVars []*protobuff.EnvVariable
@@ -151,7 +186,7 @@ func convertYAMLPluginToProtobuf(yamlPlugin YAMLPlugin) (*protobuff.PluginDetail
 		Title:            yamlPlugin.Title,
 		Icon:             yamlPlugin.Icon,
 		Description:      yamlPlugin.Description,
-		Type:             pluginType,
+		Type:             protobuff.PluginType_PLUGIN_TYPE_SYSTEM,
 		Role:             yamlPlugin.Role,
 		ExportedVariable: exportedVariable,
 		Enable:           yamlPlugin.Enable,
@@ -196,14 +231,12 @@ func convertLanguageStringToEnum(language string) (protobuff.PluginLanguage, err
 	}
 }
 
-// convertTypeStringToEnum converts type string to protobuff enum
+// convertTypeStringToEnum is retained for CLI/docs callers. All plugins are system-installed.
 func convertTypeStringToEnum(pluginType string) (protobuff.PluginType, error) {
 	switch strings.ToLower(pluginType) {
-	case "system":
+	case "", "system", "internal", "project", "external":
 		return protobuff.PluginType_PLUGIN_TYPE_SYSTEM, nil
-	case "project":
-		return protobuff.PluginType_PLUGIN_TYPE_PROJECT, nil
 	default:
-		return protobuff.PluginType_PLUGIN_TYPE_SYSTEM, fmt.Errorf("unsupported plugin type: %s", pluginType)
+		return protobuff.PluginType_PLUGIN_TYPE_SYSTEM, fmt.Errorf("unsupported plugin type: %s; plugins are system-installed", pluginType)
 	}
 }

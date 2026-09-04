@@ -960,7 +960,7 @@ func (s *GraphQLServer) SystemPlugins(p graphql.ResolveParams) (interface{}, err
 	var _plugins []*protobuff.PluginDetails
 	for _, plugin := range _hashiCorpPlugins {
 		// try to find them in the loaded plugins cache
-		if pluginCache, ok := s.HashiCorpPluginCache[plugin.Id]; ok {
+		if pluginCache := s.hashiCorpPlugin(plugin.Id); pluginCache != nil {
 			// overwrite the plugin configurations with the loaded plugin configurations
 			_plugins = append(_plugins, pluginCache.PluginConfigurations)
 		} else {
@@ -999,8 +999,13 @@ func (s *GraphQLServer) ProjectSpecificInstalledPlugins(p graphql.ResolveParams)
 	for _, plugin := range _hashiCorpPlugins {
 		for _, projectPlugin := range project.Plugins {
 			if projectPlugin.ID == plugin.Id {
-				plugin.LoadStatus = protobuff.PluginLoadStatus_PLUGIN_LOAD_STATUS_INSTALLED
-				_plugins = append(_plugins, plugin)
+				cloned := *plugin
+				cloned.Type = protobuff.PluginType_PLUGIN_TYPE_SYSTEM
+				cloned.LoadStatus = protobuff.PluginLoadStatus_PLUGIN_LOAD_STATUS_INSTALLED
+				cloned.Enable = projectPlugin.Enable
+				cloned.ActivateStatus = projectPlugin.ActivateStatus
+				cloned.EnvVars = mergeYAMLAndProjectEnvVars(plugin.EnvVars, projectPlugin.EnvVars)
+				_plugins = append(_plugins, &cloned)
 				break
 			}
 		}
@@ -1651,22 +1656,17 @@ func (s *GraphQLServer) ListExecutableFunctionsResolverFn(p graphql.ResolveParam
 
 func (s *GraphQLServer) LoadedFunctionProviderResolverFn(p graphql.ResolveParams) (interface{}, error) {
 
-	var _type protobuff.PluginType
-	if val, ok := p.Args["type"].(protobuff.PluginType); ok {
-		_type = val
-	}
-
 	var _list []string
 
 	// Only add HashiCorp plugins (local plugins removed)
-	for _, cache := range s.HashiCorpPluginCache {
+	for _, cache := range s.snapshotHashiCorpPlugins() {
 		if cache.PluginConfigurations != nil {
 			_list = append(_list, cache.PluginConfigurations.Id)
 		}
 	}
 
 	return map[string]interface{}{
-		"type":    _type,
+		"type":    protobuff.PluginType_PLUGIN_TYPE_SYSTEM,
 		"plugins": _list,
 	}, nil
 }

@@ -356,7 +356,18 @@ func (s *GraphQLServer) RegisterUserResolverFn(p graphql.ResolveParams) (interfa
 	if !models.GeneralAuthEffective(authProject) {
 		return nil, errors.New("general authentication is disabled for this project")
 	}
-	return s.createProjectEndUser(cache, authProject, p, /*forceRegistrationDefault*/ true)
+	result, err := s.createProjectEndUser(cache, authProject, p, /*forceRegistrationDefault*/ true)
+	if err != nil {
+		s.NotifyEventSinkPlugins(ctx, cache.Project.ID, "error", map[string]interface{}{
+			"source": "signup",
+			"error":  err.Error(),
+		})
+		return nil, err
+	}
+	s.NotifyEventSinkPlugins(ctx, cache.Project.ID, "signup", map[string]interface{}{
+		"user": result,
+	})
+	return result, nil
 }
 
 // CreateUserResolverFn creates a project end-user with a bcrypt password (project admin only).

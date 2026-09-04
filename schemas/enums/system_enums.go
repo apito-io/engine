@@ -47,11 +47,11 @@ var PluginTypeEnums = graphql.NewEnum(graphql.EnumConfig{
 	Values: graphql.EnumValueConfigMap{
 		"system": &graphql.EnumValueConfig{
 			Value:       protobuff.PluginType_PLUGIN_TYPE_SYSTEM,
-			Description: "Extension Type Plugin",
+			Description: "System-installed plugin. Project exposure is via activation, not a second type.",
 		},
 		"project": &graphql.EnumValueConfig{
 			Value:       protobuff.PluginType_PLUGIN_TYPE_PROJECT,
-			Description: "Function Type Plugin",
+			Description: "Deprecated. Reserved protobuf value; all plugins are system-installed. Use capabilities.",
 		},
 	},
 })

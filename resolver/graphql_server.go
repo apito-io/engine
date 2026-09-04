@@ -113,6 +113,7 @@ type GraphQLServer struct {
 	ProjectCache interfaces.CacheDBInterface
 
 	// for HashiCorp plugins only
+	pluginCacheMu        sync.RWMutex
 	HashiCorpPluginCache map[string]*models.HashiCorpPluginCache
 	PluginLoadingState   map[string]bool // Track which plugins are currently being loaded
 	PluginMonitor        *PluginMonitor  // Health monitoring and auto-restart for plugins
@@ -830,7 +831,7 @@ func (s *GraphQLServer) GetApplicationCache(router echo.Context) (*models.Applic
 
 		// Warn once per (project, plugin) when a project-enabled hc-* plugin wasn't in the engine cache
 		for _, pd := range _project.Plugins {
-			if !pd.Enable || !strings.HasPrefix(pd.ID, "hc-") {
+			if !isSavedPluginActivated(pd) || !strings.HasPrefix(pd.ID, "hc-") {
 				continue
 			}
 			if cache.PluginSchemasRegistered != nil && cache.PluginSchemasRegistered[pd.ID] {
@@ -1249,7 +1250,7 @@ func (s *GraphQLServer) WaitForPluginsToLoad() {
 // GetHashiCorpPluginIDs returns the list of loaded HashiCorp plugin IDs
 func (s *GraphQLServer) GetHashiCorpPluginIDs() []string {
 	var pluginIDs []string
-	for pluginID := range s.HashiCorpPluginCache {
+	for pluginID := range s.snapshotHashiCorpPlugins() {
 		pluginIDs = append(pluginIDs, pluginID)
 	}
 	return pluginIDs

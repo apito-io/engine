@@ -137,7 +137,7 @@ type Project struct {
 	CreatedAt   string                `json:"created_at,omitempty" firestore:"created_at,omitempty" bson:"created_at,omitempty"`
 	UpdatedAt   string                `json:"updated_at,omitempty" firestore:"updated_at,omitempty" bson:"updated_at,omitempty"`
 	ExpireAt    string                `json:"expire_at,omitempty" firestore:"expire_at,omitempty" bson:"expire_at,omitempty"`
-	Plugins     []*SavedPluginDetails `bun:"rel:has-many" json:"plugins,omitempty" firestore:"plugins,omitempty" bson:"plugins,omitempty"`
+	Plugins     []*SavedPluginDetails `bun:"type:jsonb" json:"plugins,omitempty" firestore:"plugins,omitempty" bson:"plugins,omitempty"`
 	Settings    *ProjectSettings      `bun:"rel:belongs-to,join:id=project_id" json:"settings,omitempty"  firestore:"settings,omitempty" bson:"settings,omitempty"`
 
 	Tokens []*ProjectToken `bun:"rel:has-many" json:"tokens,omitempty" firestore:"tokens,omitempty" bson:"tokens,omitempty"`

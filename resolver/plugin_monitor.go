@@ -327,9 +327,7 @@ func (pm *PluginMonitor) restartPlugin(ctx context.Context, pluginID string) err
 		fmt.Printf("🔪 [PLUGIN-MONITOR] Killing existing plugin process: %s\n", pluginID)
 		plugin.Client.Kill()
 		// Remove from cache
-		pm.server.Lock()
-		delete(pm.server.HashiCorpPluginCache, pluginID)
-		pm.server.Unlock()
+		pm.server.removeHashiCorpPlugin(pluginID)
 	} else {
 		// Plugin not in cache -- load config from YAML registry
 		registry, err := pluginService.LoadHashiCorpPluginRegistry(pm.server.Cfg)

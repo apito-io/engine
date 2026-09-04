@@ -34,11 +34,11 @@ type ModelType struct {
 }
 
 type Validation struct {
-	Required bool     `json:"required,omitempty" firestore:"required,omitempty" bson:"required,omitempty"`
-	Hide     bool     `json:"hide,omitempty" firestore:"hide,omitempty" bson:"hide,omitempty"`
+	Required bool `json:"required,omitempty" firestore:"required,omitempty" bson:"required,omitempty"`
+	Hide     bool `json:"hide,omitempty" firestore:"hide,omitempty" bson:"hide,omitempty"`
 	//AsTitle  bool     `json:"as_title,omitempty" firestore:"as_title,omitempty" bson:"as_title,omitempty"`
-	Locals   []string `json:"locals,omitempty" firestore:"locals,omitempty" bson:"locals,omitempty"`
-	Unique   bool     `json:"unique,omitempty" firestore:"unique,omitempty" bson:"unique,omitempty"`
+	Locals []string `json:"locals,omitempty" firestore:"locals,omitempty" bson:"locals,omitempty"`
+	Unique bool     `json:"unique,omitempty" firestore:"unique,omitempty" bson:"unique,omitempty"`
 
 	CharLimit        []uint32  `json:"char_limit,omitempty" firestore:"char_limit,omitempty" bson:"char_limit,omitempty"`
 	IntRangeLimit    []uint32  `json:"int_range_limit,omitempty" firestore:"int_range_limit,omitempty" bson:"int_range_limit,omitempty"`
@@ -59,20 +59,22 @@ type Validation struct {
 }
 
 type FieldInfo struct {
-	Identifier              string       `json:"identifier,omitempty" firestore:"identifier,omitempty" bson:"identifier,omitempty"`
-	Description             string       `json:"description,omitempty" firestore:"description,omitempty" bson:"description,omitempty"`
-	InputType               string       `json:"input_type,omitempty" firestore:"input_type,omitempty" bson:"input_type,omitempty"`
-	FieldType               string       `json:"field_type,omitempty" firestore:"field_type,omitempty" bson:"field_type,omitempty"`
-	FieldSubType            string       `json:"field_sub_type,omitempty" bson:"field_sub_type,omitempty"`
-	SubFieldInfo            []*FieldInfo `json:"sub_field_info,omitempty" firestore:"modules,omitempty" bson:"sub_field_info,omitempty"`
-	Validation              *Validation  `json:"validation,omitempty" firestore:"validation,omitempty" bson:"validation,omitempty"`
-	Serial                  uint32       `json:"serial,omitempty" firestore:"serial,omitempty" bson:"serial,omitempty"`
-	Label                   string       `json:"label,omitempty" firestore:"label,omitempty" bson:"label,omitempty"`
-	SystemGenerated         bool         `json:"system_generated,omitempty" firestore:"system_generated,omitempty" bson:"system_generated,omitempty"`
+	Identifier      string       `json:"identifier,omitempty" firestore:"identifier,omitempty" bson:"identifier,omitempty"`
+	Description     string       `json:"description,omitempty" firestore:"description,omitempty" bson:"description,omitempty"`
+	InputType       string       `json:"input_type,omitempty" firestore:"input_type,omitempty" bson:"input_type,omitempty"`
+	FieldType       string       `json:"field_type,omitempty" firestore:"field_type,omitempty" bson:"field_type,omitempty"`
+	FieldSubType    string       `json:"field_sub_type,omitempty" bson:"field_sub_type,omitempty"`
+	SubFieldInfo    []*FieldInfo `json:"sub_field_info,omitempty" firestore:"modules,omitempty" bson:"sub_field_info,omitempty"`
+	Validation      *Validation  `json:"validation,omitempty" firestore:"validation,omitempty" bson:"validation,omitempty"`
+	Serial          uint32       `json:"serial,omitempty" firestore:"serial,omitempty" bson:"serial,omitempty"`
+	Label           string       `json:"label,omitempty" firestore:"label,omitempty" bson:"label,omitempty"`
+	SystemGenerated bool         `json:"system_generated,omitempty" firestore:"system_generated,omitempty" bson:"system_generated,omitempty"`
 	//RepeatedGroupIdentifier string       `json:"repeated_group_identifier,omitempty" firestore:"repeated_group_identifier,omitempty" bson:"repeated_group_identifier,omitempty"`
-	IsObjectField           bool         `json:"is_object_field,omitempty" firestore:"is_object_field,omitempty" bson:"is_object_field,omitempty"`
-	ParentField             string       `json:"parent_field,omitempty" firestore:"parent_field,omitempty" bson:"parent_field,omitempty"`
-	EnableIndexing          bool         `json:"enable_indexing,omitempty" firestore:"enable_indexing,omitempty" bson:"enable_indexing,omitempty"`
+	IsObjectField   bool   `json:"is_object_field,omitempty" firestore:"is_object_field,omitempty" bson:"is_object_field,omitempty"`
+	ParentField     string `json:"parent_field,omitempty" firestore:"parent_field,omitempty" bson:"parent_field,omitempty"`
+	EnableIndexing  bool   `json:"enable_indexing,omitempty" firestore:"enable_indexing,omitempty" bson:"enable_indexing,omitempty"`
+	PluginID        string `json:"plugin_id,omitempty" firestore:"plugin_id,omitempty" bson:"plugin_id,omitempty"`
+	PluginFieldType string `json:"plugin_field_type,omitempty" firestore:"plugin_field_type,omitempty" bson:"plugin_field_type,omitempty"`
 }
 
 type ConnectionType struct {

@@ -121,8 +121,8 @@ func (s *GraphQLServer) BuildServerQueriesAndMutations() {
 			Resolve: s.ListRoleScopesResolverFn,
 		},
 		"getProjectPlans": &graphql.Field{
-			Name: "GetProjectPlans",
-			Type: graphql.NewList(privateSchemaObjects.PlanObject),
+			Name:    "GetProjectPlans",
+			Type:    graphql.NewList(privateSchemaObjects.PlanObject),
 			Resolve: s.GetProjectPlansResolverFn,
 		},
 		"modelDocumentCounts": &graphql.Field{
@@ -1380,8 +1380,8 @@ func (s *GraphQLServer) BuildServerQueriesAndMutations() {
 			Type: graphql.NewObject(graphql.ObjectConfig{
 				Name: "DeployFunctionToProjectResponse",
 				Fields: graphql.Fields{
-					"function":   &graphql.Field{Type: privateSchemaObjects.CloudFunctionObject},
-					"revision":   &graphql.Field{Type: graphql.NewObject(graphql.ObjectConfig{
+					"function": &graphql.Field{Type: privateSchemaObjects.CloudFunctionObject},
+					"revision": &graphql.Field{Type: graphql.NewObject(graphql.ObjectConfig{
 						Name: "DeployFunctionRevisionType",
 						Fields: graphql.Fields{
 							"id":            &graphql.Field{Type: graphql.String},
@@ -1591,6 +1591,12 @@ func (s *GraphQLServer) BuildServerQueriesAndMutations() {
 				},
 				"enable_indexing": &graphql.ArgumentConfig{
 					Type: graphql.Boolean,
+				},
+				"plugin_id": &graphql.ArgumentConfig{
+					Type: graphql.String,
+				},
+				"plugin_field_type": &graphql.ArgumentConfig{
+					Type: graphql.String,
 				},
 			},
 			Resolve: s.UpsertFieldToModelResolverFn,

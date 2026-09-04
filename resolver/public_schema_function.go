@@ -127,7 +127,7 @@ func (s *GraphQLServer) HandleApitoFunction(ctx context.Context, cache *models.A
 			return nil, nil, fmt.Errorf("hashicorp function missing function_provider_id")
 		}
 		var _plugin *hcplugin.Client
-		if val, ok := s.HashiCorpPluginCache[_function.FunctionProviderID]; ok && val != nil {
+		if val := s.hashiCorpPlugin(_function.FunctionProviderID); val != nil {
 			_plugin = val.Client
 		} else {
 			return nil, nil, fmt.Errorf("%s plugin Not loaded, reinstall the plugin", _function.FunctionProviderID)

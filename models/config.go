@@ -19,6 +19,21 @@ type Config struct {
 
 	PluginPath string `env:"PLUGIN_PATH" env-default:"plugins"`
 
+	// PluginRemoteRegistryEnabled turns on signed-catalog fetch and install/update/uninstall.
+	// Local YAML boot from PluginPath always runs; this flag only gates remote marketplace APIs.
+	PluginRemoteRegistryEnabled bool `env:"PLUGIN_REMOTE_REGISTRY_ENABLED" env-default:"false"`
+	// PluginRegistryURL is the signed catalog.json URL (GitHub Release asset by default).
+	PluginRegistryURL string `env:"PLUGIN_REGISTRY_URL" env-default:"https://github.com/apito-io/plugins/releases/download/catalog-v1/catalog.json"`
+	// PluginRegistrySigURL defaults to catalog.json with a .sig suffix when empty.
+	PluginRegistrySigURL string `env:"PLUGIN_REGISTRY_SIG_URL" env-default:""`
+	// PluginRegistryPublicKey is hex-encoded Ed25519 public key. Empty uses the embedded Apito key.
+	PluginRegistryPublicKey string `env:"PLUGIN_REGISTRY_PUBLIC_KEY" env-default:""`
+	// PluginAllowLocalUpload is the operator escape hatch for multipart POST /system/plugin.
+	// Production should leave this false when the remote registry is enabled.
+	PluginAllowLocalUpload bool `env:"PLUGIN_ALLOW_LOCAL_UPLOAD" env-default:"false"`
+	// EngineVersion is the semver used to match catalog engine_semver ranges.
+	EngineVersion string `env:"ENGINE_VERSION" env-default:"2.4.49"`
+
 	CacheEngine     string `env:"CACHE_DB" env-default:"memory"`
 	CacheDBHost     string `env:"CACHE_DB_HOST" env-default:""`
 	CacheDBPort     string `env:"CACHE_DB_PORT" env-default:""`

@@ -243,20 +243,23 @@ func InitRouter(cfg *models.Config) (*echo.Echo, error) {
 		//pluginRoutes := systemRoutes.Group("/plugin", middleware.CloudSyncKeyAuth())
 		pluginRoutes := systemRoutes.Group("/plugin")
 		{
-			// Plugin CRUD operations
-			pluginRoutes.POST("", pluginV2Ctrl.CreateOrUpdatePlugin)    // Create/Update plugin
-			pluginRoutes.PUT("/:id", pluginV2Ctrl.CreateOrUpdatePlugin) // Update specific plugin
-			pluginRoutes.GET("", pluginV2Ctrl.ListPlugins)              // List all plugins
-			pluginRoutes.GET("/:id", pluginV2Ctrl.GetPluginStatus)      // Get plugin status
-			pluginRoutes.DELETE("/:id", pluginV2Ctrl.DeletePlugin)      // Delete plugin
+			pluginRoutes.GET("/catalog", pluginV2Ctrl.GetPluginCatalog)
+			pluginRoutes.POST("/install", pluginV2Ctrl.InstallPlugin)
+			pluginRoutes.POST("/:id/update", pluginV2Ctrl.UpdatePlugin)
+			pluginRoutes.DELETE("/:id", pluginV2Ctrl.UninstallPlugin)
 
-			// Platform compatibility check
-			pluginRoutes.GET("/platform", pluginV2Ctrl.GetPlatformInfo) // Get server platform info
+			pluginRoutes.POST("", pluginV2Ctrl.CreateOrUpdatePlugin)
+			pluginRoutes.PUT("/:id", pluginV2Ctrl.CreateOrUpdatePlugin)
+			pluginRoutes.GET("/manifest", pluginV2Ctrl.GetPluginManifest)
+			pluginRoutes.GET("/:id/ui.js", pluginV2Ctrl.GetPluginUI)
+			pluginRoutes.GET("", pluginV2Ctrl.ListPlugins)
+			pluginRoutes.GET("/:id", pluginV2Ctrl.GetPluginStatus)
 
-			// Plugin control operations
-			pluginRoutes.POST("/:id/restart", pluginV2Ctrl.RestartPlugin) // Restart plugin
-			pluginRoutes.POST("/:id/stop", pluginV2Ctrl.StopPlugin)       // Stop plugin
-			pluginRoutes.POST("/:id/start", pluginV2Ctrl.RestartPlugin)   // Start plugin (alias for restart)
+			pluginRoutes.GET("/platform", pluginV2Ctrl.GetPlatformInfo)
+
+			pluginRoutes.POST("/:id/restart", pluginV2Ctrl.RestartPlugin)
+			pluginRoutes.POST("/:id/stop", pluginV2Ctrl.StopPlugin)
+			pluginRoutes.POST("/:id/start", pluginV2Ctrl.RestartPlugin)
 		}
 
 		// Plugin health check (no auth required, placed outside the authenticated group)
@@ -266,6 +269,11 @@ func InitRouter(cfg *models.Config) (*echo.Echo, error) {
 				"message": "Plugin management API is healthy",
 				"version": "v2.0.0",
 				"endpoints": map[string]string{
+					"catalog":       "GET /system/plugin/catalog",
+					"install":       "POST /system/plugin/install",
+					"update":        "POST /system/plugin/:id/update",
+					"manifest":      "GET /system/plugin/manifest",
+					"ui":            "GET /system/plugin/:id/ui.js",
 					"create_update": "POST /system/plugin",
 					"list":          "GET /system/plugin",
 					"status":        "GET /system/plugin/:id",

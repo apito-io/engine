@@ -5,6 +5,8 @@ import (
 	"archive/tar"
 	"compress/gzip"
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
 	"io"
 	"mime/multipart"
@@ -67,20 +69,58 @@ type PluginListResponse struct {
 }
 
 type PluginStatusInfo struct {
-	ID          string `json:"id"`
-	Title       string `json:"title"`
-	Version     string `json:"version"`
-	Status      string `json:"status"` // loaded, stopped, error
-	Language    string `json:"language"`
-	Type        string `json:"type"`
-	Enable      bool   `json:"enable"`
-	Debug       bool   `json:"debug"`
-	LastUpdated string `json:"last_updated"`
-	Error       string `json:"error,omitempty"`
+	ID           string   `json:"id"`
+	Title        string   `json:"title"`
+	Version      string   `json:"version"`
+	Status       string   `json:"status"` // loaded, stopped, error
+	Language     string   `json:"language"`
+	Type         string   `json:"type"`
+	Capabilities []string `json:"capabilities"`
+	Enable       bool     `json:"enable"`
+	Debug        bool     `json:"debug"`
+	Official     bool     `json:"official"`
+	Publisher    string   `json:"publisher,omitempty"`
+	Signed       bool     `json:"signed"`
+	BundleURL    string   `json:"bundle_url,omitempty"`
+	BundleSHA256 string   `json:"bundle_sha256,omitempty"`
+	LastUpdated  string   `json:"last_updated"`
+	Error        string   `json:"error,omitempty"`
+}
+
+type PluginManifestEntry struct {
+	ID              string                       `json:"id"`
+	Version         string                       `json:"version"`
+	Title           string                       `json:"title"`
+	Capabilities    []string                     `json:"capabilities"`
+	Activated       bool                         `json:"activated"`
+	Official        bool                         `json:"official"`
+	Signed          bool                         `json:"signed"`
+	Publisher       string                       `json:"publisher,omitempty"`
+	BundleURL       string                       `json:"bundle_url,omitempty"`
+	BundleSHA256    string                       `json:"bundle_sha256,omitempty"`
+	ExtensionPoints []string                     `json:"extension_points"`
+	BlockedReason   string                       `json:"blocked_reason,omitempty"`
+	Contributions   *pluginService.Contributions `json:"contributions,omitempty"`
+}
+
+type PluginManifestResponse struct {
+	Success bool                  `json:"success"`
+	Message string                `json:"message"`
+	Plugins []PluginManifestEntry `json:"plugins"`
 }
 
 // CreateOrUpdatePlugin handles plugin creation and updates via multipart upload
 func (pc *PluginV2Controller) CreateOrUpdatePlugin(c echo.Context) error {
+	if err := pc.requirePluginDeploy(c); err != nil {
+		return err
+	}
+	if pc.Server.Cfg.PluginRemoteRegistryEnabled && !pc.Server.Cfg.PluginAllowLocalUpload {
+		return c.JSON(http.StatusForbidden, pluginErrorResponse{
+			Success: false,
+			Code:    "LOCAL_UPLOAD_DISABLED",
+			Message: "multipart plugin upload is disabled; use POST /system/plugin/install from the signed registry",
+		})
+	}
 	// Parse the multipart form
 	// 32 << 20 means 32 shifted left by 20 bits, which is 32 * 2^20 = 33,554,432 bytes (32 megabytes)
 	if err := c.Request().ParseMultipartForm(32 << 20); err != nil { // 32 MB max
@@ -177,6 +217,9 @@ func (pc *PluginV2Controller) CreateOrUpdatePlugin(c echo.Context) error {
 
 // RestartPlugin restarts a specific plugin
 func (pc *PluginV2Controller) RestartPlugin(c echo.Context) error {
+	if err := pc.requirePluginDeploy(c); err != nil {
+		return err
+	}
 	pluginID := c.Param("id")
 	if pluginID == "" {
 		return c.JSON(http.StatusBadRequest, PluginOperationResponse{
@@ -216,6 +259,9 @@ func (pc *PluginV2Controller) RestartPlugin(c echo.Context) error {
 
 // StopPlugin stops a specific plugin
 func (pc *PluginV2Controller) StopPlugin(c echo.Context) error {
+	if err := pc.requirePluginDeploy(c); err != nil {
+		return err
+	}
 	pluginID := c.Param("id")
 	if pluginID == "" {
 		return c.JSON(http.StatusBadRequest, PluginOperationResponse{
@@ -243,6 +289,9 @@ func (pc *PluginV2Controller) StopPlugin(c echo.Context) error {
 
 // DeletePlugin removes a plugin completely
 func (pc *PluginV2Controller) DeletePlugin(c echo.Context) error {
+	if err := pc.requirePluginDeploy(c); err != nil {
+		return err
+	}
 	pluginID := c.Param("id")
 	if pluginID == "" {
 		return c.JSON(http.StatusBadRequest, PluginOperationResponse{
@@ -330,8 +379,7 @@ func (pc *PluginV2Controller) ListPlugins(c echo.Context) error {
 		errorMsg := ""
 
 		// Check if plugin is currently loaded
-		pc.Server.Lock()
-		if pluginCache, exists := pc.Server.HashiCorpPluginCache[pluginID]; exists {
+		if pluginCache := pc.Server.TryGetPlugin(pluginID); pluginCache != nil {
 			if pluginCache.Client != nil && !pluginCache.Client.Exited() {
 				status = "loaded"
 			} else {
@@ -339,7 +387,6 @@ func (pc *PluginV2Controller) ListPlugins(c echo.Context) error {
 				errorMsg = "Plugin process exited"
 			}
 		}
-		pc.Server.Unlock()
 
 		// Get last modified time of plugin directory
 		pluginDir := filepath.Join(pc.Server.Cfg.PluginPath, pluginID)
@@ -348,17 +395,24 @@ func (pc *PluginV2Controller) ListPlugins(c echo.Context) error {
 			lastUpdated = info.ModTime().Format(time.RFC3339)
 		}
 
+		ui := pluginService.UIManifestFor(pluginID)
 		plugins = append(plugins, PluginStatusInfo{
-			ID:          pluginID,
-			Title:       pluginDetails.Title,
-			Version:     pluginDetails.Version,
-			Status:      status,
-			Language:    pluginDetails.Language.String(),
-			Type:        pluginDetails.Type.String(),
-			Enable:      pluginDetails.Enable,
-			Debug:       pluginDetails.Debug,
-			LastUpdated: lastUpdated,
-			Error:       errorMsg,
+			ID:           pluginID,
+			Title:        pluginDetails.Title,
+			Version:      pluginDetails.Version,
+			Status:       status,
+			Language:     pluginDetails.Language.String(),
+			Type:         "system",
+			Capabilities: pluginService.CapabilitiesFor(pluginID),
+			Enable:       pluginDetails.Enable,
+			Debug:        pluginDetails.Debug,
+			Official:     ui.Official,
+			Publisher:    ui.Publisher,
+			Signed:       ui.Signed,
+			BundleURL:    ui.BundleURL,
+			BundleSHA256: ui.BundleSHA256,
+			LastUpdated:  lastUpdated,
+			Error:        errorMsg,
 		})
 	}
 
@@ -367,6 +421,103 @@ func (pc *PluginV2Controller) ListPlugins(c echo.Context) error {
 		Message: fmt.Sprintf("Found %d plugins", len(plugins)),
 		Plugins: plugins,
 	})
+}
+
+// GetPluginManifest returns authenticated Console UI/extension metadata.
+func (pc *PluginV2Controller) GetPluginManifest(c echo.Context) error {
+	_hashiCorpPlugins, err := pluginService.LoadHashiCorpPluginRegistry(pc.Server.Cfg)
+	if err != nil {
+		return c.JSON(http.StatusInternalServerError, PluginManifestResponse{
+			Success: false,
+			Message: "Failed to load plugin registry",
+		})
+	}
+
+	projectID := strings.TrimSpace(c.Request().Header.Get("X-Apito-Project-ID"))
+	if projectID == "" {
+		projectID = c.QueryParam("project_id")
+	}
+	if v := c.Get("project"); v != nil {
+		if s, ok := v.(string); ok && s != "" {
+			projectID = s
+		}
+	}
+
+	activated := map[string]bool{}
+	if projectID != "" {
+		project, err := pc.Server.LoadProjectCache(c.Request().Context(), projectID)
+		if err == nil && project != nil {
+			for _, p := range project.Plugins {
+				if p == nil {
+					continue
+				}
+				on := p.Enable
+				if !on && p.ActivateStatus.String() == "PLUGIN_ACTIVATE_STATUS_ACTIVATED" {
+					on = true
+				}
+				activated[p.ID] = on
+			}
+		}
+	}
+
+	var plugins []PluginManifestEntry
+	for pluginID, pluginDetails := range _hashiCorpPlugins {
+		caps := pluginService.CapabilitiesFor(pluginID)
+		ui := pluginService.UIManifestFor(pluginID)
+		entry := PluginManifestEntry{
+			ID:              pluginID,
+			Version:         pluginDetails.Version,
+			Title:           pluginDetails.Title,
+			Capabilities:    caps,
+			Activated:       activated[pluginID],
+			Official:        ui.Official,
+			Signed:          ui.Signed,
+			Publisher:       ui.Publisher,
+			BundleURL:       ui.BundleURL,
+			BundleSHA256:    ui.BundleSHA256,
+			ExtensionPoints: caps,
+			Contributions:   pluginService.ContributionsFor(pluginID),
+		}
+		if ui.BundleURL != "" && !(ui.Official && ui.Signed && ui.BundleSHA256 != "") {
+			entry.BlockedReason = "compiled Console UI requires an Apito-signed official bundle"
+			entry.BundleURL = ""
+		}
+		if !entry.Activated && pluginService.HasCapability(pluginID, pluginService.CapProjectREST) {
+			entry.BlockedReason = "plugin is not activated for this project"
+		}
+		plugins = append(plugins, entry)
+	}
+
+	return c.JSON(http.StatusOK, PluginManifestResponse{
+		Success: true,
+		Message: fmt.Sprintf("Found %d plugins", len(plugins)),
+		Plugins: plugins,
+	})
+}
+
+// GetPluginUI serves the official signed Console bundle extracted next to the plugin binary.
+func (pc *PluginV2Controller) GetPluginUI(c echo.Context) error {
+	pluginID := strings.TrimSpace(c.Param("id"))
+	ui := pluginService.UIManifestFor(pluginID)
+	if pluginID == "" || ui.BundleSHA256 == "" {
+		return c.NoContent(http.StatusNotFound)
+	}
+	path, err := pluginService.UIBundlePath(pc.Server.Cfg.PluginPath, pluginID, ui)
+	if err != nil {
+		return c.NoContent(http.StatusNotFound)
+	}
+	body, err := os.ReadFile(path)
+	if err != nil {
+		return c.NoContent(http.StatusNotFound)
+	}
+	sum := sha256.Sum256(body)
+	got := hex.EncodeToString(sum[:])
+	if !strings.EqualFold(got, ui.BundleSHA256) {
+		return c.NoContent(http.StatusConflict)
+	}
+	c.Response().Header().Set("ETag", `"`+got+`"`)
+	c.Response().Header().Set("Cache-Control", "private, max-age=60")
+	return c.Blob(http.StatusOK, "application/javascript; charset=utf-8", body)
 }
 
 // GetPluginStatus returns the status of a specific plugin
@@ -402,8 +553,7 @@ func (pc *PluginV2Controller) GetPluginStatus(c echo.Context) error {
 	errorMsg := ""
 
 	// Check if plugin is currently loaded
-	pc.Server.Lock()
-	if pluginCache, exists := pc.Server.HashiCorpPluginCache[pluginID]; exists {
+	if pluginCache := pc.Server.TryGetPlugin(pluginID); pluginCache != nil {
 		if pluginCache.Client != nil && !pluginCache.Client.Exited() {
 			status = "loaded"
 		} else {
@@ -411,7 +561,6 @@ func (pc *PluginV2Controller) GetPluginStatus(c echo.Context) error {
 			errorMsg = "Plugin process exited"
 		}
 	}
-	pc.Server.Unlock()
 
 	// Get last modified time of plugin directory
 	pluginDir := filepath.Join(pc.Server.Cfg.PluginPath, pluginID)
@@ -523,13 +672,17 @@ func (pc *PluginV2Controller) extractTarGz(file io.Reader, destDir string) error
 }
 
 func (pc *PluginV2Controller) createPluginConfig(pluginDir string, req CreatePluginRequest) error {
+	caps := []string{pluginService.CapSystemGraphQL, pluginService.CapSystemREST}
+	if strings.EqualFold(req.Type, "project") || strings.EqualFold(req.Type, "external") {
+		caps = []string{pluginService.CapProjectGraphQL, pluginService.CapProjectREST}
+	}
 	config := map[string]interface{}{
 		"plugin": map[string]interface{}{
 			"id":                req.ID,
 			"language":          req.Language,
 			"title":             req.Title,
 			"description":       req.Description,
-			"type":              req.Type,
+			"capabilities":      caps,
 			"version":           req.Version,
 			"author":            req.Author,
 			"repository_url":    req.RepositoryURL,
@@ -568,11 +721,8 @@ func (pc *PluginV2Controller) createPluginConfig(pluginDir string, req CreatePlu
 }
 
 func (pc *PluginV2Controller) stopPlugin(pluginID string) error {
-	pc.Server.Lock()
-	defer pc.Server.Unlock()
-
-	pluginCache, exists := pc.Server.HashiCorpPluginCache[pluginID]
-	if !exists {
+	pluginCache := pc.Server.TryGetPlugin(pluginID)
+	if pluginCache == nil {
 		return nil // Plugin is not loaded
 	}
 
@@ -581,7 +731,10 @@ func (pc *PluginV2Controller) stopPlugin(pluginID string) error {
 	}
 
 	// Remove from cache
-	delete(pc.Server.HashiCorpPluginCache, pluginID)
+	pc.Server.RemoveHashiCorpPlugin(pluginID)
+
+	pc.Server.Lock()
+	defer pc.Server.Unlock()
 
 	// Remove from installed plugin list
 	var updatedList []string

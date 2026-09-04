@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"log"
 	"net/http"
 	"os"
@@ -45,6 +46,25 @@ func (e *CodedError) Error() string {
 		return fmt.Sprintf("HTTP %d: %s (%s)", e.Code, e.Message, e.Details)
 	}
 	return fmt.Sprintf("HTTP %d: %s", e.Code, e.Message)
+}
+
+func pluginStatusCode(v interface{}) (int, bool) {
+	switch n := v.(type) {
+	case float64:
+		return int(n), n >= 100
+	case int:
+		return n, n >= 100
+	case int32:
+		return int(n), n >= 100
+	case json.Number:
+		i, err := n.Int64()
+		if err != nil {
+			return 0, false
+		}
+		return int(i), i >= 100
+	default:
+		return 0, false
+	}
 }
 
 // GraphQLError represents a GraphQL error with extensions (mirrors GraphQL spec)
@@ -193,7 +213,7 @@ func (s *GraphQLServer) LoadHashiCorpPlugins(ctx context.Context) error {
 				var errs []error
 
 				// Check if plugin is already loaded
-				if _, ok := s.HashiCorpPluginCache[_pluginName]; ok {
+				if s.hashiCorpPlugin(_pluginName) != nil {
 					fmt.Printf("HashiCorp Plugin %s already loaded, skipping\n", _pluginName)
 					return errs
 				}
@@ -501,12 +521,12 @@ func (s *GraphQLServer) LoadHashiCorpPlugin(ctx context.Context, _dir string, _p
 
 	s.Lock()
 	_pluginDetails.LoadStatus = protobuff.PluginLoadStatus_PLUGIN_LOAD_STATUS_LOADED
-	s.HashiCorpPluginCache[pluginID] = &models.HashiCorpPluginCache{
+	s.Unlock()
+	s.storeHashiCorpPlugin(pluginID, &models.HashiCorpPluginCache{
 		Client:               client,
 		PluginConfigurations: _pluginDetails,
 		RPCClient:            rpcClient,
-	}
-	s.Unlock()
+	})
 
 	s.EmitPluginStatusChanged(ctx, pluginID, "loaded", "")
 
@@ -522,7 +542,6 @@ func (s *GraphQLServer) registerPluginSchemaAndAPIs(ctx context.Context, plugin 
 	}
 
 	if pluginSchemas != nil {
-		// Convert protobuf schemas to GraphQL fields using server-aware method
 		convertedSchemas, err := s.convertProtoGraphQLSchemaToFieldsForSystemSchema(pluginSchemas, pluginDetails.Id)
 		if err != nil {
 			return fmt.Errorf("failed to convert plugin schemas: %w", err)
@@ -532,14 +551,13 @@ func (s *GraphQLServer) registerPluginSchemaAndAPIs(ctx context.Context, plugin 
 		if convertedSchemas.Queries != nil {
 			for k, v := range convertedSchemas.Queries {
 				queryKey := DEFAULT_INTERNAL_PREFIX + "_" + k
-				if pluginDetails.Type == protobuff.PluginType_PLUGIN_TYPE_SYSTEM {
+				if pluginService.HasCapability(pluginDetails.Id, pluginService.CapSystemGraphQL) {
 					if val := s.SystemQueries[queryKey]; val == nil {
 						fmt.Printf("--> Registering plugin schema from %s query `%s` to system schema\n", pluginDetails.Id, k)
 						s.SystemQueries[queryKey] = v
 						continue
 					}
 					fmt.Printf("the query '%s' on '%s' already found on another plugin. please change the id. ignoring this query\n", k, pluginDetails.Id)
-				} else {
 				}
 			}
 		}
@@ -548,14 +566,13 @@ func (s *GraphQLServer) registerPluginSchemaAndAPIs(ctx context.Context, plugin 
 		if convertedSchemas.Mutations != nil {
 			for k, v := range convertedSchemas.Mutations {
 				mutationKey := DEFAULT_INTERNAL_PREFIX + "_" + k
-				if pluginDetails.Type == protobuff.PluginType_PLUGIN_TYPE_SYSTEM {
+				if pluginService.HasCapability(pluginDetails.Id, pluginService.CapSystemGraphQL) {
 					if val := s.SystemMutations[mutationKey]; val == nil {
 						fmt.Printf("--> Registering plugin schema from %s mutation `%s` to system schema\n", pluginDetails.Id, k)
 						s.SystemMutations[mutationKey] = v
 						continue
 					}
 					fmt.Printf("the mutation '%s' on '%s' already found on another plugin. please change the id. ignoring this mutation\n", k, pluginDetails.Id)
-				} else {
 				}
 			}
 		}
@@ -573,10 +590,9 @@ func (s *GraphQLServer) registerPluginSchemaAndAPIs(ctx context.Context, plugin 
 
 		// Register routes with the extension router
 		for _, route := range convertedAPIs {
-			var path string
-			if pluginDetails.Type == protobuff.PluginType_PLUGIN_TYPE_PROJECT {
-				path = "/" + pluginDetails.Id + route.Path
-			} else {
+			path := "/" + pluginDetails.Id + route.Path
+			if pluginService.HasCapability(pluginDetails.Id, pluginService.CapSystemREST) &&
+				!pluginService.HasCapability(pluginDetails.Id, pluginService.CapProjectREST) {
 				path = "/" + route.Path
 			}
 			if !utility.ArrayContains(s.ExtensionRouterList, path) {
@@ -600,12 +616,18 @@ func (s *GraphQLServer) registerPluginSchemaAndAPIs(ctx context.Context, plugin 
 		s.PrintAllPluginRoutes()
 	}
 
+	pluginService.MergeRuntimeContributions(pluginDetails.Id, pluginService.SnapshotRuntimeAPI(pluginSchemas, pluginAPIs))
+
 	return nil
 }
 
 // createPluginAPIHandler creates an Echo handler that routes requests to the plugin
 func (s *GraphQLServer) createPluginAPIHandler(pluginID string, route *protobuff.ThirdPartyRESTApi) echo.HandlerFunc {
 	return func(c echo.Context) error {
+		if err := s.enforcePluginRESTActivation(c, pluginID); err != nil {
+			return err
+		}
+
 		// Execute the plugin REST handler using the same pattern as GraphQL resolvers
 		result, err := s.executePluginRESTHandler(c.Request().Context(), pluginID, route, c)
 
@@ -632,9 +654,9 @@ func (s *GraphQLServer) createPluginAPIHandler(pluginID string, route *protobuff
 		case map[string]interface{}:
 			// Check if there's a specific status code
 			if statusCode, exists := v["_status_code"]; exists {
-				if code, ok := statusCode.(float64); ok {
-					delete(v, "_status_code") // Remove internal field
-					return c.JSON(int(code), v)
+				if code, ok := pluginStatusCode(statusCode); ok {
+					delete(v, "_status_code")
+					return c.JSON(code, v)
 				}
 			}
 			return c.JSON(http.StatusOK, v)
@@ -745,39 +767,44 @@ func (s *GraphQLServer) executePluginRESTHandler(ctx context.Context, pluginID s
 				}
 			}
 		} else {
-			// Handle regular JSON body
-			var requestBody map[string]interface{}
-			if err := echoCtx.Bind(&requestBody); err == nil && requestBody != nil {
-				// Merge body data into args, prefixing with "body_" to avoid conflicts
-				for key, value := range requestBody {
-					args["body_"+key] = value
+			bodyBytes, readErr := io.ReadAll(echoCtx.Request().Body)
+			if readErr == nil && len(bodyBytes) > 0 {
+				args["_raw_body"] = string(bodyBytes)
+				var requestBody map[string]interface{}
+				if json.Unmarshal(bodyBytes, &requestBody) == nil && requestBody != nil {
+					for key, value := range requestBody {
+						args["body_"+key] = value
+					}
+					args["_request_body"] = requestBody
 				}
-				// Also add the entire body as a single field
-				args["_request_body"] = requestBody
 			}
 		}
 	}
 
-	// Add HTTP method and path to args
+	// Add HTTP method, path, headers, and raw body so plugins can verify signatures.
 	args["_http_method"] = route.Method
 	args["_http_path"] = route.Path
+	headers := map[string]interface{}{}
+	for key, values := range echoCtx.Request().Header {
+		if len(values) == 1 {
+			headers[strings.ToLower(key)] = values[0]
+		} else if len(values) > 0 {
+			headers[strings.ToLower(key)] = values
+		}
+	}
+	if len(headers) > 0 {
+		args["_headers"] = headers
+	}
 
 	// Call the actual Execute method
 
-	// Prepare context data to pass sensitive values
-	contextData := map[string]interface{}{
-		"plugin_id":   pluginID,
-		"http_method": route.Method,
-		"http_path":   route.Path,
+	projectID := pluginProjectIDFromEcho(echoCtx)
+	if projectID == "" {
+		projectID = pluginProjectIDFromContext(ctx)
 	}
-
-	// Extract additional context values if needed
-	if projectID := ctx.Value("project_id"); projectID != nil {
-		contextData["project_id"] = projectID
-	}
-	if userID := ctx.Value("user_id"); userID != nil {
-		contextData["user_id"] = userID
-	}
+	contextData := s.pluginExecuteContext(ctx, pluginID, projectID)
+	contextData["http_method"] = route.Method
+	contextData["http_path"] = route.Path
 
 	// Create a unique function name based on the route
 	functionName := fmt.Sprintf("rest_%s_%s", strings.ToLower(route.Method), strings.ReplaceAll(strings.TrimPrefix(route.Path, "/"), "/", "_"))
@@ -972,7 +999,7 @@ func (s *GraphQLServer) LoadProjectSpecificPlugins(ctx context.Context, cache *m
 	// Collect enabled HashiCorp plugins
 	var enabledPlugins []*protobuff.PluginDetails
 	for _, pluginDetails := range project.Plugins {
-		if pluginDetails.Enable && strings.HasPrefix(pluginDetails.ID, "hc-") {
+		if isSavedPluginActivated(pluginDetails) && strings.HasPrefix(pluginDetails.ID, "hc-") {
 			enabledPlugins = append(enabledPlugins, &protobuff.PluginDetails{
 				Id:             pluginDetails.ID,
 				EnvVars:        pluginDetails.EnvVars,
@@ -1017,62 +1044,26 @@ func (s *GraphQLServer) LoadProjectSpecificPlugins(ctx context.Context, cache *m
 	return nil
 }
 
-// tryGetPluginNoBlock attempts to get a plugin from global cache without blocking
-// Returns nil if plugin doesn't exist or if we can't get lock immediately
+// tryGetPluginNoBlock looks up a loaded HashiCorp plugin without taking
+// GraphQLServer.Mutex. REST/GraphQL execute used to call s.Lock() with a 10ms
+// timeout; system resolvers already hold that mutex for disk/DB work, so every
+// plugin REST call returned "Plugin X not available" while env vars sat in DB.
 func (s *GraphQLServer) tryGetPluginNoBlock(pluginID string) *models.HashiCorpPluginCache {
-	// Create a channel to receive the result
-	resultChan := make(chan *models.HashiCorpPluginCache, 1)
-
-	// Try to get the plugin in a goroutine with timeout
-	go func() {
-		defer func() {
-			if r := recover(); r != nil {
-				resultChan <- nil
-			}
-		}()
-
-		// Try to acquire lock with a very short timeout
-		done := make(chan bool, 1)
-		var result *models.HashiCorpPluginCache
-
-		go func() {
-			s.Lock()
-			if plugin, exists := s.HashiCorpPluginCache[pluginID]; exists {
-				result = plugin
-			}
-			s.Unlock()
-			done <- true
-		}()
-
-		// Wait for either completion or timeout
-		select {
-		case <-done:
-			resultChan <- result
-		case <-time.After(10 * time.Millisecond): // Very short timeout
-			resultChan <- nil
-		}
-	}()
-
-	// Wait for result with timeout
-	select {
-	case result := <-resultChan:
-		return result
-	case <-time.After(50 * time.Millisecond): // Overall timeout
-		return nil
-	}
+	return s.hashiCorpPlugin(pluginID)
 }
 
 // registerProjectPluginToCache registers a plugin's schemas and APIs to the project cache
 func (s *GraphQLServer) registerProjectPluginToCache(ctx context.Context, cache *models.ApplicationCache, globalPlugin *models.HashiCorpPluginCache, pluginDetails *protobuff.PluginDetails) error {
 	pluginID := pluginDetails.Id
-	effectiveType := pluginDetails.Type
-	if globalPlugin != nil && globalPlugin.PluginConfigurations != nil {
-		effectiveType = globalPlugin.PluginConfigurations.Type
-	}
+	projectGraphQL := pluginService.HasCapability(pluginID, pluginService.CapProjectGraphQL)
 
 	// Defensive programming: ensure cache is valid
 	if cache == nil || cache.RawSchemas == nil {
 		return fmt.Errorf("invalid cache for plugin %s registration", pluginID)
+	}
+
+	if !projectGraphQL {
+		return nil
 	}
 
 	// Get the RPC client (this operation should not hold locks)
@@ -1109,7 +1100,7 @@ func (s *GraphQLServer) registerProjectPluginToCache(ctx context.Context, cache 
 		if convertedSchemas.Queries != nil {
 			for k, v := range convertedSchemas.Queries {
 				queryKey := fmt.Sprintf("%s_%s", PROJECT_PLUGIN_PREFIX, k)
-				if cache.RawSchemas.Queries[queryKey] == nil && effectiveType == protobuff.PluginType_PLUGIN_TYPE_PROJECT {
+				if cache.RawSchemas.Queries[queryKey] == nil {
 					cache.RawSchemas.Queries[queryKey] = v
 					fmt.Printf("✅ Added plugin query '%s' from %s to project %s\n", k, pluginID, cache.Project.ID)
 				} else {
@@ -1122,7 +1113,7 @@ func (s *GraphQLServer) registerProjectPluginToCache(ctx context.Context, cache 
 		if convertedSchemas.Mutations != nil {
 			for k, v := range convertedSchemas.Mutations {
 				mutationKey := fmt.Sprintf("%s_%s", PROJECT_PLUGIN_PREFIX, k)
-				if cache.RawSchemas.Mutations[mutationKey] == nil && effectiveType == protobuff.PluginType_PLUGIN_TYPE_PROJECT {
+				if cache.RawSchemas.Mutations[mutationKey] == nil {
 					cache.RawSchemas.Mutations[mutationKey] = v
 					fmt.Printf("✅ Added plugin mutation '%s' from %s to project %s\n", k, pluginID, cache.Project.ID)
 				} else {
@@ -1169,20 +1160,14 @@ func (s *GraphQLServer) executePluginGraphQLResolver(ctx context.Context, plugin
 		return fmt.Sprintf("❌ ERROR: Plugin %s is not a valid universal plugin", pluginID), nil
 	}
 
+	if err := s.enforcePluginGraphQLActivation(ctx, pluginID); err != nil {
+		return nil, err
+	}
+
 	// Call the actual Execute method
 
 	// Prepare context data to pass sensitive values
-	contextData := map[string]interface{}{
-		"plugin_id": pluginID,
-	}
-
-	// Extract additional context values if needed
-	if projectID := ctx.Value("project_id"); projectID != nil {
-		contextData["project_id"] = projectID
-	}
-	if userID := ctx.Value("user_id"); userID != nil {
-		contextData["user_id"] = userID
-	}
+	contextData := s.pluginExecuteContext(ctx, pluginID, pluginProjectIDFromContext(ctx))
 
 	response, err := loadedPlugin.Execute(ctx, resolverName, functionType, args, contextData)
 	if err != nil {

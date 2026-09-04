@@ -35,6 +35,7 @@ func (s *GraphQLServer) realtimeTopic(ctx context.Context, base string) string {
 // the realtime bus. Best-effort: never blocks or fails the originating mutation.
 func (s *GraphQLServer) EmitModelChange(ctx context.Context, projectID, model, event, id string, node interface{}) {
 	if s == nil || s.RealtimeBus == nil || projectID == "" || model == "" {
+		s.notifyDocumentEventSink(ctx, projectID, model, event, id, node)
 		return
 	}
 	evt := &models.ModelChangeEvent{
@@ -50,6 +51,7 @@ func (s *GraphQLServer) EmitModelChange(ctx context.Context, projectID, model, e
 	}
 	topic := s.realtimeTopic(ctx, RealtimeModelBaseTopic(projectID, model))
 	_ = s.RealtimeBus.Publish(ctx, topic, payload)
+	s.notifyDocumentEventSink(ctx, projectID, model, event, id, node)
 }
 
 // PublishBroadcast publishes a generic broadcast message to a channel.

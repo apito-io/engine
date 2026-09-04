@@ -1,3 +1,29 @@
+## 2026-09-03 — plugin env overlay + event sink
+
+- **Changed:** Execute `contextData` gets per-project `env_vars`. REST
+  passes `_raw_body` + `_headers`. `NotifyEventSinkPlugins` after
+  document change, signup, mutation/function error.
+- **Why:** Secrets live on project activation, not YAML defaults. Discord
+  needs a host fanout without a 6th RPC method.
+- **Affected:** `plugin_activation.go`, `plugin_loader.go`,
+  `plugin_event_sink.go`, `public_schema_mutation.go`, `user_resolvers.go`,
+  `realtime_subscriptions.go`, `utility_fn.go`.
+
+---
+
+## 2026-09-03 — system plugin activation + capabilities
+
+- **Changed:** `applyPluginUpsert` / REST activation gate / capability
+  index. GraphQL plugin details expose capabilities + signed UI
+  metadata. `GET /system/plugin/manifest`.
+- **Why:** Upsert inverted activate_status, skipped append, ignored
+  enable; project plugin REST was global.
+- **Affected:** `resolver/plugin_activation.go`, `plugin_loader.go`,
+  `system_mutations.go`, `yaml_plugin_loader.go`, `plugin_controller.go`,
+  `object_models.go`.
+
+---
+
 ## 2026-09-02 — invites + EmailSender (v1.8.20)
 
 - **Changed:** `EmailSender` interface; Cloudflare REST + Resend + noop.

@@ -4,8 +4,10 @@ import (
 	"github.com/apito-io/engine/models"
 	"github.com/apito-io/engine/scaler"
 	"github.com/apito-io/engine/schemas/enums"
+	pluginService "github.com/apito-io/engine/services/plugin"
 	"github.com/apito-io/engine/utility"
 	"github.com/apito-io/types"
+	"github.com/apito-io/types/protobuff"
 	"github.com/graph-gophers/dataloader"
 	"github.com/tailor-platform/graphql"
 )
@@ -116,36 +118,36 @@ func (s *SchemaObjects) GetProjectDetailsObject(userDefinedSchemaObj, pluginDeta
 	return graphql.NewObject(graphql.ObjectConfig{
 		Name: "ProjectModel",
 		Fields: graphql.Fields{
-			"_key":                         &graphql.Field{Type: graphql.String},
-			"id":                           &graphql.Field{Type: graphql.String},
-			"name":                         &graphql.Field{Type: graphql.String},
-			"description":                  &graphql.Field{Type: graphql.String},
-			"project_icon":                 &graphql.Field{Type: graphql.String},
-			"schema":                       &graphql.Field{Type: userDefinedSchemaObj},
-			"created_at":                   &graphql.Field{Type: graphql.String},
-			"updated_at":                   &graphql.Field{Type: graphql.String},
-			"expire_at":                    &graphql.Field{Type: graphql.String},
-			"plugins":                      &graphql.Field{Type: graphql.NewList(pluginDetailsObj)},
-			"settings":                     &graphql.Field{Type: settingsObj},
-			"roles":                        &graphql.Field{Type: scaler.ScalarJSON},
-			"plans":                        &graphql.Field{Type: scaler.ScalarJSON},
-			"tokens":                       &graphql.Field{Type: graphql.NewList(apiTokenObj)},
-			"driver":                       &graphql.Field{Type: driverCredObj},
-			"project_template":             &graphql.Field{Type: graphql.String},
-			"trial_ends":                   &graphql.Field{Type: graphql.String},
-			"teams":                        &graphql.Field{Type: graphql.NewList(systemUserObj)},
-			"system_messages":              &graphql.Field{Type: graphql.NewList(systemMsgObj)},
-			"workspaces":                   &graphql.Field{Type: graphql.NewList(workSpaceObj)},
-			"default_storage_plugin":       &graphql.Field{Type: graphql.String},
-			"default_function_plugin":      &graphql.Field{Type: graphql.String},
+			"_key":                    &graphql.Field{Type: graphql.String},
+			"id":                      &graphql.Field{Type: graphql.String},
+			"name":                    &graphql.Field{Type: graphql.String},
+			"description":             &graphql.Field{Type: graphql.String},
+			"project_icon":            &graphql.Field{Type: graphql.String},
+			"schema":                  &graphql.Field{Type: userDefinedSchemaObj},
+			"created_at":              &graphql.Field{Type: graphql.String},
+			"updated_at":              &graphql.Field{Type: graphql.String},
+			"expire_at":               &graphql.Field{Type: graphql.String},
+			"plugins":                 &graphql.Field{Type: graphql.NewList(pluginDetailsObj)},
+			"settings":                &graphql.Field{Type: settingsObj},
+			"roles":                   &graphql.Field{Type: scaler.ScalarJSON},
+			"plans":                   &graphql.Field{Type: scaler.ScalarJSON},
+			"tokens":                  &graphql.Field{Type: graphql.NewList(apiTokenObj)},
+			"driver":                  &graphql.Field{Type: driverCredObj},
+			"project_template":        &graphql.Field{Type: graphql.String},
+			"trial_ends":              &graphql.Field{Type: graphql.String},
+			"teams":                   &graphql.Field{Type: graphql.NewList(systemUserObj)},
+			"system_messages":         &graphql.Field{Type: graphql.NewList(systemMsgObj)},
+			"workspaces":              &graphql.Field{Type: graphql.NewList(workSpaceObj)},
+			"default_storage_plugin":  &graphql.Field{Type: graphql.String},
+			"default_function_plugin": &graphql.Field{Type: graphql.String},
 			"project_type": &graphql.Field{
 				Type: graphql.String,
 				Resolve: func(p graphql.ResolveParams) (interface{}, error) {
 					return "general", nil
 				},
 			},
-			"project_plan":                 &graphql.Field{Type: graphql.String},
-			"project_secret_key":           &graphql.Field{Type: graphql.String},
+			"project_plan":       &graphql.Field{Type: graphql.String},
+			"project_secret_key": &graphql.Field{Type: graphql.String},
 		},
 	})
 }
@@ -247,12 +249,17 @@ func (s *SchemaObjects) GetPluginDetailsObject(funcEnvVarObject *graphql.Object)
 	return graphql.NewObject(graphql.ObjectConfig{
 		Name: "PluginDetailsFields",
 		Fields: graphql.Fields{
-			"icon":              &graphql.Field{Type: graphql.String},
-			"id":                &graphql.Field{Type: graphql.String},
-			"title":             &graphql.Field{Type: graphql.String},
-			"version":           &graphql.Field{Type: graphql.String},
-			"description":       &graphql.Field{Type: graphql.String},
-			"type":              &graphql.Field{Type: enums.PluginTypeEnums}, // Adjust the type accordingly
+			"icon":        &graphql.Field{Type: graphql.String},
+			"id":          &graphql.Field{Type: graphql.String},
+			"title":       &graphql.Field{Type: graphql.String},
+			"version":     &graphql.Field{Type: graphql.String},
+			"description": &graphql.Field{Type: graphql.String},
+			"type": &graphql.Field{
+				Type: enums.PluginTypeEnums,
+				Resolve: func(p graphql.ResolveParams) (interface{}, error) {
+					return protobuff.PluginType_PLUGIN_TYPE_SYSTEM, nil
+				},
+			},
 			"role":              &graphql.Field{Type: graphql.String},
 			"enable":            &graphql.Field{Type: graphql.Boolean},
 			"exported_variable": &graphql.Field{Type: graphql.String},
@@ -263,8 +270,57 @@ func (s *SchemaObjects) GetPluginDetailsObject(funcEnvVarObject *graphql.Object)
 			"load_status":       &graphql.Field{Type: enums.PluginLoadTypeEnums},  // Adjust the type accordingly
 			"activate_status":   &graphql.Field{Type: enums.PluginActivationType}, // Adjust the type accordingly
 			"used_in_projects":  &graphql.Field{Type: graphql.NewList(graphql.String)},
+			"capabilities": &graphql.Field{
+				Type: graphql.NewList(graphql.String),
+				Resolve: func(p graphql.ResolveParams) (interface{}, error) {
+					return pluginService.CapabilitiesFor(pluginDetailsID(p.Source)), nil
+				},
+			},
+			"official": &graphql.Field{
+				Type: graphql.Boolean,
+				Resolve: func(p graphql.ResolveParams) (interface{}, error) {
+					return pluginService.UIManifestFor(pluginDetailsID(p.Source)).Official, nil
+				},
+			},
+			"bundle_url": &graphql.Field{
+				Type: graphql.String,
+				Resolve: func(p graphql.ResolveParams) (interface{}, error) {
+					return pluginService.UIManifestFor(pluginDetailsID(p.Source)).BundleURL, nil
+				},
+			},
+			"bundle_sha256": &graphql.Field{
+				Type: graphql.String,
+				Resolve: func(p graphql.ResolveParams) (interface{}, error) {
+					return pluginService.UIManifestFor(pluginDetailsID(p.Source)).BundleSHA256, nil
+				},
+			},
+			"publisher": &graphql.Field{
+				Type: graphql.String,
+				Resolve: func(p graphql.ResolveParams) (interface{}, error) {
+					return pluginService.UIManifestFor(pluginDetailsID(p.Source)).Publisher, nil
+				},
+			},
+			"signed": &graphql.Field{
+				Type: graphql.Boolean,
+				Resolve: func(p graphql.ResolveParams) (interface{}, error) {
+					return pluginService.UIManifestFor(pluginDetailsID(p.Source)).Signed, nil
+				},
+			},
 		},
 	})
+}
+
+func pluginDetailsID(source interface{}) string {
+	if id := pluginService.PluginIDFromSource(source); id != "" {
+		return id
+	}
+	if sp, ok := source.(*models.SavedPluginDetails); ok && sp != nil {
+		return sp.ID
+	}
+	if sp, ok := source.(models.SavedPluginDetails); ok {
+		return sp.ID
+	}
+	return ""
 }
 
 func (s *SchemaObjects) GetFieldInfoObject(validationTypeObj *graphql.Object) *graphql.Object {
@@ -277,17 +333,19 @@ func (s *SchemaObjects) GetFieldInfoObject(validationTypeObj *graphql.Object) *g
 		Name: "SubFieldInfo",
 		Fields: graphql.FieldsThunk(func() graphql.Fields {
 			return graphql.Fields{
-				"identifier":       &graphql.Field{Type: graphql.String},
-				"description":      &graphql.Field{Type: graphql.String},
-				"input_type":       &graphql.Field{Type: graphql.String},
-				"field_type":       &graphql.Field{Type: graphql.String},
-				"field_sub_type":   &graphql.Field{Type: graphql.String},
-				"validation":       &graphql.Field{Type: validationTypeObj},
-				"serial":           &graphql.Field{Type: graphql.Int},
-				"label":            &graphql.Field{Type: graphql.String},
-				"system_generated": &graphql.Field{Type: graphql.Boolean},
-				"parent_field":     &graphql.Field{Type: graphql.String},
-				"sub_field_info":   &graphql.Field{Type: graphql.NewList(subFieldInfoType)},
+				"identifier":        &graphql.Field{Type: graphql.String},
+				"description":       &graphql.Field{Type: graphql.String},
+				"input_type":        &graphql.Field{Type: graphql.String},
+				"field_type":        &graphql.Field{Type: graphql.String},
+				"field_sub_type":    &graphql.Field{Type: graphql.String},
+				"validation":        &graphql.Field{Type: validationTypeObj},
+				"serial":            &graphql.Field{Type: graphql.Int},
+				"label":             &graphql.Field{Type: graphql.String},
+				"system_generated":  &graphql.Field{Type: graphql.Boolean},
+				"parent_field":      &graphql.Field{Type: graphql.String},
+				"plugin_id":         &graphql.Field{Type: graphql.String},
+				"plugin_field_type": &graphql.Field{Type: graphql.String},
+				"sub_field_info":    &graphql.Field{Type: graphql.NewList(subFieldInfoType)},
 			}
 		}),
 	})
@@ -306,9 +364,11 @@ func (s *SchemaObjects) GetFieldInfoObject(validationTypeObj *graphql.Object) *g
 			"serial":           &graphql.Field{Type: graphql.Int},
 			"label":            &graphql.Field{Type: graphql.String},
 			//"repeated_group_identifier": &graphql.Field{Type: graphql.String},
-			"parent_field":    &graphql.Field{Type: graphql.String},
-			"is_object_field": &graphql.Field{Type: graphql.Boolean},
-			"enable_indexing": &graphql.Field{Type: graphql.Boolean},
+			"parent_field":      &graphql.Field{Type: graphql.String},
+			"is_object_field":   &graphql.Field{Type: graphql.Boolean},
+			"enable_indexing":   &graphql.Field{Type: graphql.Boolean},
+			"plugin_id":         &graphql.Field{Type: graphql.String},
+			"plugin_field_type": &graphql.Field{Type: graphql.String},
 		},
 	})
 }
@@ -347,13 +407,13 @@ func (s *SchemaObjects) GetPlanObject() *graphql.Object {
 	return graphql.NewObject(graphql.ObjectConfig{
 		Name: "Plan",
 		Fields: graphql.Fields{
-			"id":               &graphql.Field{Type: graphql.String},
-			"name":             &graphql.Field{Type: graphql.String},
-			"description":      &graphql.Field{Type: graphql.String},
-			"api_permissions":  &graphql.Field{Type: scaler.ScalarJSON},
-			"logic_executions": &graphql.Field{Type: graphql.NewList(graphql.String)},
-			"quotas":           &graphql.Field{Type: scaler.ScalarJSON},
-			"system_generated": &graphql.Field{Type: graphql.Boolean},
+			"id":                &graphql.Field{Type: graphql.String},
+			"name":              &graphql.Field{Type: graphql.String},
+			"description":       &graphql.Field{Type: graphql.String},
+			"api_permissions":   &graphql.Field{Type: scaler.ScalarJSON},
+			"logic_executions":  &graphql.Field{Type: graphql.NewList(graphql.String)},
+			"quotas":            &graphql.Field{Type: scaler.ScalarJSON},
+			"system_generated":  &graphql.Field{Type: graphql.Boolean},
 			"currency":          &graphql.Field{Type: graphql.String},
 			"price_monthly":     &graphql.Field{Type: graphql.Float},
 			"play_product_id":   &graphql.Field{Type: graphql.String},

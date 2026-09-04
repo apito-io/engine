@@ -281,12 +281,21 @@ func (s *GraphQLServer) createAndConnectDocument(ctx context.Context, cache *mod
 	return doc, nil
 }
 
-func (s *GraphQLServer) MutationResolverFn(p graphql.ResolveParams) (interface{}, error) {
-
+func (s *GraphQLServer) MutationResolverFn(p graphql.ResolveParams) (resp interface{}, err error) {
 	cache, ok := utility.LegacyApplicationCache(p.Context)
 	if !ok || cache == nil {
 		return nil, errors.New("graphql context: application cache missing")
 	}
+
+	defer func() {
+		if err != nil && cache != nil && cache.Project != nil {
+			s.NotifyEventSinkPlugins(p.Context, cache.Project.ID, "error", map[string]interface{}{
+				"source": "mutation",
+				"field":  p.Info.FieldName,
+				"error":  err.Error(),
+			})
+		}
+	}()
 
 	ctx := p.Context
 	dbCtx := publicProjectDBContext(cache, ctx)

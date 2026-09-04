@@ -998,17 +998,13 @@ func (s *GraphQLServer) RemoveProjectSpecificPluginResolverFn(p graphql.ResolveP
 		return nil, errors.New("plugin id is required")
 	}
 
-	for i, plugin := range project.Plugins {
-		if plugin.ID == id {
-			project.Plugins = append(project.Plugins[:i], project.Plugins[i+1:]...)
-			break
-		}
-	}
+	project.Plugins = removeProjectPlugin(project.Plugins, id)
 
 	err = s.SystemDriver.UpdateProject(cache.Ctx, &project, true)
 	if err != nil {
 		return nil, err
 	}
+	_ = s.ExpireGraphQLProjectCache(cache.Ctx, project.ID)
 
 	return map[string]interface{}{
 		"message": "Plugin deleted successfully",
@@ -1041,74 +1037,56 @@ func (s *GraphQLServer) UpsertPluginResolverFn(p graphql.ResolveParams) (interfa
 		return nil, errors.New("plugin id is required")
 	}
 
-	var _pluginDetails *models.SavedPluginDetails
-
-	// First check if plugin already exists in project
-	for _, plugin := range project.Plugins {
-		if plugin.ID == id {
-			_pluginDetails = plugin
-			break
-		}
-	}
-
-	// If not found in project, load from HashiCorp registry
-	if _pluginDetails == nil {
+	var catalog *models.SavedPluginDetails
+	if findProjectPlugin(project.Plugins, id) == nil {
 		_hashiCorpPlugins, err := pluginService.LoadHashiCorpPluginRegistry(s.Cfg)
 		if err != nil {
 			return nil, fmt.Errorf("failed to load HashiCorp plugin registry: %w", err)
 		}
 		if plugin, exists := _hashiCorpPlugins[id]; exists {
-			_pluginDetails = &models.SavedPluginDetails{
+			catalog = &models.SavedPluginDetails{
 				ProjectID:      project.ID,
 				ID:             id,
-				EnvVars:        plugin.EnvVars,
+				EnvVars:        cloneEnvVars(plugin.EnvVars),
 				ActivateStatus: plugin.ActivateStatus,
 				LoadStatus:     plugin.LoadStatus,
 				Enable:         plugin.Enable,
 			}
-		} else {
-			return nil, errors.New("plugin not found in HashiCorp registry")
 		}
 	}
 
-	if val, ok := p.Args["env_vars"].([]interface{}); ok && val != nil && len(val) > 0 {
-		for _, v := range val {
-			_env := v.(map[string]interface{})
-			for _, env := range _pluginDetails.EnvVars {
-				if env.Key == _env["key"].(string) {
-					env.Value = _env["value"].(string)
-					break
-				}
-			}
-		}
+	in := pluginUpsertInput{ID: id}
+	if val, ok := p.Args["enable"].(bool); ok {
+		in.Enable = &val
 	}
-
 	if val, ok := p.Args["activate_status"].(protobuff.PluginActivateStatus); ok {
-		switch val {
-		case protobuff.PluginActivateStatus_PLUGIN_ACTIVATE_STATUS_ACTIVATED:
-			_pluginDetails.ActivateStatus = protobuff.PluginActivateStatus_PLUGIN_ACTIVATE_STATUS_DEACTIVATED
-			project.Settings.DefaultStoragePlugin = ""
-		case protobuff.PluginActivateStatus_PLUGIN_ACTIVATE_STATUS_DEACTIVATED:
-			_pluginDetails.ActivateStatus = 1
-			project.Settings.DefaultStoragePlugin = id
+		in.ActivateStatus = &val
+	}
+	if val, ok := p.Args["env_vars"].([]interface{}); ok && val != nil && len(val) > 0 {
+		for _, raw := range val {
+			env, ok := raw.(map[string]interface{})
+			if !ok {
+				continue
+			}
+			key, _ := env["key"].(string)
+			value, _ := env["value"].(string)
+			if key == "" {
+				continue
+			}
+			in.EnvVars = append(in.EnvVars, &protobuff.EnvVariable{Key: key, Value: value})
 		}
 	}
 
-	if len(project.Plugins) == 0 {
-		project.Plugins = append(project.Plugins, _pluginDetails)
-	} else {
-		for i, plugin := range project.Plugins {
-			if plugin.ID == id {
-				project.Plugins[i] = _pluginDetails
-				break
-			}
-		}
+	_pluginDetails, err := applyPluginUpsert(&project, catalog, in)
+	if err != nil {
+		return nil, err
 	}
 
 	err = s.SystemDriver.UpdateProject(cache.Ctx, &project, true)
 	if err != nil {
 		return nil, err
 	}
+	_ = s.ExpireGraphQLProjectCache(cache.Ctx, project.ID)
 
 	return _pluginDetails, nil
 }
@@ -2679,6 +2657,13 @@ func (s *GraphQLServer) UpsertFieldToModelResolverFn(p graphql.ResolveParams) (i
 	if parentField != "" {
 		//fieldInfo.RepeatedGroupIdentifier = repeatedGroupIdentifier
 		fieldInfo.ParentField = parentField
+	}
+
+	if val, ok := p.Args["plugin_id"].(string); ok {
+		fieldInfo.PluginID = strings.TrimSpace(val)
+	}
+	if val, ok := p.Args["plugin_field_type"].(string); ok {
+		fieldInfo.PluginFieldType = strings.TrimSpace(val)
 	}
 
 	param := s.NewParam(cache.Param)
