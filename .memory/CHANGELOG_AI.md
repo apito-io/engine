@@ -1,3 +1,24 @@
+## 2026-09-07 — noop mail logs AcceptURL
+
+- **Changed:** Noop `EmailSender` logs `accept <url>` when
+  `EmailSendRequest.AcceptURL` is set.
+- **Why:** Local Cloudflare still sends real mail; noop/dev runs need
+  the URL in stdout when Gmail is unreachable.
+- **Affected:** `services/email.go`. Uncommitted.
+
+---
+
+## 2026-09-06 — project transfer email + QuotaNote
+
+- **Changed:** `ComposeProjectTransfer`. `EmailSendRequest.QuotaNote`.
+  `AcceptProjectTransferURL`. Keep `TrialEndsAt` on the same struct.
+- **Why:** Transfer mail is not an invite; recipient needs quota copy.
+  Dropping `TrialEndsAt` broke engine compile.
+- **Affected:** `services/email.go`, `models/invite.go`, `models/email.go`,
+  `utility/date.go`. Uncommitted.
+
+---
+
 ## 2026-09-03 — plugin env overlay + event sink
 
 - **Changed:** Execute `contextData` gets per-project `env_vars`. REST

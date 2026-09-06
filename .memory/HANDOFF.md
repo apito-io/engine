@@ -1,19 +1,24 @@
-# Handoff — open-core 2026-09-03
+# Handoff — open-core 2026-09-07
 
-## Uncommitted
+## Uncommitted — project transfer email
 
-- Plugin activation helpers + tests.
-- `upsertPlugin` honors enable, does not invert activate_status, appends
-  new plugins, expires project cache. Does not rewrite DefaultStoragePlugin.
-- `project.rest` REST 403 unless activated + project id.
-- YAML capabilities; legacy `type: project` maps (strict in dev).
-- GraphQL `capabilities` / official bundle fields. `type` always system.
+- `ComposeProjectTransfer` in `services/email.go`.
+- `AcceptProjectTransferURL` in `models/invite.go`.
+- `EmailSendRequest` has `ActivateBy`, `TrialEndsAt`, **`QuotaNote`**.
+- Noop sender logs `accept <url>` so local runs without Gmail still
+  show the link in engine stdout.
+- `FormatReadableDate` in `utility/date.go`.
+
+## Also uncommitted
+
+- Plugin activation helpers + REST gate + YAML capabilities.
 
 ## Do not
 
 - Reuse protobuf type enum 0/1.
 - Change HashiCorp five-method interface.
+- Drop `TrialEndsAt` on `EmailSendRequest`.
 
 ## Last Updated
 
-2026-09-03
+2026-09-07
