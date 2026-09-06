@@ -55,7 +55,11 @@ func ConnectDisconnectParamBuilder(project *models.Project, uid string, connecti
 		var connValCheck *models.ConnectionType
 		// validate the relation to
 		for _, c := range modelType.Connections {
-			if c.Model == relationTo && c.KnownAs == "" {
+			if c == nil {
+				continue
+			}
+			modelMatches := c.Model == relationTo || ModelIDMatchesGraphQLField(c.Model, relationTo)
+			if modelMatches && c.KnownAs == "" {
 				connValCheck = c
 				knownAs = ""
 				break
@@ -85,7 +89,12 @@ func ConnectDisconnectParamBuilder(project *models.Project, uid string, connecti
 
 		// validate the relation to
 		for _, connection := range modelType.Connections {
-			if connection.Model == relationTo && connection.Type == "backward" && connection.KnownAs == knownAs {
+			if connection == nil {
+				continue
+			}
+			modelMatches := connection.Model == relationTo ||
+				ModelIDMatchesGraphQLField(connection.Model, relationTo)
+			if modelMatches && connection.Type == "backward" && connection.KnownAs == knownAs {
 
 				connParam.ForwardConnectionID = uid
 				connParam.ActionIDs = ids
@@ -113,42 +122,50 @@ func ConnectDisconnectParamBuilder(project *models.Project, uid string, connecti
 				// find forward
 				var forwardModelType *models.ModelType
 				for _, ct := range project.Schema.Models {
-					if ct.Name == relationTo {
+					if ct.Name == relationTo || ModelIDMatchesGraphQLField(ct.Name, relationTo) {
 						forwardModelType = ct
 						break
 					}
 				}
 
-				for _, _connection := range forwardModelType.Connections {
-					if _connection.Model == modelType.Name && _connection.Type == "forward" {
-						connParam.BackwardConnectionModelType = forwardModelType
-						connParam.ForwardConnectionType = _connection
-						if _connection.Relation == "has_one" {
-
-							identifier := SyntheticSystemRelationFieldIdentifier(_connection.Model, knownAs)
-
-							ij := &models.InjectableHasOneConnection{
-								ModelName: relationTo,
-								IDs:       ids,
-								Data: map[string]string{
-									identifier: uid,
-								},
-							}
-							if connParam.InjectableHasOneConnects == nil {
-								connParam.InjectableHasOneConnects = []*models.InjectableHasOneConnection{ij}
-							} else {
-								connParam.InjectableHasOneConnects = append(connParam.InjectableHasOneConnects, ij)
-							}
+				if forwardModelType != nil {
+					for _, _connection := range forwardModelType.Connections {
+						if _connection == nil {
+							continue
 						}
-						for _, ct := range project.Schema.Models {
-							if ct.Name == _connection.Model {
-								connParam.ForwardConnectionModelType = ct
-								break
+						peerMatches := _connection.Model == modelType.Name ||
+							ModelIDMatchesGraphQLField(_connection.Model, modelType.Name)
+						if peerMatches && _connection.Type == "forward" && _connection.KnownAs == knownAs {
+							connParam.BackwardConnectionModelType = forwardModelType
+							connParam.ForwardConnectionType = _connection
+							if _connection.Relation == "has_one" {
+
+								identifier := SyntheticSystemRelationFieldIdentifier(_connection.Model, knownAs)
+
+								ij := &models.InjectableHasOneConnection{
+									ModelName: relationTo,
+									IDs:       ids,
+									Data: map[string]string{
+										identifier: uid,
+									},
+								}
+								if connParam.InjectableHasOneConnects == nil {
+									connParam.InjectableHasOneConnects = []*models.InjectableHasOneConnection{ij}
+								} else {
+									connParam.InjectableHasOneConnects = append(connParam.InjectableHasOneConnects, ij)
+								}
 							}
+							for _, ct := range project.Schema.Models {
+								if ct.Name == _connection.Model || ModelIDMatchesGraphQLField(ct.Name, _connection.Model) {
+									connParam.ForwardConnectionModelType = ct
+									break
+								}
+							}
+							break
 						}
 					}
 				}
-			} else if connection.Model == relationTo && connection.Type == "forward" && connection.KnownAs == knownAs {
+			} else if modelMatches && connection.Type == "forward" && connection.KnownAs == knownAs {
 
 				connParam.ForwardConnectionID = uid
 				connParam.ActionIDs = ids
@@ -172,40 +189,48 @@ func ConnectDisconnectParamBuilder(project *models.Project, uid string, connecti
 						connParam.InjectableHasOneConnects = append(connParam.InjectableHasOneConnects, ij)
 					}
 				}
-				// find forward
+				// find reverse (must match KnownAs — dual has_one to same model)
 				var backwardModelType *models.ModelType
 				for _, ct := range project.Schema.Models {
-					if ct.Name == relationTo {
+					if ct.Name == relationTo || ModelIDMatchesGraphQLField(ct.Name, relationTo) {
 						backwardModelType = ct
 						break
 					}
 				}
-				for _, _connection := range backwardModelType.Connections {
-					if _connection.Model == modelType.Name && _connection.Type == "backward" {
-						connParam.BackwardConnectionModelType = backwardModelType
-						connParam.BackwardConnectionType = _connection
-						if _connection.Relation == "has_one" {
-
-							identifier := SyntheticSystemRelationFieldIdentifier(_connection.Model, knownAs)
-
-							ij := &models.InjectableHasOneConnection{
-								ModelName: relationTo,
-								IDs:       ids,
-								Data: map[string]string{
-									identifier: uid,
-								},
-							}
-							if connParam.InjectableHasOneConnects == nil {
-								connParam.InjectableHasOneConnects = []*models.InjectableHasOneConnection{ij}
-							} else {
-								connParam.InjectableHasOneConnects = append(connParam.InjectableHasOneConnects, ij)
-							}
+				if backwardModelType != nil {
+					for _, _connection := range backwardModelType.Connections {
+						if _connection == nil {
+							continue
 						}
-						for _, ct := range project.Schema.Models {
-							if ct.Name == _connection.Model {
-								connParam.ForwardConnectionModelType = ct
-								break
+						peerMatches := _connection.Model == modelType.Name ||
+							ModelIDMatchesGraphQLField(_connection.Model, modelType.Name)
+						if peerMatches && _connection.Type == "backward" && _connection.KnownAs == knownAs {
+							connParam.BackwardConnectionModelType = backwardModelType
+							connParam.BackwardConnectionType = _connection
+							if _connection.Relation == "has_one" {
+
+								identifier := SyntheticSystemRelationFieldIdentifier(_connection.Model, knownAs)
+
+								ij := &models.InjectableHasOneConnection{
+									ModelName: relationTo,
+									IDs:       ids,
+									Data: map[string]string{
+										identifier: uid,
+									},
+								}
+								if connParam.InjectableHasOneConnects == nil {
+									connParam.InjectableHasOneConnects = []*models.InjectableHasOneConnection{ij}
+								} else {
+									connParam.InjectableHasOneConnects = append(connParam.InjectableHasOneConnects, ij)
+								}
 							}
+							for _, ct := range project.Schema.Models {
+								if ct.Name == _connection.Model || ModelIDMatchesGraphQLField(ct.Name, _connection.Model) {
+									connParam.ForwardConnectionModelType = ct
+									break
+								}
+							}
+							break
 						}
 					}
 				}
@@ -217,4 +242,3 @@ func ConnectDisconnectParamBuilder(project *models.Project, uid string, connecti
 
 	return connParams, nil
 }
-
