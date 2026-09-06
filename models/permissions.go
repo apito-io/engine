@@ -31,7 +31,7 @@ type SchemaBuildPermission struct {
 
 func BuildPermissions(role string) *SchemaBuildPermission {
 	switch role {
-	case "admin":
+	case "admin", "owner":
 		return &SchemaBuildPermission{
 			CanQuery:        true,
 			CanCreateRecord: true,

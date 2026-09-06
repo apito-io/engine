@@ -356,7 +356,7 @@ func (s *GraphQLServer) RegisterUserResolverFn(p graphql.ResolveParams) (interfa
 	if !models.GeneralAuthEffective(authProject) {
 		return nil, errors.New("general authentication is disabled for this project")
 	}
-	result, err := s.createProjectEndUser(cache, authProject, p, /*forceRegistrationDefault*/ true)
+	result, err := s.createProjectEndUser(cache, authProject, p /*forceRegistrationDefault*/, true)
 	if err != nil {
 		s.NotifyEventSinkPlugins(ctx, cache.Project.ID, "error", map[string]interface{}{
 			"source": "signup",
@@ -402,7 +402,7 @@ func (s *GraphQLServer) CreateUserResolverFn(p graphql.ResolveParams) (interface
 	if err := requireProjectArg(p.Args, cache.Project.ID); err != nil {
 		return nil, err
 	}
-	return s.createProjectEndUser(cache, cache.Project, p, /*forceRegistrationDefault*/ false)
+	return s.createProjectEndUser(cache, cache.Project, p /*forceRegistrationDefault*/, false)
 }
 
 func (s *GraphQLServer) createProjectEndUser(

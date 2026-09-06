@@ -5,12 +5,12 @@ import (
 	"database/sql"
 	"testing"
 
-	"gitlab.com/apito.io/open_driver/project/projectauthusers"
 	"github.com/apito-io/engine/models"
 	"github.com/stretchr/testify/require"
 	"github.com/uptrace/bun"
 	"github.com/uptrace/bun/dialect/sqlitedialect"
 	_ "github.com/uptrace/bun/driver/sqliteshim"
+	"gitlab.com/apito.io/open_driver/project/projectauthusers"
 	"google.golang.org/api/idtoken"
 )
 
@@ -41,13 +41,13 @@ func TestResolveUserForGoogleLogin_AutoCreate(t *testing.T) {
 	svc, _ := newMemProjectUserService(t)
 	user, err := svc.ResolveUserForGoogleLogin("sub-new", "new@example.com", true, "", "", func() (*models.User, error) {
 		return svc.CreateUserRecord(&models.User{
-			ID:       "u-new",
-			Username: "u_new",
-			Email:    "new@example.com",
+			ID:        "u-new",
+			Username:  "u_new",
+			Email:     "new@example.com",
 			GoogleSub: "sub-new",
-			Role:     "none",
-			Provider: models.UserProviderGoogle,
-			Status:   models.UserStatusActive,
+			Role:      "none",
+			Provider:  models.UserProviderGoogle,
+			Status:    models.UserStatusActive,
 		}, "")
 	})
 	require.NoError(t, err)

@@ -285,6 +285,8 @@ type Config struct {
 	// as the outer server. Type: func(echo.Context, *ApplicationCache).
 	PostApplicationCacheHook interface{} `env:"-"`
 
+	PluginAttachGuard func(ctx context.Context, projectID, pluginID string) (allowUncataloged bool, err error) `env:"-"`
+
 	// SchemaObjectsExtensionHook runs inside BuildServerQueriesAndMutations right after
 	// InitPrivateObjects(). The pro layer uses it to AddFieldConfig on core schema objects
 	// (e.g. ModelType, ProjectModel) before the schema is sent through channels.

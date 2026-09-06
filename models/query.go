@@ -80,8 +80,8 @@ type QueryBuilder struct {
 	SkipWhereFilter   bool `json:"skip_where_filter"`
 	SkipDefaultFilter bool `json:"skip_default_filter"`
 
-	ReturnOnlyID        bool `json:"return_only_id"`
-	ReturnOnlyCount     bool `json:"return_only_count"`
+	ReturnOnlyID     bool `json:"return_only_id"`
+	ReturnOnlyCount  bool `json:"return_only_count"`
 	IsAggregateQuery bool `json:"is_aggregate_query"`
 
 	FinalQuery string `json:"final_query"`
@@ -89,8 +89,8 @@ type QueryBuilder struct {
 	Ext map[string]interface{} `json:"ext,omitempty"`
 
 	// RuntimeConfig and HookParam wire QueryFilterHook from AQL builder without importing drivers.
-	RuntimeConfig *Config               `json:"-"`
-	HookParam     *CommonSystemParams   `json:"-"`
+	RuntimeConfig *Config             `json:"-"`
+	HookParam     *CommonSystemParams `json:"-"`
 }
 
 type FilterInformation struct {

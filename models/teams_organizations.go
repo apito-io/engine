@@ -15,17 +15,17 @@ type UserTeam struct {
 }
 
 type UserProject struct {
-	UserID      string      `bun:"type:uuid,pk" json:"user_id" bson:"user_id,omitempty"`
-	ProjectID   string      `bun:"type:uuid,pk" json:"project_id" bson:"project_id,omitempty"`
-	Role        string      `bun:"role,type:text,nullzero" json:"role,omitempty" bson:"role,omitempty"`
-	Permissions string      `bun:"permissions,type:text,nullzero" json:"permissions,omitempty" bson:"permissions,omitempty"`
-	InviteStatus    string `bun:"invite_status,type:text,nullzero" json:"invite_status,omitempty" bson:"invite_status,omitempty"`
-	InvitedAt       string `bun:"invited_at,type:text,nullzero" json:"invited_at,omitempty" bson:"invited_at,omitempty"`
-	AcceptedAt      string `bun:"accepted_at,type:text,nullzero" json:"accepted_at,omitempty" bson:"accepted_at,omitempty"`
-	InviteExpiresAt string `bun:"invite_expires_at,type:text,nullzero" json:"invite_expires_at,omitempty" bson:"invite_expires_at,omitempty"`
-	InviteToken     string `bun:"invite_token,type:text,nullzero" json:"-" bson:"invite_token,omitempty"`
-	User        *SystemUser `bun:"rel:belongs-to,join:user_id=id" bson:"user,omitempty"`
-	Project     *Project    `bun:"rel:belongs-to,join:project_id=id" bson:"project,omitempty"`
+	UserID          string      `bun:"type:uuid,pk" json:"user_id" bson:"user_id,omitempty"`
+	ProjectID       string      `bun:"type:uuid,pk" json:"project_id" bson:"project_id,omitempty"`
+	Role            string      `bun:"role,type:text,nullzero" json:"role,omitempty" bson:"role,omitempty"`
+	Permissions     string      `bun:"permissions,type:text,nullzero" json:"permissions,omitempty" bson:"permissions,omitempty"`
+	InviteStatus    string      `bun:"invite_status,type:text,nullzero" json:"invite_status,omitempty" bson:"invite_status,omitempty"`
+	InvitedAt       string      `bun:"invited_at,type:text,nullzero" json:"invited_at,omitempty" bson:"invited_at,omitempty"`
+	AcceptedAt      string      `bun:"accepted_at,type:text,nullzero" json:"accepted_at,omitempty" bson:"accepted_at,omitempty"`
+	InviteExpiresAt string      `bun:"invite_expires_at,type:text,nullzero" json:"invite_expires_at,omitempty" bson:"invite_expires_at,omitempty"`
+	InviteToken     string      `bun:"invite_token,type:text,nullzero" json:"-" bson:"invite_token,omitempty"`
+	User            *SystemUser `bun:"rel:belongs-to,join:user_id=id" bson:"user,omitempty"`
+	Project         *Project    `bun:"rel:belongs-to,join:project_id=id" bson:"project,omitempty"`
 }
 
 type TeamProject struct {
@@ -67,12 +67,12 @@ type Team struct {
 }
 
 type Organization struct {
-	XKey        string        `json:"_key,omitempty" firestore:"_key,omitempty" bson:"_key,omitempty"`
-	ID          string        `bun:"type:uuid,pk" json:"id,omitempty" firestore:"id,omitempty" bson:"_id,omitempty"`
-	Name        string        `json:"name,omitempty" firestore:"name,omitempty" bson:"name,omitempty"`
-	Description string        `json:"description,omitempty" firestore:"description,omitempty" bson:"description,omitempty"`
+	XKey        string `json:"_key,omitempty" firestore:"_key,omitempty" bson:"_key,omitempty"`
+	ID          string `bun:"type:uuid,pk" json:"id,omitempty" firestore:"id,omitempty" bson:"_id,omitempty"`
+	Name        string `json:"name,omitempty" firestore:"name,omitempty" bson:"name,omitempty"`
+	Description string `json:"description,omitempty" firestore:"description,omitempty" bson:"description,omitempty"`
 	// Owner/creator FK for SystemUser.Organization has-many (join:id=user_id).
-	UserID string `bun:"user_id,type:uuid" json:"user_id,omitempty" firestore:"user_id,omitempty" bson:"user_id,omitempty"`
+	UserID string        `bun:"user_id,type:uuid" json:"user_id,omitempty" firestore:"user_id,omitempty" bson:"user_id,omitempty"`
 	Teams  []*Team       `bun:"m2m:organization_teams,join:Organization=Team" json:"teams,omitempty" firestore:"teams,omitempty" bson:"teams,omitempty"`
 	Users  []*SystemUser `bun:"m2m:user_organizations,join:Organization=User" json:"users,omitempty" firestore:"users,omitempty" bson:"users,omitempty"`
 }

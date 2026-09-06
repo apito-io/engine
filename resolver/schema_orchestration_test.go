@@ -2,20 +2,20 @@ package resolver
 
 import (
 	"context"
-	"errors"
 	stdsql "database/sql"
+	"errors"
 	"sync"
 	"testing"
 
 	_const "github.com/apito-io/engine/const"
-	projectsql "gitlab.com/apito.io/open_driver/project/sqlite"
-	"gitlab.com/apito.io/open_driver/project/sqlcommon"
 	"github.com/apito-io/engine/interfaces"
 	"github.com/apito-io/engine/models"
 	schemasvc "github.com/apito-io/engine/services/schema"
 	"github.com/uptrace/bun"
 	"github.com/uptrace/bun/dialect/sqlitedialect"
 	"github.com/uptrace/bun/driver/sqliteshim"
+	"gitlab.com/apito.io/open_driver/project/sqlcommon"
+	projectsql "gitlab.com/apito.io/open_driver/project/sqlite"
 )
 
 func TestApplySchemaDDLToBaseAndTenants_PropagatesTenantError(t *testing.T) {
@@ -69,8 +69,8 @@ func (t *trackingSystemDriver) UpdateProject(ctx context.Context, project *model
 	return nil
 }
 
-func (t *trackingSystemDriver) RunMigration(context.Context) error                      { return nil }
-func (t *trackingSystemDriver) EnsureSystemBootstrap(context.Context) error             { return nil }
+func (t *trackingSystemDriver) RunMigration(context.Context) error          { return nil }
+func (t *trackingSystemDriver) EnsureSystemBootstrap(context.Context) error { return nil }
 func (t *trackingSystemDriver) CreateProject(context.Context, string, *models.Project) (*models.Project, error) {
 	return nil, nil
 }
@@ -111,7 +111,7 @@ func (t *trackingSystemDriver) CreateUser(context.Context, *models.User) (*model
 func (t *trackingSystemDriver) GetUser(context.Context, string, string) (*models.User, error) {
 	return nil, nil
 }
-func (t *trackingSystemDriver) UpdateUser(context.Context, *models.User) error { return nil }
+func (t *trackingSystemDriver) UpdateUser(context.Context, *models.User) error   { return nil }
 func (t *trackingSystemDriver) DeleteUser(context.Context, string, string) error { return nil }
 func (t *trackingSystemDriver) SearchProjectUsers(context.Context, string, string, int, int) ([]*models.User, int, error) {
 	return nil, 0, nil
@@ -134,7 +134,9 @@ func (t *trackingSystemDriver) ListUsersByGoogleSub(context.Context, string, str
 func (t *trackingSystemDriver) AddATeamMemberToProject(context.Context, *models.TeamMemberAddRequest) error {
 	return nil
 }
-func (t *trackingSystemDriver) RemoveATeamMemberFromProject(context.Context, string, string) error { return nil }
+func (t *trackingSystemDriver) RemoveATeamMemberFromProject(context.Context, string, string) error {
+	return nil
+}
 func (t *trackingSystemDriver) SearchFunctions(context.Context, *models.CommonSystemParams) (*models.SearchResponse[models.ApitoFunction], error) {
 	return nil, nil
 }
@@ -150,7 +152,9 @@ func (t *trackingSystemDriver) GetSystemUsers(context.Context, []string) ([]*mod
 func (t *trackingSystemDriver) CreateSystemUser(context.Context, *models.SystemUser) (*models.SystemUser, error) {
 	return nil, nil
 }
-func (t *trackingSystemDriver) UpdateSystemUser(context.Context, *models.SystemUser, bool) error { return nil }
+func (t *trackingSystemDriver) UpdateSystemUser(context.Context, *models.SystemUser, bool) error {
+	return nil
+}
 func (t *trackingSystemDriver) SearchSystemUsers(context.Context, *models.CommonSystemParams) (*models.SearchResponse[models.SystemUser], error) {
 	return nil, nil
 }
@@ -160,7 +164,9 @@ func (t *trackingSystemDriver) CheckProjectWithRoles(context.Context, string, st
 func (t *trackingSystemDriver) SearchResource(context.Context, *models.CommonSystemParams) (*models.SearchResponse[any], error) {
 	return nil, nil
 }
-func (t *trackingSystemDriver) GetTeams(context.Context, string) ([]*models.Team, error) { return nil, nil }
+func (t *trackingSystemDriver) GetTeams(context.Context, string) ([]*models.Team, error) {
+	return nil, nil
+}
 func (t *trackingSystemDriver) GetOrganizations(context.Context, string) (*models.SearchResponse[models.Organization], error) {
 	return nil, nil
 }

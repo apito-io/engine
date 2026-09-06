@@ -93,14 +93,14 @@ func init() {
 	projectStorageSettingsObject = graphql.NewObject(graphql.ObjectConfig{
 		Name: "ProjectStorageSettings",
 		Fields: graphql.Fields{
-			"use_free_cloud_storage":  &graphql.Field{Type: graphql.NewNonNull(graphql.Boolean)},
-			"endpoint":              &graphql.Field{Type: graphql.String},
-			"region":                &graphql.Field{Type: graphql.String},
-			"bucket":                &graphql.Field{Type: graphql.String},
-			"access_key_id":         &graphql.Field{Type: graphql.String},
-			"has_secret_access_key": &graphql.Field{Type: graphql.NewNonNull(graphql.Boolean)},
-			"public_base_url":       &graphql.Field{Type: graphql.String},
-			"force_path_style":      &graphql.Field{Type: graphql.Boolean},
+			"use_free_cloud_storage": &graphql.Field{Type: graphql.NewNonNull(graphql.Boolean)},
+			"endpoint":               &graphql.Field{Type: graphql.String},
+			"region":                 &graphql.Field{Type: graphql.String},
+			"bucket":                 &graphql.Field{Type: graphql.String},
+			"access_key_id":          &graphql.Field{Type: graphql.String},
+			"has_secret_access_key":  &graphql.Field{Type: graphql.NewNonNull(graphql.Boolean)},
+			"public_base_url":        &graphql.Field{Type: graphql.String},
+			"force_path_style":       &graphql.Field{Type: graphql.Boolean},
 		},
 	})
 
@@ -205,8 +205,8 @@ func projectAuthenticationSettingsSnapshot(project *models.Project) map[string]i
 func projectStorageSettingsSnapshot(project *models.Project) map[string]interface{} {
 	useFree := models.UseFreeCloudStorageEffective(project)
 	out := map[string]interface{}{
-		"use_free_cloud_storage":  useFree,
-		"has_secret_access_key": models.HasSecretAccessKeyConfigured(project),
+		"use_free_cloud_storage": useFree,
+		"has_secret_access_key":  models.HasSecretAccessKeyConfigured(project),
 	}
 	if project == nil || project.StorageSettings == nil || useFree {
 		return out

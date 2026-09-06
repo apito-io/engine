@@ -10,10 +10,10 @@ func TestResolveProjectStorageConfigFreeCloud(t *testing.T) {
 		},
 	}
 	cfg := &Config{
-		FreeCloudDefaultS3AccessKey:  "key",
-		FreeCloudDefaultS3SecretKey:  "secret",
-		FreeCloudDefaultS3Endpoint:     "https://r2.example.com",
-		FreeCloudDefaultS3BucketName:   "bucket",
+		FreeCloudDefaultS3AccessKey:      "key",
+		FreeCloudDefaultS3SecretKey:      "secret",
+		FreeCloudDefaultS3Endpoint:       "https://r2.example.com",
+		FreeCloudDefaultS3BucketName:     "bucket",
 		FreeCloudDefaultS3ForcePathStyle: true,
 	}
 	got, err := ResolveProjectStorageConfig(p, cfg)

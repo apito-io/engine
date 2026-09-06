@@ -12,10 +12,10 @@ func TestApplyUpdateKeepsOAuthSecretWhenOmitted(t *testing.T) {
 		},
 	}
 	next, err := ApplyUpdateProjectAuthenticationInput(p, map[string]interface{}{
-		"enable_facebook_auth":          true,
-		"facebook_client_id":            "fb-id-2",
-		"facebook_oauth_redirect_uri":   "https://app.example.com/cb2",
-		"facebook_client_secret":        "",
+		"enable_facebook_auth":        true,
+		"facebook_client_id":          "fb-id-2",
+		"facebook_oauth_redirect_uri": "https://app.example.com/cb2",
+		"facebook_client_secret":      "",
 	})
 	if err != nil {
 		t.Fatal(err)

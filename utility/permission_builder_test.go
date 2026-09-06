@@ -79,6 +79,14 @@ func TestValidateCreateScopeRejectsOwn(t *testing.T) {
 	}
 }
 
+func TestEffectivePermissionReadOnlyProjectWinsOverAdmin(t *testing.T) {
+	role := &models.Role{ID: "admin", IsAdmin: true, ReadOnlyProject: true}
+	perm := EffectivePermission(role, "food_order")
+	if perm.Read != "all" || perm.Create != "none" || perm.Update != "none" || perm.Delete != "none" {
+		t.Fatalf("read-only must win over admin: %#v", perm)
+	}
+}
+
 func TestEffectivePermissionDemoReadOnly(t *testing.T) {
 	role := &models.Role{ID: "demo", SystemGenerated: true}
 	perm := EffectivePermission(role, "food_order")

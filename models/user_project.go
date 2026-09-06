@@ -13,7 +13,7 @@ type MetaField struct {
 	CreatedBy      *SystemUser `json:"created_by,omitempty" firestore:"title,omitempty" bson:"created_by,omitempty"`
 	LastModifiedBy *SystemUser `json:"last_modified_by,omitempty" firestore:"created_by,omitempty" bson:"last_modified_by,omitempty"`
 
-	Status string `json:"status,omitempty" firestore:"status,omitempty" bson:"status,omitempty"`
+	Status         string `json:"status,omitempty" firestore:"status,omitempty" bson:"status,omitempty"`
 	RootRevisionID string `json:"root_revision_id,omitempty" firestore:"root_revision_id,omitempty" bson:"root_revision_id,omitempty"`
 	Revision       bool   `json:"revision,omitempty" firestore:"revision,omitempty" bson:"revision,omitempty"`
 	RevisionAt     string `json:"revision_at,omitempty" firestore:"revision_at,omitempty" bson:"revision_at,omitempty"`
@@ -129,8 +129,8 @@ type Project struct {
 	XKey string `json:"_key,omitempty" firestore:"_key,omitempty" bson:"_key,omitempty"`
 	ID   string `bun:"type:uuid,pk" json:"id,omitempty" firestore:"id,omitempty" bson:"_id,omitempty"`
 
-	Name        string                `json:"name,omitempty" firestore:"name,omitempty" bson:"name,omitempty"`
-	Description string                `json:"description,omitempty" firestore:"description,omitempty" bson:"description,omitempty"`
+	Name        string `json:"name,omitempty" firestore:"name,omitempty" bson:"name,omitempty"`
+	Description string `json:"description,omitempty" firestore:"description,omitempty" bson:"description,omitempty"`
 	// ProjectIcon is an optional branding URL (or media file URL) for invoices / receipts.
 	ProjectIcon string                `json:"project_icon,omitempty" firestore:"project_icon,omitempty" bson:"project_icon,omitempty"`
 	Schema      *ProjectSchema        `bun:"rel:belongs-to,join:id=project_id" json:"schema,omitempty" firestore:"schema,omitempty" bson:"schema,omitempty"`
@@ -142,16 +142,16 @@ type Project struct {
 
 	Tokens []*ProjectToken `bun:"rel:has-many" json:"tokens,omitempty" firestore:"tokens,omitempty" bson:"tokens,omitempty"`
 
-	Roles      map[string]*Role   `bun:"type:jsonb" json:"roles,omitempty" protobuf_key:"bytes,1,opt,name=key,proto3" protobuf_val:"bytes,2,opt,name=value,proto3" firestore:"roles,omitempty" bson:"roles,omitempty"`
+	Roles map[string]*Role `bun:"type:jsonb" json:"roles,omitempty" protobuf_key:"bytes,1,opt,name=key,proto3" protobuf_val:"bytes,2,opt,name=value,proto3" firestore:"roles,omitempty" bson:"roles,omitempty"`
 	// Plans are project-defined permission ceilings keyed by slug (free/paid/…).
 	// Assigned per tenant via pro_tenants.plan_tier. Nil/empty is treated as fully permissive.
 	// Only free is system_generated; other tiers are operator-owned customs.
 	Plans map[string]*Plan `bun:"type:jsonb" json:"plans,omitempty" firestore:"plans,omitempty" bson:"plans,omitempty"`
 	// PlanSeedOmissions lists default seed slugs the operator removed so EnsureProjectPlansSeeds
 	// does not recreate them. Free is never omitted. Legacy paid_* seeds are no longer re-seeded.
-	PlanSeedOmissions []string `bun:"type:jsonb" json:"plan_seed_omissions,omitempty" firestore:"plan_seed_omissions,omitempty" bson:"plan_seed_omissions,omitempty"`
-	Driver     *DriverCredentials `bun:"rel:belongs-to,join:id=project_id" json:"driver,omitempty"  firestore:"driver,omitempty" bson:"driver,omitempty"`
-	TempBanned bool               `json:"temp_banned,omitempty" firestore:"temp_banned,omitempty" bson:"temp_banned,omitempty"`
+	PlanSeedOmissions []string           `bun:"type:jsonb" json:"plan_seed_omissions,omitempty" firestore:"plan_seed_omissions,omitempty" bson:"plan_seed_omissions,omitempty"`
+	Driver            *DriverCredentials `bun:"rel:belongs-to,join:id=project_id" json:"driver,omitempty"  firestore:"driver,omitempty" bson:"driver,omitempty"`
+	TempBanned        bool               `bun:"temp_banned,nullzero" json:"temp_banned,omitempty" firestore:"temp_banned,omitempty" bson:"temp_banned,omitempty"`
 
 	ProjectTemplate string `json:"project_template,omitempty" firestore:"project_template,omitempty" bson:"project_template,omitempty"`
 
@@ -172,8 +172,6 @@ type Project struct {
 	StorageSettings        *StorageSettings        `json:"storage_settings,omitempty" firestore:"storage_settings,omitempty" bson:"storage_settings,omitempty"`
 }
 
-
-
 type SyncProject struct {
 	ProjectID                string `bun:"type:uuid,pk" json:"project_id,omitempty" firestore:"project_id,omitempty" bson:"_id,omitempty"`
 	SyncedTokenUsed          string `json:"synced_token_used,omitempty" firestore:"synced_token_used,omitempty" bson:"synced_token_used,omitempty"`
@@ -189,4 +187,14 @@ type ProjectWithRoles struct {
 	Permissions     []string    `json:"permissions,omitempty" firestore:"permissions,omitempty" bson:"permissions,omitempty"`
 	InviteStatus    string      `json:"invite_status,omitempty" firestore:"invite_status,omitempty" bson:"invite_status,omitempty"`
 	InviteExpiresAt string      `json:"invite_expires_at,omitempty" firestore:"invite_expires_at,omitempty" bson:"invite_expires_at,omitempty"`
+}
+
+// ApplyProjectBillingLock marks the user read-only when the project is frozen/suspended.
+func ApplyProjectBillingLock(user *SystemUser, project *Project) {
+	if user == nil || project == nil {
+		return
+	}
+	if project.TempBanned {
+		user.ReadOnlyProject = true
+	}
 }

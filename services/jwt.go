@@ -256,6 +256,7 @@ func (s *JWTService) GenerateLoginIDToken(ctx context.Context, projectWithRoles 
 	}
 
 	user := projectWithRoles.User
+	models.ApplyProjectBillingLock(user, projectWithRoles.Project)
 
 	token := jwt.New(jwt.SigningMethodRS512)
 

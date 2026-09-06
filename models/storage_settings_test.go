@@ -71,8 +71,8 @@ func TestProjectStorageConfiguredFreeCloud(t *testing.T) {
 	cfg := &Config{
 		FreeCloudDefaultS3AccessKey:  "key",
 		FreeCloudDefaultS3SecretKey:  "secret",
-		FreeCloudDefaultS3Endpoint:     "https://r2.example.com",
-		FreeCloudDefaultS3BucketName:   "bucket",
+		FreeCloudDefaultS3Endpoint:   "https://r2.example.com",
+		FreeCloudDefaultS3BucketName: "bucket",
 	}
 	if !ProjectStorageConfigured(p, cfg) {
 		t.Fatal("expected free cloud configured")

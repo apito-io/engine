@@ -172,10 +172,10 @@ func (g *GraphCtrl) PluginUpload(router echo.Context) error {
 
 	param := cache.Param
 
-	if param.Role.ID == "demo" && param.Role.SystemGenerated {
+	if param.Role.ReadOnlyProject || (param.Role.ID == "demo" && param.Role.SystemGenerated) {
 		return router.JSON(http.StatusBadRequest, models.HttpResponse{
 			Code:    http.StatusBadRequest,
-			Message: "You Cant Change Anything in a Demo Project",
+			Message: "Project is read-only (billing grace ended or demo)",
 		})
 	}
 

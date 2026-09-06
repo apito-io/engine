@@ -5,12 +5,12 @@ import (
 	"testing"
 
 	_const "github.com/apito-io/engine/const"
-	coresqlite "gitlab.com/apito.io/open_driver/project/sqlite"
 	"github.com/apito-io/engine/interfaces"
 	"github.com/apito-io/engine/models"
 	"github.com/uptrace/bun"
 	"github.com/uptrace/bun/dialect/sqlitedialect"
 	"github.com/uptrace/bun/driver/sqliteshim"
+	coresqlite "gitlab.com/apito.io/open_driver/project/sqlite"
 )
 
 func testSQLiteProjectDriver(t *testing.T) interfaces.ProjectDBInterface {

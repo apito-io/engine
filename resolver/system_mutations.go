@@ -695,89 +695,6 @@ func (s *GraphQLServer) UpdateProjectResolverFn(p graphql.ResolveParams) (interf
 
 	}
 
-	if val, ok := p.Args["add_team_member"].(map[string]interface{}); ok && val != nil {
-
-		req := models.TeamMemberAddRequest{
-			ProjectID: param.ProjectID,
-		}
-
-		if val, ok := val["email"].(string); ok {
-			req.Email = val
-		} else {
-			return nil, errors.New("email is Required")
-		}
-
-		if val, ok := val["role"].(string); ok {
-			req.Role = val
-		}
-		req.Role = models.NormalizeMembershipRole(req.Role, false)
-
-		if vals, ok := val["administrative_permissions"].([]interface{}); ok {
-			var permissions []string
-			for _, v := range vals {
-				permissions = append(permissions, v.(string))
-			}
-			req.Permissions = models.MembershipPermissions(permissions, false)
-		}
-
-		user, created, err := s.resolveOrCreateSystemUserByEmail(cache.Ctx, req.Email, projectId)
-		if err != nil {
-			return nil, err
-		}
-
-		req.UserID = user.ID
-
-		adminCheck, err := s.SystemDriver.CheckProjectWithRoles(cache.Ctx, param.UserID, req.ProjectID)
-		if err != nil {
-			return nil, err
-		}
-		if err := requireWorkspaceMemberAdmin(adminCheck); err != nil {
-			return nil, err
-		}
-
-		rawToken, tokenHash, err := models.NewInviteToken()
-		if err != nil {
-			return nil, err
-		}
-		existing, _ := s.lookupUserProjectGrant(cache.Ctx, user.ID, req.ProjectID)
-		models.StampInviteOnRequest(&req, existing, tokenHash, time.Now().UTC(), s.inviteTTL())
-
-		err = s.SystemDriver.AddATeamMemberToProject(cache.Ctx, &req)
-		if err != nil {
-			return nil, err
-		}
-
-		tempPass := ""
-		if created {
-			tempPass = user.TempPassword
-		}
-		inviteNames := []string{}
-		if project != nil && strings.TrimSpace(project.Name) != "" {
-			inviteNames = []string{project.Name}
-		}
-		s.sendTeamInviteEmail(user, inviteNames, tempPass, models.AcceptInviteURL(s.corsOrigin(), rawToken))
-	}
-
-	if val, ok := p.Args["remove_team_member"].(map[string]interface{}); ok {
-		var memberId string
-		if val, ok := val["member_id"].(string); ok {
-			memberId = val
-		} else {
-			return nil, errors.New("member ID is Required")
-		}
-		adminCheck, err := s.SystemDriver.CheckProjectWithRoles(cache.Ctx, param.UserID, projectId)
-		if err != nil {
-			return nil, err
-		}
-		if err := requireWorkspaceMemberAdmin(adminCheck); err != nil {
-			return nil, err
-		}
-		err = s.SystemDriver.RemoveATeamMemberFromProject(cache.Ctx, projectId, memberId)
-		if err != nil {
-			return nil, err
-		}
-	}
-
 	/* 	if plugins, ok := p.Args["plugins"].(map[string]interface{}); ok {
 		if project.Plugins == nil {
 			project.Plugins = []*models.SavedPluginDetails{}
@@ -1051,6 +968,18 @@ func (s *GraphQLServer) UpsertPluginResolverFn(p graphql.ResolveParams) (interfa
 				ActivateStatus: plugin.ActivateStatus,
 				LoadStatus:     plugin.LoadStatus,
 				Enable:         plugin.Enable,
+			}
+		}
+	}
+
+	if catalog == nil && findProjectPlugin(project.Plugins, id) == nil {
+		if s.Cfg != nil && s.Cfg.PluginAttachGuard != nil {
+			ok, err := s.Cfg.PluginAttachGuard(cache.Ctx, project.ID, id)
+			if err != nil {
+				return nil, err
+			}
+			if ok {
+				catalog = &models.SavedPluginDetails{ProjectID: project.ID, ID: id, Enable: true}
 			}
 		}
 	}

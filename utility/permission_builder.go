@@ -120,6 +120,14 @@ func EffectivePermission(role *models.Role, modelName string) *models.APIPermiss
 	if role == nil {
 		return noneAPIPermission()
 	}
+	if role.ReadOnlyProject {
+		return &models.APIPermission{
+			Read:   "all",
+			Create: "none",
+			Update: "none",
+			Delete: "none",
+		}
+	}
 	if RoleBypassesDataACL(role) {
 		return allAPIPermission()
 	}

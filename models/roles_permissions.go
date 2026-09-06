@@ -55,8 +55,8 @@ type Plan struct {
 	SystemGenerated bool           `json:"system_generated,omitempty" firestore:"system_generated,omitempty" bson:"system_generated,omitempty"`
 
 	// Monetization (ApitoProjectPayment) — optional list price + store SKUs. Not used by ApitoPayment (platform Paddle).
-	Currency       string  `json:"currency,omitempty" firestore:"currency,omitempty" bson:"currency,omitempty"`               // derived from default prices[] row
-	PriceMonthly   float64 `json:"price_monthly,omitempty" firestore:"price_monthly,omitempty" bson:"price_monthly,omitempty"` // derived from default prices[] row
+	Currency       string  `json:"currency,omitempty" firestore:"currency,omitempty" bson:"currency,omitempty"`                      // derived from default prices[] row
+	PriceMonthly   float64 `json:"price_monthly,omitempty" firestore:"price_monthly,omitempty" bson:"price_monthly,omitempty"`       // derived from default prices[] row
 	PlayProductID  string  `json:"play_product_id,omitempty" firestore:"play_product_id,omitempty" bson:"play_product_id,omitempty"` // legacy; prefer ProviderProducts
 	PlayBasePlanID string  `json:"play_base_plan_id,omitempty" firestore:"play_base_plan_id,omitempty" bson:"play_base_plan_id,omitempty"`
 	PaddlePriceID  string  `json:"paddle_price_id,omitempty" firestore:"paddle_price_id,omitempty" bson:"paddle_price_id,omitempty"`

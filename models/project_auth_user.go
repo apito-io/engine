@@ -17,17 +17,17 @@ const (
 type ProjectAuthUser struct {
 	bun.BaseModel `bun:"table:users,alias:u"`
 
-	ID        string `bun:"id,pk" json:"id"`
-	TenantID  string `bun:"tenant_id,nullzero" json:"tenant_id,omitempty"`
-	Username  string `bun:"username,notnull" json:"-"`
-	Email     string `bun:"email" json:"email,omitempty"`
-	Phone     string `bun:"phone,nullzero" json:"phone,omitempty"`
-	Secret    string `bun:"secret" json:"-"`
-	Role      string `bun:"role,notnull" json:"role"`
-	Provider  string `bun:"provider,notnull" json:"provider"`
-	GoogleSub string `bun:"google_sub" json:"google_sub,omitempty"`
-	OAuthSub  string `bun:"oauth_sub" json:"oauth_sub,omitempty"`
-	Status    string `bun:"status,notnull" json:"status"`
+	ID        string    `bun:"id,pk" json:"id"`
+	TenantID  string    `bun:"tenant_id,nullzero" json:"tenant_id,omitempty"`
+	Username  string    `bun:"username,notnull" json:"-"`
+	Email     string    `bun:"email" json:"email,omitempty"`
+	Phone     string    `bun:"phone,nullzero" json:"phone,omitempty"`
+	Secret    string    `bun:"secret" json:"-"`
+	Role      string    `bun:"role,notnull" json:"role"`
+	Provider  string    `bun:"provider,notnull" json:"provider"`
+	GoogleSub string    `bun:"google_sub" json:"google_sub,omitempty"`
+	OAuthSub  string    `bun:"oauth_sub" json:"oauth_sub,omitempty"`
+	Status    string    `bun:"status,notnull" json:"status"`
 	CreatedAt time.Time `bun:"created_at,nullzero" json:"created_at"`
 	UpdatedAt time.Time `bun:"updated_at,nullzero" json:"updated_at"`
 }

@@ -804,6 +804,9 @@ func (s *GraphQLServer) GetApplicationCache(router echo.Context) (*models.Applic
 	if err != nil {
 		return nil, err
 	}
+	if _project != nil && _project.TempBanned && param != nil && param.Role != nil {
+		param.Role.ReadOnlyProject = true
+	}
 	cache := &models.ApplicationCache{
 		Ctx:     ctx,
 		Project: _project,
@@ -890,7 +893,7 @@ func (s *GraphQLServer) BuildSystemParam(i echo.Context, project *models.Project
 		} else if param.Role.ID == "demo" {
 			param.Role.SystemGenerated = true
 			param.Role.IsAdmin = false
-		} else if param.Role.ID == "team" {
+		} else if param.Role.ID == "team" || param.Role.ID == "developer" || param.Role.ID == "viewer" {
 			param.Role.SystemGenerated = true
 			param.Role.IsAdmin = false
 		} else if param.Role.ID == "owner" {
@@ -1080,12 +1083,17 @@ func (s *GraphQLServer) buildCommonSystemParam(i echo.Context) (*models.CommonSy
 		if param.Role.ID == "demo" {
 			param.Role.SystemGenerated = true
 			param.Role.IsAdmin = false
-		} else if param.Role.ID == "team" {
+		} else if param.Role.ID == "team" || param.Role.ID == "developer" || param.Role.ID == "viewer" {
 			param.Role.SystemGenerated = true
 			param.Role.IsAdmin = false
 		}
 	}
 	return &param, nil
+}
+
+// BuildCommonSystemParam is the exported form for Cloud/Pro resolvers.
+func (s *GraphQLServer) BuildCommonSystemParam(i echo.Context) (*models.CommonSystemParams, error) {
+	return s.buildCommonSystemParam(i)
 }
 
 /*func (s *GraphQLServer) SetUploadService(service *services.UploadService) {

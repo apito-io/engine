@@ -1,9 +1,9 @@
 package models
 
 type JWTTokens struct {
-	AccessToken  string `json:"access_token"`
-	IDToken      string `json:"id_token"`
-	RefreshToken string `json:"refresh_token"`
+	AccessToken  string                 `json:"access_token"`
+	IDToken      string                 `json:"id_token"`
+	RefreshToken string                 `json:"refresh_token"`
 	Ext          map[string]interface{} `json:"ext,omitempty"`
 }
 
@@ -29,7 +29,7 @@ type TokenClaims struct {
 
 	ExpireAt int64 `json:"expire_at"` // unix timestamp
 
-	ProjectIDs []string `json:"project_ids"` // ['project_id_1', 'project_id_2']
-	Scopes     []string `json:"scopes"`      // ['read', 'write']
+	ProjectIDs []string               `json:"project_ids"` // ['project_id_1', 'project_id_2']
+	Scopes     []string               `json:"scopes"`      // ['read', 'write']
 	Ext        map[string]interface{} `json:"ext,omitempty"`
 }

@@ -51,12 +51,12 @@ type GraphQLIncomingRequest struct {
 }
 
 type ApplicationCache struct {
-	Ctx         context.Context         `json:"ctx,omitempty"`
-	Project     *Project                `json:"project,omitempty"`
-	Param       *CommonSystemParams     `json:"param,omitempty"`
-	RawSchemas  *RawSchema              `json:"raw_schema,omitempty"`
-	Dataloaders map[string]*dlv6.Loader `json:"dataloaders,omitempty"`
-	PluginSchemasRegistered map[string]bool `json:"-"`
+	Ctx                     context.Context         `json:"ctx,omitempty"`
+	Project                 *Project                `json:"project,omitempty"`
+	Param                   *CommonSystemParams     `json:"param,omitempty"`
+	RawSchemas              *RawSchema              `json:"raw_schema,omitempty"`
+	Dataloaders             map[string]*dlv6.Loader `json:"dataloaders,omitempty"`
+	PluginSchemasRegistered map[string]bool         `json:"-"`
 
 	IncomingRequest []*IncomingRequest      `json:"incoming_request"`
 	GraphqlRequest  *GraphQLIncomingRequest `json:"graphql_request,omitempty"`
@@ -99,8 +99,8 @@ type IncomingRequest struct {
 }
 
 type CommonSystemParams struct {
-	Role          *Role  `json:"role,omitempty"`
-	Plan          string `json:"plan,omitempty"`
+	Role *Role  `json:"role,omitempty"`
+	Plan string `json:"plan,omitempty"`
 	// ActivePlan is the request-scoped plan ceiling (not persisted). Set by pro SaaS clamp.
 	ActivePlan    *Plan  `json:"-"`
 	UserID        string `json:"user_id,omitempty"`
@@ -133,8 +133,8 @@ type CommonSystemParams struct {
 	// AllowUnscopedSystemUserList lets searchPlatformAccounts list system_users
 	// without an email/name filter. Team invite searchSystemUsers must not set this.
 	AllowUnscopedSystemUserList bool `json:"-"`
-	IsDataloaderRequest             bool `json:"is_dataloader_request,omitempty"`
-	IsIntersectionResult            bool `json:"is_intersection_result,omitempty"`
+	IsDataloaderRequest         bool `json:"is_dataloader_request,omitempty"`
+	IsIntersectionResult        bool `json:"is_intersection_result,omitempty"`
 
 	// these three used in intersection of two collections
 	SkipSort          bool `json:"skip_sort,omitempty"`
@@ -208,10 +208,10 @@ type EdgeRelation struct {
 	To       string `json:"to,omitempty" bson:"to,omitempty"`
 	ToID     string `json:"to_id,omitempty" bson:"to_id,omitempty"`
 
-	Role        string   `json:"role,omitempty" bson:"role,omitempty"`
-	KnownAs     string   `json:"known_as,omitempty" bson:"known_as,omitempty"`
-	Permissions []string `json:"permissions,omitempty" bson:"permissions,omitempty"`
-	CreatedAt   string   `json:"created_at,omitempty" bson:"created_at,omitempty"`
+	Role        string                 `json:"role,omitempty" bson:"role,omitempty"`
+	KnownAs     string                 `json:"known_as,omitempty" bson:"known_as,omitempty"`
+	Permissions []string               `json:"permissions,omitempty" bson:"permissions,omitempty"`
+	CreatedAt   string                 `json:"created_at,omitempty" bson:"created_at,omitempty"`
 	Ext         map[string]interface{} `json:"ext,omitempty" bson:"ext,omitempty"`
 }
 

@@ -7,14 +7,14 @@ import (
 )
 
 const (
-	storageEnvProjectID          = "PROJECT_ID"
-	storageEnvEndpoint           = "STORAGE_ENDPOINT"
-	storageEnvBucket             = "STORAGE_BUCKET"
-	storageEnvAccessKeyID        = "STORAGE_ACCESS_KEY_ID"
-	storageEnvSecretAccessKey    = "STORAGE_SECRET_ACCESS_KEY"
-	storageEnvRegion             = "STORAGE_REGION"
-	storageEnvPublicBaseURL      = "STORAGE_PUBLIC_BASE_URL"
-	storageEnvForcePathStyle     = "STORAGE_FORCE_PATH_STYLE"
+	storageEnvProjectID       = "PROJECT_ID"
+	storageEnvEndpoint        = "STORAGE_ENDPOINT"
+	storageEnvBucket          = "STORAGE_BUCKET"
+	storageEnvAccessKeyID     = "STORAGE_ACCESS_KEY_ID"
+	storageEnvSecretAccessKey = "STORAGE_SECRET_ACCESS_KEY"
+	storageEnvRegion          = "STORAGE_REGION"
+	storageEnvPublicBaseURL   = "STORAGE_PUBLIC_BASE_URL"
+	storageEnvForcePathStyle  = "STORAGE_FORCE_PATH_STYLE"
 )
 
 // BuildStoragePluginEnvVars returns env vars for storage plugin Init from resolved project storage.

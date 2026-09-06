@@ -5,8 +5,8 @@ package models
 const LegacySQLiteTemplateFilename = "apito_project.db"
 
 type ValidIdentifier struct {
-	Label string
-	Identifier string
+	Label       string
+	Identifier  string
 	ParentField string
 }
 

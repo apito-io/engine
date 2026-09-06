@@ -2,40 +2,12 @@ package models
 
 import "strings"
 
-// WorkspaceMember is one SystemUser with console grants across projects.
-type WorkspaceMember struct {
-	ID        string                  `json:"id,omitempty"`
-	Email     string                  `json:"email,omitempty"`
-	FirstName string                  `json:"first_name,omitempty"`
-	LastName  string                  `json:"last_name,omitempty"`
-	Avatar    string                  `json:"avatar,omitempty"`
-	Grants    []*WorkspaceMemberGrant `json:"grants,omitempty"`
-}
-
-// WorkspaceMemberGrant is one user_projects row the caller may see or edit.
-type WorkspaceMemberGrant struct {
-	ProjectID       string   `json:"project_id,omitempty"`
-	ProjectName     string   `json:"project_name,omitempty"`
-	Role            string   `json:"role,omitempty"`
-	Permissions     []string `json:"permissions,omitempty"`
-	InviteStatus    string   `json:"invite_status,omitempty"`
-	InviteExpiresAt string   `json:"invite_expires_at,omitempty"`
-}
-
-// WorkspaceMemberUpsertRequest is invite or edit of grants on selected projects.
-type WorkspaceMemberUpsertRequest struct {
-	Email                     string
-	UserID                    string
-	ProjectIDs                []string
-	AdministrativePermissions []string
-	MakeAdmin                 bool
-	// ReplaceExisting, when true, removes caller-managed grants not in ProjectIDs.
-	ReplaceExisting bool
-}
-
 const (
-	MembershipRoleTeam  = "team"
-	MembershipRoleAdmin = "admin"
+	MembershipRoleTeam      = "team"
+	MembershipRoleAdmin     = "admin"
+	MembershipRoleOwner     = "owner"
+	MembershipRoleDeveloper = "developer"
+	MembershipRoleViewer    = "viewer"
 )
 
 // consoleSectionAliases maps old / informal keys onto GlobalPermissions.
@@ -78,16 +50,25 @@ func CanonicalConsoleSection(raw string) string {
 	return ""
 }
 
-// NormalizeMembershipRole returns team or admin. Project.Roles slugs are not used.
+// NormalizeMembershipRole maps invite/edit roles onto owner/admin/developer/viewer.
+// Legacy team/editor stay team (collaborator). Project.Roles slugs are not used.
 func NormalizeMembershipRole(role string, makeAdmin bool) string {
 	if makeAdmin {
 		return MembershipRoleAdmin
 	}
 	r := strings.ToLower(strings.TrimSpace(role))
-	if r == MembershipRoleAdmin || r == "owner" || r == "project_admin" {
+	switch r {
+	case MembershipRoleOwner, "primary_owner":
+		return MembershipRoleOwner
+	case MembershipRoleAdmin, "project_admin", "make_admin":
 		return MembershipRoleAdmin
+	case MembershipRoleDeveloper:
+		return MembershipRoleDeveloper
+	case MembershipRoleViewer:
+		return MembershipRoleViewer
+	default:
+		return MembershipRoleTeam
 	}
-	return MembershipRoleTeam
 }
 
 // MembershipPermissions returns console-section keys. Full admin gets GlobalPermissions.
@@ -117,5 +98,11 @@ func MembershipPermissions(perms []string, makeAdmin bool) []string {
 // IsCollaboratorMembershipRole is true for grants that must not count as owned projects.
 func IsCollaboratorMembershipRole(role string) bool {
 	r := strings.ToLower(strings.TrimSpace(role))
-	return r == MembershipRoleTeam || r == "editor"
+	return r == MembershipRoleTeam || r == "editor" || r == MembershipRoleDeveloper || r == MembershipRoleViewer
+}
+
+// IsPrimaryOwnerRole is the legal/commercial owner stored on user_projects.
+func IsPrimaryOwnerRole(role string) bool {
+	r := strings.ToLower(strings.TrimSpace(role))
+	return r == MembershipRoleOwner || r == "primary_owner"
 }

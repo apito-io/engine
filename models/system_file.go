@@ -17,8 +17,8 @@ const (
 )
 
 const (
-	ExtKeySystemFileType   = "file_type"
-	ExtKeySystemFilesLimit = "files_limit"
+	ExtKeySystemFileType    = "file_type"
+	ExtKeySystemFilesLimit  = "files_limit"
 	ExtKeySystemFilesOffset = "files_offset"
 )
 

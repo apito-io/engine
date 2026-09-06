@@ -440,15 +440,15 @@ func clonePlan(src *models.Plan) *models.Plan {
 	}
 	models.NormalizePlanMonetization(src)
 	dst := &models.Plan{
-		ID:             src.ID,
-		Name:           src.Name,
-		Description:    src.Description,
+		ID:              src.ID,
+		Name:            src.Name,
+		Description:     src.Description,
 		SystemGenerated: src.SystemGenerated,
-		Currency:       src.Currency,
-		PriceMonthly:   src.PriceMonthly,
-		PlayProductID:  src.PlayProductID,
-		PlayBasePlanID: src.PlayBasePlanID,
-		PaddlePriceID:  src.PaddlePriceID,
+		Currency:        src.Currency,
+		PriceMonthly:    src.PriceMonthly,
+		PlayProductID:   src.PlayProductID,
+		PlayBasePlanID:  src.PlayBasePlanID,
+		PaddlePriceID:   src.PaddlePriceID,
 	}
 	if len(src.LogicExecutions) > 0 {
 		dst.LogicExecutions = append([]string(nil), src.LogicExecutions...)

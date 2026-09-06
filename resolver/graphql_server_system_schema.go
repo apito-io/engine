@@ -469,12 +469,6 @@ func (s *GraphQLServer) BuildServerQueriesAndMutations() {
 			Type:    graphql.NewList(privateSchemaObjects.SystemUserObject),
 			Resolve: s.ListProjectTeams,
 		},
-		"workspaceMembers": &graphql.Field{
-			Name:        "WorkspaceMembers",
-			Description: "Console operators grouped by user across projects the caller can administer",
-			Type:        graphql.NewList(workspaceMemberObject(workspaceMemberGrantObject())),
-			Resolve:     s.WorkspaceMembersResolverFn,
-		},
 		/*		"getPhotos": &graphql.Field{
 					Name: "ListAllDataOfAMedia",
 					Type: graphql.NewObject(graphql.ObjectConfig{
@@ -712,11 +706,7 @@ func (s *GraphQLServer) BuildServerQueriesAndMutations() {
 				Resolve: server.SwitchProjectResolverFn,
 			},*/
 	}
-	wmMut := s.workspaceMemberMutationFields()
 	s.SystemMutationsChan <- &graphql.Fields{
-		"inviteWorkspaceMember": wmMut["inviteWorkspaceMember"],
-		"updateWorkspaceMember": wmMut["updateWorkspaceMember"],
-		"removeWorkspaceMember": wmMut["removeWorkspaceMember"],
 		// This the mutation that sends messages to the server.
 		"send": &graphql.Field{
 			Args: graphql.FieldConfigArgument{
@@ -998,35 +988,6 @@ func (s *GraphQLServer) BuildServerQueriesAndMutations() {
 							"auto_soft_delete_idle_tenants": &graphql.InputObjectFieldConfig{
 								Type:        graphql.Boolean,
 								Description: "When true, daily job soft-deletes free-tier idle tenants (never hard-deletes)",
-							},
-						},
-					}),
-				},
-				"add_team_member": &graphql.ArgumentConfig{
-					Type: graphql.NewInputObject(graphql.InputObjectConfig{
-						Name: "AddTeamMemberPayload",
-						Fields: graphql.InputObjectConfigFieldMap{
-							"email": &graphql.InputObjectFieldConfig{
-								Type: graphql.NewNonNull(graphql.String),
-							},
-							"role": &graphql.InputObjectFieldConfig{
-								Type: graphql.String,
-							},
-							"team_id": &graphql.InputObjectFieldConfig{
-								Type: graphql.String,
-							},
-							"administrative_permissions": &graphql.InputObjectFieldConfig{
-								Type: graphql.NewNonNull(graphql.NewList(graphql.String)),
-							},
-						},
-					}),
-				},
-				"remove_team_member": &graphql.ArgumentConfig{
-					Type: graphql.NewInputObject(graphql.InputObjectConfig{
-						Name: "RemoveTeamMemberPayload",
-						Fields: graphql.InputObjectConfigFieldMap{
-							"member_id": &graphql.InputObjectFieldConfig{
-								Type: graphql.NewNonNull(graphql.String),
 							},
 						},
 					}),

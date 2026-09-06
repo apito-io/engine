@@ -34,13 +34,13 @@ type FunctionBuild struct {
 	Name       string `bun:"type:text,notnull" json:"name,omitempty"`
 	RevisionID string `bun:"type:text,notnull" json:"revision_id,omitempty"`
 
-	Status        string `json:"status,omitempty"` // queued, building, succeeded, failed
-	Logs          string `bun:"type:text,nullzero" json:"logs,omitempty"`
-	ArtifactKey   string `bun:",nullzero" json:"artifact_key,omitempty"`
-	ArtifactHash  string `bun:",nullzero" json:"artifact_hash,omitempty"`
-	ErrorMessage  string `bun:",nullzero" json:"error_message,omitempty"`
-	CreatedAt     string `json:"created_at,omitempty"`
-	CompletedAt   string `bun:",nullzero" json:"completed_at,omitempty"`
+	Status       string `json:"status,omitempty"` // queued, building, succeeded, failed
+	Logs         string `bun:"type:text,nullzero" json:"logs,omitempty"`
+	ArtifactKey  string `bun:",nullzero" json:"artifact_key,omitempty"`
+	ArtifactHash string `bun:",nullzero" json:"artifact_hash,omitempty"`
+	ErrorMessage string `bun:",nullzero" json:"error_message,omitempty"`
+	CreatedAt    string `json:"created_at,omitempty"`
+	CompletedAt  string `bun:",nullzero" json:"completed_at,omitempty"`
 }
 
 // FunctionDeployment activates a successful revision.
@@ -54,7 +54,7 @@ type FunctionDeployment struct {
 	BuildID    string `bun:",nullzero" json:"build_id,omitempty"`
 
 	Environment string `bun:",nullzero" json:"environment,omitempty"` // production, staging, …
-	Status      string `json:"status,omitempty"`                       // active, rolled_back, superseded
+	Status      string `json:"status,omitempty"`                      // active, rolled_back, superseded
 	DeployedBy  string `bun:",nullzero" json:"deployed_by,omitempty"`
 	RollbackOf  string `bun:",nullzero" json:"rollback_of,omitempty"`
 	CreatedAt   string `json:"created_at,omitempty"`
@@ -72,7 +72,7 @@ type FunctionInvocation struct {
 
 	TenantScope string `bun:",nullzero" json:"tenant_scope,omitempty"`
 	Principal   string `bun:",nullzero" json:"principal,omitempty"` // caller or service
-	Status      string `json:"status,omitempty"`                   // accepted, running, committed, failed, dead_lettered
+	Status      string `json:"status,omitempty"`                    // accepted, running, committed, failed, dead_lettered
 
 	DurationMs   int64  `json:"duration_ms,omitempty"`
 	ErrorClass   string `bun:",nullzero" json:"error_class,omitempty"`

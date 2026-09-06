@@ -11,9 +11,9 @@ import (
 )
 
 var defaultOrderModels = map[string]struct{}{
-	"order":   {},
-	"orders":  {},
-	"invoice": {},
+	"order":    {},
+	"orders":   {},
+	"invoice":  {},
 	"invoices": {},
 }
 
@@ -92,10 +92,10 @@ func (s *GraphQLServer) notifyDocumentEventSink(ctx context.Context, projectID, 
 		return
 	}
 	payload := map[string]interface{}{
-		"model":         model,
-		"change_event":  changeEvent,
-		"id":            id,
-		"document":      nodeToMap(node),
+		"model":        model,
+		"change_event": changeEvent,
+		"id":           id,
+		"document":     nodeToMap(node),
 	}
 	s.NotifyEventSinkPlugins(ctx, projectID, "publish", payload)
 	if isOrderModelName(model) {

@@ -17,7 +17,7 @@ func modelPhysicalHealthObject() *graphql.Object {
 	return graphql.NewObject(graphql.ObjectConfig{
 		Name: "ModelPhysicalHealth",
 		Fields: graphql.Fields{
-			"model_name": &graphql.Field{Type: graphql.NewNonNull(graphql.String)},
+			"model_name":   &graphql.Field{Type: graphql.NewNonNull(graphql.String)},
 			"table_exists": &graphql.Field{Type: graphql.NewNonNull(graphql.Boolean)},
 			"physical_columns": &graphql.Field{
 				Type: graphql.NewNonNull(graphql.NewList(graphql.NewNonNull(graphql.String))),
@@ -63,14 +63,14 @@ func healthToMap(h schemasvc.ModelPhysicalHealth) map[string]interface{} {
 		warn = []string{}
 	}
 	return map[string]interface{}{
-		"model_name":        h.ModelName,
-		"table_exists":      h.TableExists,
-		"physical_columns":  phys,
-		"expected_columns":  exp,
-		"missing_columns":   miss,
-		"extra_columns":     extra,
-		"is_common_model":   h.IsCommonModel,
-		"warnings":          warn,
+		"model_name":       h.ModelName,
+		"table_exists":     h.TableExists,
+		"physical_columns": phys,
+		"expected_columns": exp,
+		"missing_columns":  miss,
+		"extra_columns":    extra,
+		"is_common_model":  h.IsCommonModel,
+		"warnings":         warn,
 	}
 }
 

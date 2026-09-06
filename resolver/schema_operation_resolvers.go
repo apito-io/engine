@@ -22,16 +22,16 @@ func schemaOperationGraphQLObject() *graphql.Object {
 		schemaOperationObject = graphql.NewObject(graphql.ObjectConfig{
 			Name: "SchemaOperation",
 			Fields: graphql.Fields{
-				"id":              &graphql.Field{Type: graphql.String},
-				"project_id":      &graphql.Field{Type: graphql.String},
-				"operation_type":  &graphql.Field{Type: graphql.String},
-				"status":          &graphql.Field{Type: graphql.String},
-				"request_json":    &graphql.Field{Type: graphql.String},
-				"steps_json":      &graphql.Field{Type: graphql.String},
-				"error":           &graphql.Field{Type: graphql.String},
-				"attempt_count":   &graphql.Field{Type: graphql.Int},
-				"created_at":      &graphql.Field{Type: graphql.String},
-				"updated_at":      &graphql.Field{Type: graphql.String},
+				"id":             &graphql.Field{Type: graphql.String},
+				"project_id":     &graphql.Field{Type: graphql.String},
+				"operation_type": &graphql.Field{Type: graphql.String},
+				"status":         &graphql.Field{Type: graphql.String},
+				"request_json":   &graphql.Field{Type: graphql.String},
+				"steps_json":     &graphql.Field{Type: graphql.String},
+				"error":          &graphql.Field{Type: graphql.String},
+				"attempt_count":  &graphql.Field{Type: graphql.Int},
+				"created_at":     &graphql.Field{Type: graphql.String},
+				"updated_at":     &graphql.Field{Type: graphql.String},
 			},
 		})
 	})
