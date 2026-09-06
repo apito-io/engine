@@ -163,6 +163,55 @@ func TestComposeTeamInvite_MultipleProjects(t *testing.T) {
 	require.Contains(t, req.HtmlBody, apitoEmailLogoURL)
 }
 
+func TestComposeFreelanceClientBilling(t *testing.T) {
+	req := &models.EmailSendRequest{
+		ProjectName:        "Test Freelance Project",
+		ProjectDescription: "Client sandbox for handover",
+		ProjectKind:        "General backend",
+		SelectedPlan:       "Pro",
+		TemplateName:       "Blank",
+		FreelancerName:     "Fahim Shoumik",
+		FreelancerEmail:    "fahim@apito.io",
+		ActivateBy:         "2026-09-13T12:25:43Z",
+		TrialEndsAt:        "2026-10-06T12:25:43Z",
+		AcceptURL:          "http://localhost:4000/freelance/accept?token=abc",
+	}
+	ComposeFreelanceClientBilling(req)
+	require.Equal(t, "Take ownership of Test Freelance Project", req.Subject)
+	require.NotContains(t, req.Subject, "You're invited")
+	require.NotContains(t, req.HtmlBody, "You're invited")
+	require.NotContains(t, req.HtmlBody, "Accept invite")
+	require.NotContains(t, req.HtmlBody, "Paddle")
+	require.Contains(t, req.HtmlBody, "Take ownership of this project")
+	require.Contains(t, req.HtmlBody, "Test Freelance Project")
+	require.Contains(t, req.HtmlBody, "Client sandbox for handover")
+	require.Contains(t, req.HtmlBody, "General backend")
+	require.Contains(t, req.HtmlBody, "13 September 2026")
+	require.Contains(t, req.HtmlBody, "6 October 2026")
+	require.Contains(t, req.HtmlBody, "/freelance/accept?token=abc")
+	require.Contains(t, req.TextBody, "We bill the selected plan")
+}
+
+func TestComposeProjectTransfer(t *testing.T) {
+	req := &models.EmailSendRequest{
+		ProjectName:     "Kisti",
+		ProjectKind:     "General backend",
+		FreelancerName:  "Apito Admin",
+		FreelancerEmail: "admin@apito.io",
+		ActivateBy:      "2026-09-13T12:00:00Z",
+		AcceptURL:       "http://localhost:4000/project/transfer/accept?token=abc",
+		QuotaNote:       "Your Free plan is full. Upgrade to Pro before you accept.",
+	}
+	ComposeProjectTransfer(req)
+	require.Equal(t, "Accept transfer of Kisti", req.Subject)
+	require.NotContains(t, req.Subject, "You're invited")
+	require.NotContains(t, req.HtmlBody, "Paddle")
+	require.Contains(t, req.HtmlBody, "Accept this project transfer")
+	require.Contains(t, req.HtmlBody, "Apito Pro subscription")
+	require.Contains(t, req.HtmlBody, "Your Free plan is full")
+	require.Contains(t, req.HtmlBody, "13 September 2026")
+}
+
 func TestComposePasswordReset(t *testing.T) {
 	req := &models.EmailSendRequest{VerificationCode: "123456", AppURL: "http://localhost:4000"}
 	ComposePasswordReset(req)

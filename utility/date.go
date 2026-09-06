@@ -1,6 +1,33 @@
 package utility
 
-import "time"
+import (
+	"strings"
+	"time"
+)
+
+// FormatReadableDate turns RFC3339 / date-only timestamps into "2 January 2006".
+// Empty or unparseable values return fallback (or the raw string if fallback is empty).
+func FormatReadableDate(raw, fallback string) string {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return strings.TrimSpace(fallback)
+	}
+	layouts := []string{
+		time.RFC3339,
+		time.RFC3339Nano,
+		"2006-01-02",
+		"2006-01-02 15:04:05",
+	}
+	for _, layout := range layouts {
+		if t, err := time.Parse(layout, raw); err == nil {
+			return t.UTC().Format("2 January 2006")
+		}
+	}
+	if t, err := time.Parse(time.RFC3339, raw); err == nil {
+		return t.UTC().Format("2 January 2006")
+	}
+	return raw
+}
 
 // UTC time functions
 func GetCurrentTime() string {

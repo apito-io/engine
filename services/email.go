@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/apito-io/engine/models"
+	"github.com/apito-io/engine/utility"
 )
 
 // Site nav uses https://apito.io/logo.svg. Gmail often drops SVG in <img>,
@@ -23,10 +24,18 @@ type noopEmailSender struct{}
 
 func (noopEmailSender) Send(_ context.Context, req *models.EmailSendRequest) error {
 	to := ""
+	accept := ""
 	if req != nil && len(req.Recipients) > 0 {
 		to = req.Recipients[0]
 	}
-	log.Printf("email: noop skip send to %s subject %q", to, reqSubject(req))
+	if req != nil {
+		accept = strings.TrimSpace(req.AcceptURL)
+	}
+	if accept != "" {
+		log.Printf("email: noop skip send to %s subject %q accept %s", to, reqSubject(req), accept)
+	} else {
+		log.Printf("email: noop skip send to %s subject %q", to, reqSubject(req))
+	}
 	return nil
 }
 
@@ -211,6 +220,216 @@ Apito.io Team
 </div>
 </body>
 </html>`, emailLogoImg(), inviteProjectListHTML(names), extraHTML)
+}
+
+func emailDetailRow(label, value string) (textLine, htmlRow string) {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return "", ""
+	}
+	textLine = fmt.Sprintf("%s: %s\n", label, value)
+	htmlRow = fmt.Sprintf(
+		`<tr><td style="padding:8px 16px 8px 0;color:#666;vertical-align:top;white-space:nowrap">%s</td><td style="padding:8px 0;color:#111">%s</td></tr>`,
+		html.EscapeString(label),
+		html.EscapeString(value),
+	)
+	return textLine, htmlRow
+}
+
+// ComposeFreelanceClientBilling fills a client activation email. Not a team invite.
+func ComposeFreelanceClientBilling(req *models.EmailSendRequest) {
+	if req == nil {
+		return
+	}
+	name := strings.TrimSpace(req.ProjectName)
+	if name == "" {
+		name = "your project"
+	}
+	trial := utility.FormatReadableDate(req.TrialEndsAt, "")
+	activateBy := utility.FormatReadableDate(req.ActivateBy, "")
+	req.Subject = fmt.Sprintf("Take ownership of %s", name)
+
+	who := strings.TrimSpace(req.FreelancerName)
+	if who == "" {
+		who = strings.TrimSpace(req.FreelancerEmail)
+	}
+	if who == "" {
+		who = "Your freelancer"
+	}
+
+	var textDetails, htmlRows strings.Builder
+	add := func(label, value string) {
+		t, h := emailDetailRow(label, value)
+		textDetails.WriteString(t)
+		htmlRows.WriteString(h)
+	}
+	add("Project", name)
+	add("Description", strings.TrimSpace(req.ProjectDescription))
+	add("Type", strings.TrimSpace(req.ProjectKind))
+	add("Plan", strings.TrimSpace(req.SelectedPlan))
+	add("Starter template", strings.TrimSpace(req.TemplateName))
+	builtBy := strings.TrimSpace(req.FreelancerName)
+	if email := strings.TrimSpace(req.FreelancerEmail); email != "" {
+		if builtBy != "" && !strings.EqualFold(builtBy, email) {
+			builtBy = builtBy + " (" + email + ")"
+		} else if builtBy == "" {
+			builtBy = email
+		}
+	}
+	add("Built by", builtBy)
+	if activateBy != "" {
+		add("Activate by", activateBy)
+	}
+	if trial != "" {
+		add("First bill date", trial)
+	}
+
+	intro := fmt.Sprintf(
+		"%s built this backend for you on Apito. Review the details and take ownership. We bill the selected plan on %s. Taking ownership does not start a new trial.",
+		who,
+		trial,
+	)
+	if trial == "" {
+		intro = fmt.Sprintf(
+			"%s built this backend for you on Apito. Review the details and take ownership. We bill the selected plan on the original trial end date. Taking ownership does not start a new trial.",
+			who,
+		)
+	}
+
+	accept := strings.TrimSpace(req.AcceptURL)
+	ctaText := ""
+	ctaHTML := ""
+	if accept != "" {
+		href := html.EscapeString(accept)
+		ctaText = fmt.Sprintf("\nReview the project and continue:\n%s\n", accept)
+		ctaHTML = fmt.Sprintf(
+			`<p style="margin:24px 0 8px"><a href="%s" style="display:inline-block;background:#111;color:#fff;padding:12px 24px;text-decoration:none;border-radius:4px">Review project</a></p><p style="font-size:12px;color:#888">Or paste: %s</p>`,
+			href, href,
+		)
+	}
+
+	req.TextBody = fmt.Sprintf(`
+Hi,
+
+%s
+
+%s%s
+This is an automated email, please do not reply.
+
+Best regards,
+Apito.io Team
+`, intro, textDetails.String(), ctaText)
+
+	req.HtmlBody = fmt.Sprintf(`<!DOCTYPE html>
+<html lang="en">
+<head><meta charset="UTF-8"><title>%s</title></head>
+<body style="font-family:Arial,sans-serif;background:#f4f4f4;margin:0;padding:0">
+<div style="max-width:600px;margin:0 auto;background:#fff;border:1px solid #ddd;border-top:10px solid #EA3A60">
+<div style="text-align:center;padding:40px 24px 16px">
+%s
+<h1 style="font-size:24px;color:#000;margin:20px 0 8px">Take ownership of this project</h1>
+</div>
+<div style="padding:8px 32px 28px;text-align:left">
+<p>Hi,</p>
+<p>%s</p>
+<table style="width:100%%;border-collapse:collapse;margin:16px 0">%s</table>
+%s
+<p style="color:#888;font-size:13px">This is an automated email, please do not reply.</p>
+</div>
+<div style="background:#f4f4f4;padding:10px;text-align:center;font-size:12px;color:#888">
+<p>Best regards,<br>Apito.io Team</p>
+</div>
+</div>
+</body>
+</html>`, html.EscapeString(req.Subject), emailLogoImg(), html.EscapeString(intro), htmlRows.String(), ctaHTML)
+}
+
+// ComposeProjectTransfer fills an owner-to-owner project transfer email.
+func ComposeProjectTransfer(req *models.EmailSendRequest) {
+	if req == nil {
+		return
+	}
+	name := strings.TrimSpace(req.ProjectName)
+	if name == "" {
+		name = "a project"
+	}
+	req.Subject = fmt.Sprintf("Accept transfer of %s", name)
+	from := strings.TrimSpace(req.FreelancerName)
+	if from == "" {
+		from = strings.TrimSpace(req.FreelancerEmail)
+	}
+	if from == "" {
+		from = "A teammate"
+	}
+	expires := utility.FormatReadableDate(req.ActivateBy, "in 7 days")
+
+	var textDetails, htmlRows strings.Builder
+	add := func(label, value string) {
+		t, h := emailDetailRow(label, value)
+		textDetails.WriteString(t)
+		htmlRows.WriteString(h)
+	}
+	add("Project", name)
+	add("Type", strings.TrimSpace(req.ProjectKind))
+	add("From", from)
+	add("Accept by", expires)
+
+	intro := fmt.Sprintf(
+		"%s wants to transfer this Apito project to you. You become the owner. They stay as Project Admin until you change that. This does not move their Apito Pro subscription — Cloud limits apply to your account.",
+		from,
+	)
+	quota := strings.TrimSpace(req.QuotaNote)
+	quotaText := ""
+	quotaHTML := ""
+	if quota != "" {
+		quotaText = "\n" + quota + "\n"
+		quotaHTML = fmt.Sprintf(`<p style="margin:12px 0;padding:12px 14px;background:#fff8e8;border:1px solid #f0d9a0;border-radius:4px">%s</p>`, html.EscapeString(quota))
+	}
+	accept := strings.TrimSpace(req.AcceptURL)
+	ctaText := ""
+	ctaHTML := ""
+	if accept != "" {
+		href := html.EscapeString(accept)
+		ctaText = fmt.Sprintf("\nReview and accept:\n%s\n", accept)
+		ctaHTML = fmt.Sprintf(
+			`<p style="margin:24px 0 8px"><a href="%s" style="display:inline-block;background:#111;color:#fff;padding:12px 24px;text-decoration:none;border-radius:4px">Accept project</a></p><p style="font-size:12px;color:#888">Or paste: %s</p>`,
+			href, href,
+		)
+	}
+	req.TextBody = fmt.Sprintf(`
+Hi,
+
+%s
+
+%s%s%s
+This is an automated email, please do not reply.
+
+Best regards,
+Apito.io Team
+`, intro, textDetails.String(), quotaText, ctaText)
+	req.HtmlBody = fmt.Sprintf(`<!DOCTYPE html>
+<html lang="en">
+<head><meta charset="UTF-8"><title>%s</title></head>
+<body style="font-family:Arial,sans-serif;background:#f4f4f4;margin:0;padding:0">
+<div style="max-width:600px;margin:0 auto;background:#fff;border:1px solid #ddd;border-top:10px solid #EA3A60">
+<div style="text-align:center;padding:40px 24px 16px">
+%s
+<h1 style="font-size:24px;color:#000;margin:20px 0 8px">Accept this project transfer</h1>
+</div>
+<div style="padding:8px 32px 28px;text-align:left">
+<p>Hi,</p>
+<p>%s</p>
+<table style="width:100%%;border-collapse:collapse;margin:16px 0">%s</table>
+%s
+%s
+<p style="color:#888;font-size:13px">This is an automated email, please do not reply.</p>
+</div>
+<div style="background:#f4f4f4;padding:10px;text-align:center;font-size:12px;color:#888">
+<p>Best regards,<br>Apito.io Team</p>
+</div>
+</div>
+</body>
+</html>`, html.EscapeString(req.Subject), emailLogoImg(), html.EscapeString(intro), htmlRows.String(), quotaHTML, ctaHTML)
 }
 
 // ComposePasswordReset fills subject/html/text for a 6-digit recovery code.

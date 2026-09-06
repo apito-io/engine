@@ -44,6 +44,18 @@ func AcceptInviteURL(origin, rawToken string) string {
 	return origin + "/invite/accept?token=" + url.QueryEscape(rawToken)
 }
 
+// AcceptProjectTransferURL is the public console page for owner-to-owner project transfer.
+func AcceptProjectTransferURL(origin, rawToken string) string {
+	origin = strings.TrimRight(strings.TrimSpace(origin), "/")
+	if origin == "" {
+		origin = "http://localhost:4000"
+	}
+	if strings.TrimSpace(rawToken) == "" {
+		return origin + "/auth/login"
+	}
+	return origin + "/project/transfer/accept?token=" + url.QueryEscape(rawToken)
+}
+
 // EffectiveInviteStatus maps empty/legacy rows to accepted and past-due invited to expired.
 func EffectiveInviteStatus(status, expiresAt string, now time.Time) string {
 	s := strings.ToLower(strings.TrimSpace(status))

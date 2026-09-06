@@ -13,4 +13,15 @@ type EmailSendRequest struct {
 	Subject          string   `json:"subject"`
 	HtmlBody         string   `json:"html_body"`
 	TextBody         string   `json:"text_body"`
+
+	// Freelance client billing (Request Client Billing). Unused by team invite.
+	ProjectDescription string `json:"project_description,omitempty"`
+	ProjectKind        string `json:"project_kind,omitempty"`
+	SelectedPlan       string `json:"selected_plan,omitempty"`
+	TemplateName       string `json:"template_name,omitempty"`
+	FreelancerName     string `json:"freelancer_name,omitempty"`
+	FreelancerEmail    string `json:"freelancer_email,omitempty"`
+	ActivateBy         string `json:"activate_by,omitempty"`
+	TrialEndsAt        string `json:"trial_ends_at,omitempty"`
+	QuotaNote          string `json:"quota_note,omitempty"`
 }
