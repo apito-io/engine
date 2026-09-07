@@ -2,23 +2,18 @@
 
 ## Working on
 
-- Email: `ComposeProjectTransfer` + `QuotaNote`. Noop sender logs
-  `AcceptURL` when present. Do not drop `TrialEndsAt`. Uncommitted
-  until engine cut.
+- Common models: promote-only, paginated verify-then-reduce, shadow
+  repair, hide-deleted queries. Tag **v1.8.23**.
 
 ## Live
 
-- **v1.8.21** with engine **v2.4.51**. Live with `engine:v1.14`.
-
-## Also uncommitted
-
-- System plugin refactor: capabilities, activation upsert, REST gate.
+- **v1.8.22** with engine **v2.4.52**.
 
 ## Do not
 
-- Mint `is_super_admin` from `IsAdmin` alone.
-- Restore `PLUGIN_TYPE_PROJECT` as a user-facing install class.
-- Drop `TrialEndsAt` from `EmailSendRequest` again.
+- Import `open_driver` from this module.
+- Advertise demotion.
+- Drop `TrialEndsAt` from `EmailSendRequest`.
 
 ## Last Updated
 

@@ -1,23 +1,17 @@
 # Handoff — open-core 2026-09-07
 
-## Uncommitted — project transfer email
+## Common models (v1.8.23)
 
-- `ComposeProjectTransfer` in `services/email.go`.
-- `AcceptProjectTransferURL` in `models/invite.go`.
-- `EmailSendRequest` has `ActivateBy`, `TrialEndsAt`, **`QuotaNote`**.
-- Noop sender logs `accept <url>` so local runs without Gmail still
-  show the link in engine stdout.
-- `FormatReadableDate` in `utility/date.go`.
-
-## Also uncommitted
-
-- Plugin activation helpers + REST gate + YAML capabilities.
+- `validateCommonModelToggle` promote-only.
+- `runCommonModelPromotion` page 500, conflict, verify, then reduce.
+- `repairCommonShadows` real `shadows_fixed`.
+- `prepareCommonModelQuery` list+count; reject common-relation sort.
+- Docs: `features/common-models.md`.
 
 ## Do not
 
-- Reuse protobuf type enum 0/1.
-- Change HashiCorp five-method interface.
-- Drop `TrialEndsAt` on `EmailSendRequest`.
+- Import `open_driver`.
+- Use `NewParam(nil)` (panics).
 
 ## Last Updated
 

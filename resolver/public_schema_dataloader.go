@@ -6,6 +6,7 @@ import (
 	"fmt"
 
 	ae "github.com/apito-io/engine/err"
+	"github.com/apito-io/engine/executor"
 	"github.com/apito-io/engine/models"
 	"github.com/apito-io/engine/utility"
 	"github.com/apito-io/types"
@@ -122,16 +123,91 @@ func (s *GraphQLServer) DataLoaderFn(ctx context.Context, keys dataloader.Keys) 
 		param.SinglePageData = true
 	}
 
-	// do not use old passed ctx, instead use the new one, because dataloader is a concurrent process
-	// the old ctx might be already cancelled
-	driver, err := s.GraphQLExecutor.GetProjectDriver(publicProjectDBContext(cache, ctx))
+	var parentModelType *models.ModelType
+	for _, m := range cache.Project.Schema.Models {
+		if m != nil && (m.Name == parentType || utility.ModelIDMatchesGraphQLField(m.Name, parentType)) {
+			parentModelType = m
+			break
+		}
+	}
+	relCtx := publicProjectDBContext(cache, ctx)
+	if models.RelationLoaderUsesBaseDB(param, parentModelType, modelType) {
+		relCtx = models.WithBaseProjectDB(relCtx)
+	}
+
+	driver, err := s.GraphQLExecutor.GetProjectDriver(relCtx)
 	if err != nil {
 		return handleError(err)
 	}
 
+	// Dataloader's request ctx is often already cancelled; Scan must not use it.
 	_results, err := driver.RelationshipDataLoader(context.Background(), param, connection)
 	if err != nil {
 		return handleError(err)
+	}
+
+	if models.ParamPerTenantSeparateDB(param) && models.ModelIsCommon(param.Model) {
+		if typed, ok := _results.([]*dataloader.Result); ok {
+			var ids []string
+			for _, r := range typed {
+				if r == nil || r.Data == nil {
+					continue
+				}
+				switch d := r.Data.(type) {
+				case *types.DefaultDocumentStructure:
+					if d != nil && d.ID != "" {
+						ids = append(ids, d.ID)
+					}
+				case []*types.DefaultDocumentStructure:
+					for _, doc := range d {
+						if doc != nil && doc.ID != "" {
+							ids = append(ids, doc.ID)
+						}
+					}
+				}
+			}
+			exec, ok := s.GraphQLExecutor.(*executor.GraphQLExecutor)
+			if !ok || exec == nil {
+				return handleError(fmt.Errorf("dataloader: common-model hydration requires GraphQLExecutor"))
+			}
+			byID, hydErr := exec.LoadCommonDocsByIDs(relCtx, param, ids)
+			if hydErr != nil {
+				return handleError(hydErr)
+			}
+			for _, r := range typed {
+				if r == nil || r.Data == nil {
+					continue
+				}
+				switch d := r.Data.(type) {
+				case *types.DefaultDocumentStructure:
+					src := byID[d.ID]
+					if src == nil {
+						r.Data = nil
+						continue
+					}
+					d.Data = src.Data
+					d.Meta = src.Meta
+					d.Type = src.Type
+				case []*types.DefaultDocumentStructure:
+					var kept []*types.DefaultDocumentStructure
+					for _, doc := range d {
+						if doc == nil {
+							continue
+						}
+						src := byID[doc.ID]
+						if src == nil {
+							continue
+						}
+						doc.Data = src.Data
+						doc.Meta = src.Meta
+						doc.Type = src.Type
+						kept = append(kept, doc)
+					}
+					r.Data = kept
+				}
+			}
+			_results = typed
+		}
 	}
 
 	results, ok := _results.([]*dataloader.Result)

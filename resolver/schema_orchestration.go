@@ -8,8 +8,6 @@ import (
 	schemasvc "github.com/apito-io/engine/services/schema"
 )
 
-const skipConnectionRoutingContextKey = "skip_connection_routing"
-
 func (s *GraphQLServer) schemaHooks() schemasvc.Hooks {
 	h := schemasvc.Hooks{
 		SchemaIterate: s.Cfg.SchemaIterateHook,
@@ -61,23 +59,29 @@ func (s *GraphQLServer) RunSchemaChange(ctx context.Context, in schemasvc.RunInp
 
 // GetSchemaBaseProjectDriverIfNeeded returns the base project driver for schema DDL when needed.
 func (s *GraphQLServer) GetSchemaBaseProjectDriverIfNeeded(ctx context.Context, project *models.Project) (interfaces.ProjectDBInterface, bool, error) {
-	return s.getSchemaBaseProjectDriverIfNeeded(ctx, project)
+	return s.getSchemaBaseProjectDriverIfNeeded(ctx, project, nil)
+}
+
+// GetSchemaBaseProjectDriverIfNeededForModel is the model-aware variant used when
+// common models must receive base-project DDL on per-tenant-separate-database SaaS.
+func (s *GraphQLServer) GetSchemaBaseProjectDriverIfNeededForModel(ctx context.Context, project *models.Project, model *models.ModelType) (interfaces.ProjectDBInterface, bool, error) {
+	return s.getSchemaBaseProjectDriverIfNeeded(ctx, project, model)
 }
 
 func schemaBaseDriverContext(ctx context.Context) context.Context {
-	return context.WithValue(ctx, skipConnectionRoutingContextKey, true)
+	return models.WithBaseProjectDB(ctx)
 }
 
 func (s *GraphQLServer) getSchemaBaseProjectDriver(ctx context.Context) (interfaces.ProjectDBInterface, error) {
 	return s.GraphQLExecutor.GetProjectDriver(schemaBaseDriverContext(ctx))
 }
 
-func (s *GraphQLServer) skipSchemaBaseDDL(ctx context.Context, project *models.Project) bool {
-	return s != nil && s.Cfg != nil && s.Cfg.SkipSchemaBaseDDLHook != nil && s.Cfg.SkipSchemaBaseDDLHook(ctx, project)
+func (s *GraphQLServer) skipSchemaBaseDDL(ctx context.Context, project *models.Project, model *models.ModelType) bool {
+	return s != nil && s.Cfg != nil && s.Cfg.SkipSchemaBaseDDLHook != nil && s.Cfg.SkipSchemaBaseDDLHook(ctx, project, model)
 }
 
-func (s *GraphQLServer) getSchemaBaseProjectDriverIfNeeded(ctx context.Context, project *models.Project) (interfaces.ProjectDBInterface, bool, error) {
-	if s.skipSchemaBaseDDL(ctx, project) {
+func (s *GraphQLServer) getSchemaBaseProjectDriverIfNeeded(ctx context.Context, project *models.Project, model *models.ModelType) (interfaces.ProjectDBInterface, bool, error) {
+	if s.skipSchemaBaseDDL(ctx, project, model) {
 		return nil, true, nil
 	}
 	drv, err := s.getSchemaBaseProjectDriver(ctx)

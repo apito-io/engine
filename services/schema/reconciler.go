@@ -15,10 +15,10 @@ type ReconcileInput struct {
 	Ctx           context.Context
 	Op            *models.SchemaOperation
 	BaseDriver    interfaces.ProjectDBInterface
-	ApplyDDL      func(driver interfaces.ProjectDBInterface) error
+	ApplyDDL      func(ctx context.Context, driver interfaces.ProjectDBInterface) error
 	PersistSystem func() error
 	RefreshCache  func() error
-	Compensate    func(driver interfaces.ProjectDBInterface) error
+	Compensate    func(ctx context.Context, driver interfaces.ProjectDBInterface) error
 }
 
 // ReconcileOneOperation retries idempotent steps for failed / needs_repair / applying operations.

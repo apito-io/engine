@@ -20,7 +20,6 @@ func (s *GraphQLServer) MultiResourceResolverFn(p graphql.ResolveParams) (interf
 	if !ok {
 		return nil, errors.New("selection set missing in context")
 	}
-	dbCtx := publicProjectDBContext(cache, p.Context)
 
 	model := utility.SingularResourceName(p.Info.FieldName)
 
@@ -63,6 +62,10 @@ func (s *GraphQLServer) MultiResourceResolverFn(p graphql.ResolveParams) (interf
 
 	param.QuerySelectionSets = selectionSet
 
+	dbCtx := models.ProjectDBContext(publicProjectDBContext(cache, p.Context), param)
+	if err := s.prepareCommonModelQuery(dbCtx, param); err != nil {
+		return nil, err
+	}
 	driver, err := s.GraphQLExecutor.GetProjectDriver(dbCtx)
 	if err != nil {
 		return nil, err
@@ -81,7 +84,6 @@ func (s *GraphQLServer) SingleResourceResolverFn(p graphql.ResolveParams) (inter
 	if !ok {
 		return nil, errors.New("selection set missing in context")
 	}
-	dbCtx := publicProjectDBContext(cache, p.Context)
 
 	model := utility.SingularResourceName(p.Info.FieldName)
 
@@ -133,6 +135,7 @@ func (s *GraphQLServer) SingleResourceResolverFn(p graphql.ResolveParams) (inter
 		return nil, errors.New("ID is required")
 	}
 
+	dbCtx := models.ProjectDBContext(publicProjectDBContext(cache, p.Context), param)
 	driver, err := s.GraphQLExecutor.GetProjectDriver(dbCtx)
 	if err != nil {
 		return nil, err
@@ -164,7 +167,6 @@ func (s *GraphQLServer) CountResolverFn(p graphql.ResolveParams) (interface{}, e
 	if !ok {
 		return nil, errors.New("application cache missing in context")
 	}
-	dbCtx := publicProjectDBContext(cache, p.Context)
 
 	/*cache, err := s.GetApplicationCache(router)
 	if err != nil {
@@ -197,6 +199,10 @@ func (s *GraphQLServer) CountResolverFn(p graphql.ResolveParams) (interface{}, e
 	param.ProjectSchemaModels = cache.Project.Schema.Models
 	param.OnlyReturnCount = true
 
+	dbCtx := models.ProjectDBContext(publicProjectDBContext(cache, p.Context), param)
+	if err := s.prepareCommonModelQuery(dbCtx, param); err != nil {
+		return nil, err
+	}
 	driver, err := s.GraphQLExecutor.GetProjectDriver(dbCtx)
 	if err != nil {
 		return nil, err
@@ -220,7 +226,6 @@ func (s *GraphQLServer) AggregateResolverFn(p graphql.ResolveParams) (interface{
 	if !ok {
 		return nil, errors.New("selection set missing in context")
 	}
-	dbCtx := publicProjectDBContext(cache, p.Context)
 
 	/*cache, err := s.GetApplicationCache(router)
 	if err != nil {
@@ -264,6 +269,7 @@ func (s *GraphQLServer) AggregateResolverFn(p graphql.ResolveParams) (interface{
 	// this is must be here for aggregate query
 	param.QuerySelectionSets = selectionSet
 
+	dbCtx := models.ProjectDBContext(publicProjectDBContext(cache, p.Context), param)
 	driver, err := s.GraphQLExecutor.GetProjectDriver(dbCtx)
 	if err != nil {
 		return nil, err

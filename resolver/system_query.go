@@ -1073,12 +1073,16 @@ func (s *GraphQLServer) ListDetailedModelsDataInfoResolverFn(p graphql.ResolvePa
 
 	param.IsSystemRequest = true
 
-	driver, err := s.GraphQLExecutor.GetProjectDriver(cache.Ctx)
+	dbCtx := models.ProjectDBContext(cache.Ctx, param)
+	if err := s.prepareCommonModelQuery(dbCtx, param); err != nil {
+		return nil, err
+	}
+	driver, err := s.GraphQLExecutor.GetProjectDriver(dbCtx)
 	if err != nil {
 		return nil, err
 	}
 
-	return driver.QueryMultiDocumentOfProject(cache.Ctx, param)
+	return driver.QueryMultiDocumentOfProject(dbCtx, param)
 }
 
 func (s *GraphQLServer) ListDetailedModelsDataCountResolverFn(p graphql.ResolveParams) (interface{}, error) {
@@ -1114,12 +1118,16 @@ func (s *GraphQLServer) ListDetailedModelsDataCountResolverFn(p graphql.ResolveP
 
 	param.IsSystemRequest = true
 
-	driver, err := s.GraphQLExecutor.GetProjectDriver(cache.Ctx)
+	dbCtx := models.ProjectDBContext(cache.Ctx, param)
+	if err := s.prepareCommonModelQuery(dbCtx, param); err != nil {
+		return nil, err
+	}
+	driver, err := s.GraphQLExecutor.GetProjectDriver(dbCtx)
 	if err != nil {
 		return nil, err
 	}
 
-	return driver.CountMultiDocumentOfProject(cache.Ctx, param, false)
+	return driver.CountMultiDocumentOfProject(dbCtx, param, false)
 }
 
 func (s *GraphQLServer) ListProjectTeams(p graphql.ResolveParams) (interface{}, error) {

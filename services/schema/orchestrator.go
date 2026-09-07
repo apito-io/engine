@@ -33,11 +33,11 @@ type RunInput struct {
 	Request       interface{}
 	BaseDriver    interfaces.ProjectDBInterface
 	SkipBaseDDL   bool
-	ApplyDDL      func(driver interfaces.ProjectDBInterface) error
+	ApplyDDL      func(ctx context.Context, driver interfaces.ProjectDBInterface) error
 	PersistSystem func() error
 	RefreshCache  func() error
 	// Compensate runs on base project driver after partial success (best-effort).
-	Compensate func(driver interfaces.ProjectDBInterface) error
+	Compensate func(ctx context.Context, driver interfaces.ProjectDBInterface) error
 	// PhysicalDDLRequired when true tells PostSchemaChangeHook to flush project/tenant replicas.
 	PhysicalDDLRequired bool
 }
@@ -96,7 +96,7 @@ func Run(h Hooks, in RunInput) error {
 	}
 
 	if !in.SkipBaseDDL {
-		if err := in.ApplyDDL(in.BaseDriver); err != nil {
+		if err := in.ApplyDDL(in.Ctx, in.BaseDriver); err != nil {
 			mark(StepBaseProjectDDL, models.SchemaOpStepFailed, err.Error())
 			finishOperation(h.Store, in.Ctx, op, models.SchemaOpStatusFailed, err)
 			return fmt.Errorf("base project schema DDL: %w", err)
@@ -142,7 +142,7 @@ func applyTenantDDL(h Hooks, in RunInput) error {
 		if !ok || td == nil {
 			return nil
 		}
-		return in.ApplyDDL(td)
+		return in.ApplyDDL(models.WithSchemaDDLTenantTarget(ctx), td)
 	})
 }
 
@@ -158,7 +158,7 @@ func runCompensation(in RunInput, h Hooks, op *models.SchemaOperation, steps []m
 		op.UpdatedAt = utility.GetCurrentTime()
 		_ = h.Store.UpdateSchemaOperation(in.Ctx, op)
 	}
-	if err := in.Compensate(in.BaseDriver); err != nil {
+	if err := in.Compensate(in.Ctx, in.BaseDriver); err != nil {
 		mark(StepBaseProjectDDL, models.SchemaOpStepFailed, "compensation: "+err.Error())
 		if op != nil {
 			op.Status = models.SchemaOpStatusNeedsRepair
@@ -173,7 +173,7 @@ func runCompensation(in RunInput, h Hooks, op *models.SchemaOperation, steps []m
 	})
 }
 
-func statusAfterCompensation(compensate func(interfaces.ProjectDBInterface) error) string {
+func statusAfterCompensation(compensate func(context.Context, interfaces.ProjectDBInterface) error) string {
 	if compensate == nil {
 		return models.SchemaOpStatusNeedsRepair
 	}

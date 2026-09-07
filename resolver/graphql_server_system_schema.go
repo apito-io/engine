@@ -1117,6 +1117,10 @@ func (s *GraphQLServer) BuildServerQueriesAndMutations() {
 					Type:        graphql.Boolean,
 					Description: "SaaS: project-wide model without tenant_id scoping",
 				},
+				"common_model_migration": &graphql.ArgumentConfig{
+					Type:        graphql.String,
+					Description: "Required when promoting a model that already has rows to is_common_model. Only \"promote\" is supported; demotion is not available.",
+				},
 			},
 			Resolve: s.UpdateModelResolverFn,
 		},
@@ -1800,6 +1804,25 @@ func (s *GraphQLServer) BuildServerQueriesAndMutations() {
 				},
 			},
 			Resolve: s.RetrySchemaOperationResolverFn,
+		},
+		"reconcileCommonModels": &graphql.Field{
+			Name: "ReconcileCommonModels",
+			Type: graphql.NewObject(graphql.ObjectConfig{
+				Name: "CommonModelReconcileResult",
+				Fields: graphql.Fields{
+					"promoted":        &graphql.Field{Type: graphql.Int},
+					"shadows_fixed":   &graphql.Field{Type: graphql.Int},
+					"orphans_removed": &graphql.Field{Type: graphql.Int},
+					"tables_reduced":  &graphql.Field{Type: graphql.Int},
+				},
+			}),
+			Args: graphql.FieldConfigArgument{
+				"model_name": &graphql.ArgumentConfig{
+					Type:        graphql.String,
+					Description: "Optional. When set, only this common model is reconciled.",
+				},
+			},
+			Resolve: s.ReconcileCommonModelsResolverFn,
 		},
 	}
 }

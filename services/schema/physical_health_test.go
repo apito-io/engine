@@ -55,6 +55,23 @@ func TestBuildModelPhysicalHealth_StubTable(t *testing.T) {
 	}
 }
 
+func TestBuildModelPhysicalHealth_CommonShadowHealthy(t *testing.T) {
+	model := &models.ModelType{
+		Name: "medicine",
+		Ext:  map[string]interface{}{"is_common_model": true},
+		Fields: []*models.FieldInfo{
+			{Identifier: "name", FieldType: _const.TextField, InputType: "string"},
+		},
+	}
+	h := BuildModelPhysicalHealthScoped(model, true, []string{"id"}, true)
+	if len(h.MissingColumns) != 0 {
+		t.Fatalf("shadow table must not report column_drift, got missing %v", h.MissingColumns)
+	}
+	if len(h.Warnings) != 0 {
+		t.Fatalf("healthy shadow must have no stub warnings, got %v", h.Warnings)
+	}
+}
+
 func TestBuildModelPhysicalHealth_MissingTable(t *testing.T) {
 	model := &models.ModelType{Name: "x", Fields: []*models.FieldInfo{
 		{Identifier: "a", FieldType: _const.TextField, InputType: "string"},

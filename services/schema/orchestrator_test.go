@@ -59,7 +59,7 @@ func TestApplyTenantDDL_NoHookIsNoOp(t *testing.T) {
 	err := applyTenantDDL(Hooks{}, RunInput{
 		Ctx:     context.Background(),
 		Project: &models.Project{ID: "p1"},
-		ApplyDDL: func(interfaces.ProjectDBInterface) error {
+		ApplyDDL: func(context.Context, interfaces.ProjectDBInterface) error {
 			return errors.New("should not run")
 		},
 	})

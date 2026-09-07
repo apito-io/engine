@@ -52,8 +52,7 @@ func (s *GraphQLServer) updateAndConnectDocument(ctx context.Context, cache *mod
 		return nil, errors.New("payload is required")
 	}
 
-	dbCtx := publicProjectDBContext(cache, ctx)
-
+	dbCtx := models.ProjectDBContext(publicProjectDBContext(cache, ctx), param)
 	driver, err := s.GraphQLExecutor.GetProjectDriver(dbCtx)
 	if err != nil {
 		return nil, err
@@ -188,7 +187,7 @@ func (s *GraphQLServer) createAndConnectDocument(ctx context.Context, cache *mod
 		return nil, errors.New("payload is required")
 	}
 
-	dbCtx := publicProjectDBContext(cache, ctx)
+	dbCtx := models.ProjectDBContext(publicProjectDBContext(cache, ctx), param)
 
 	_id := utility.NewID()
 	doc := &types.DefaultDocumentStructure{
@@ -298,7 +297,6 @@ func (s *GraphQLServer) MutationResolverFn(p graphql.ResolveParams) (resp interf
 	}()
 
 	ctx := p.Context
-	dbCtx := publicProjectDBContext(cache, ctx)
 
 	param := s.NewParam(cache.Param)
 
@@ -328,6 +326,8 @@ func (s *GraphQLServer) MutationResolverFn(p graphql.ResolveParams) (resp interf
 	if cache.Project != nil && cache.Project.Schema != nil {
 		param.ProjectSchemaModels = cache.Project.Schema.Models
 	}
+
+	dbCtx := models.ProjectDBContext(publicProjectDBContext(cache, ctx), param)
 
 	// p == "none" || p == "all" || p == "own" || p == "auth"
 	permission, err := mutationPermissionForRole(param.Role, modelType.Name)

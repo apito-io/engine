@@ -1,3 +1,15 @@
+## 2026-09-07 — harden common models
+
+- **Changed:** Promote-only toggle, paginated verified promotion,
+  shadow FK/pivot repair, hide-deleted list/count, relation-sort
+  reject. `models/saas_scope.go`, `executor/common_hydrate.go`.
+- **Why:** Demotion unimplemented; 50k one-shot; repair was a no-op
+  counter; deleted rows leaked on root lists.
+- **Affected:** `resolver/common_model_*.go`, `system_mutations.go`,
+  `features/common-models.md`. Tag **v1.8.23**.
+
+---
+
 ## 2026-09-07 — noop mail logs AcceptURL
 
 - **Changed:** Noop `EmailSender` logs `accept <url>` when

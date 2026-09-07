@@ -306,7 +306,7 @@ func TestRunSchemaChange_SkipsSystemWhenBaseDDLFails(t *testing.T) {
 		Project:       project,
 		OperationType: models.SchemaOpTypeAddField,
 		BaseDriver:    drv,
-		ApplyDDL: func(interfaces.ProjectDBInterface) error {
+		ApplyDDL: func(context.Context, interfaces.ProjectDBInterface) error {
 			return errors.New("ddl failed")
 		},
 		PersistSystem: func() error {

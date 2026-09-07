@@ -190,7 +190,10 @@ type Config struct {
 	SchemaIterateHook func(ctx context.Context, project *Project, fn func(ctx context.Context, driver interface{}) error) error `env:"-"`
 
 	// SkipSchemaBaseDDLHook lets extensions skip base project physical DDL for tenant-only storage layouts.
-	SkipSchemaBaseDDLHook func(ctx context.Context, project *Project) bool `env:"-"`
+	// model may be nil (project-wide default). When model is a common model on a
+	// per-tenant-separate-database project the hook must return false so the
+	// base project DB receives full columns.
+	SkipSchemaBaseDDLHook func(ctx context.Context, project *Project, model *ModelType) bool `env:"-"`
 
 	// PostSchemaChangeHook runs after a successful schema orchestration commit (pro: Turso Sync flush).
 	PostSchemaChangeHook func(ctx context.Context, baseDriver interface{}, project *Project) `env:"-"`

@@ -105,11 +105,26 @@ func BuildModelPhysicalHealth(
 	tableExists bool,
 	physicalColumns []string,
 ) ModelPhysicalHealth {
+	return BuildModelPhysicalHealthScoped(model, tableExists, physicalColumns, false)
+}
+
+// BuildModelPhysicalHealthScoped treats an id-only tenant shadow table as healthy
+// when inspectShadow is true for a common model.
+func BuildModelPhysicalHealthScoped(
+	model *models.ModelType,
+	tableExists bool,
+	physicalColumns []string,
+	inspectShadow bool,
+) ModelPhysicalHealth {
 	name := ""
 	if model != nil {
 		name = model.Name
 	}
+	isCommon := ModelIsCommonFromExt(model)
 	expected := ExpectedPhysicalColumns(model)
+	if inspectShadow && isCommon {
+		expected = []string{"id"}
+	}
 	phys := normalizeColumnList(physicalColumns)
 	expNorm := normalizeColumnList(expected)
 
@@ -145,7 +160,10 @@ func BuildModelPhysicalHealth(
 		h.Warnings = append(h.Warnings, "physical table missing — publish schema DDL or create the table via Console/Studio ops (MCP cannot apply DDL)")
 		return h
 	}
-	if len(phys) == 1 && strings.EqualFold(phys[0], "id") && len(expNorm) > 1 {
+	if inspectShadow && isCommon && len(phys) > 1 {
+		h.Warnings = append(h.Warnings, "tenant common-model table still has field columns — run reconcileCommonModels to reduce to an id-only shadow")
+	}
+	if !inspectShadow && len(phys) == 1 && strings.EqualFold(phys[0], "id") && len(expNorm) > 1 {
 		h.Warnings = append(h.Warnings, "table exists but only id column — likely stub from runModelMigrations; field columns never applied")
 	}
 	if len(missing) > 0 {

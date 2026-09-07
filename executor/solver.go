@@ -134,12 +134,24 @@ func (s *GraphQLExecutor) DataLoaderHandler(ctx context.Context, keys []string) 
 	param.QuerySelectionSets = &selectionSet
 	param.DocumentIDs = keys
 
-	driver, err := s.GetProjectDriver(ctx)
+	var parentModelType *models.ModelType
+	for _, m := range cache.Project.Schema.Models {
+		if m != nil && (m.Name == to_model || utility.ModelIDMatchesGraphQLField(m.Name, to_model)) {
+			parentModelType = m
+			break
+		}
+	}
+	relCtx := ctx
+	if models.RelationLoaderUsesBaseDB(param, parentModelType, modelType) {
+		relCtx = models.WithBaseProjectDB(ctx)
+	}
+
+	driver, err := s.GetProjectDriver(relCtx)
 	if err != nil {
 		return handleError[interface{}](len(keys), err)
 	}
 
-	resultBytes, err := driver.RelationshipDataLoaderBytes(ctx, param, connection)
+	resultBytes, err := driver.RelationshipDataLoaderBytes(relCtx, param, connection)
 
 	if err != nil {
 		return handleError[interface{}](len(keys), err)
@@ -150,6 +162,14 @@ func (s *GraphQLExecutor) DataLoaderHandler(ctx context.Context, keys []string) 
 
 	if err != nil {
 		return handleError[interface{}](len(keys), err)
+	}
+
+	if len(results.Result) > 0 && results.Result[0] != nil {
+		hydrated, hydErr := s.HydrateCommonRelationMaps(ctx, param, results.Result[0])
+		if hydErr != nil {
+			return handleError[interface{}](len(keys), hydErr)
+		}
+		results.Result[0] = hydrated
 	}
 
 	var dataloaderResults []*dataloader.Result[interface{}]
@@ -215,7 +235,7 @@ func (s *GraphQLExecutor) SolvePublicQuery(ctx context.Context, model string, ar
 	param.Model = modelType
 	param.ResolveParams = &graphql.ResolveParams{Args: _args}
 
-	driver, err := s.GetProjectDriver(ctx)
+	driver, err := s.GetProjectDriver(models.ProjectDBContext(ctx, param))
 	if err != nil {
 		return nil, err
 	}
@@ -278,7 +298,7 @@ func (s *GraphQLExecutor) SolvePublicQueryCount(ctx context.Context, model strin
 	param.Model = modelType
 	param.ResolveParams = &graphql.ResolveParams{Args: _args}
 
-	driver, err := s.GetProjectDriver(ctx)
+	driver, err := s.GetProjectDriver(models.ProjectDBContext(ctx, param))
 	if err != nil {
 		return nil, err
 	}
@@ -344,7 +364,7 @@ func (s *GraphQLExecutor) SolvePublicMutation(ctx context.Context, resolverName 
 		_status = "draft" // default is draft
 	}
 
-	driver, err := s.GetProjectDriver(ctx)
+	driver, err := s.GetProjectDriver(models.ProjectDBContext(ctx, param))
 	if err != nil {
 		return nil, err
 	}
@@ -979,7 +999,7 @@ func (s *GraphQLExecutor) HandlePayloadFormatting(ctx context.Context, param *mo
 
 func (s *GraphQLExecutor) TrackUploadHistory(ctx context.Context, param *models.CommonSystemParams, sent *models.FileDetails) error {
 
-	driver, err := s.GetProjectDriver(ctx)
+	driver, err := s.GetProjectDriver(models.ProjectDBContext(ctx, param))
 	if err != nil {
 		return err
 	}
@@ -1042,7 +1062,7 @@ func enforceExecutorPlanCreateQuota(ctx context.Context, s *GraphQLExecutor, cac
 	}
 	count, ok := raw[modelType.Name]
 	if !ok {
-		driver, err := s.GetProjectDriver(ctx)
+		driver, err := s.GetProjectDriver(models.ProjectDBContext(ctx, param))
 		if err != nil {
 			return fmt.Errorf("plan quota check: %w", err)
 		}

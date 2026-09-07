@@ -1159,7 +1159,7 @@ func (s *GraphQLServer) AddModelToProjectResolverFn(p graphql.ResolveParams) (in
 			}
 		}
 
-		driver, skipBaseDDL, err := s.getSchemaBaseProjectDriverIfNeeded(cache.Ctx, project)
+		driver, skipBaseDDL, err := s.getSchemaBaseProjectDriverIfNeeded(cache.Ctx, project, model)
 		if err != nil {
 			return nil, err
 		}
@@ -1180,8 +1180,8 @@ func (s *GraphQLServer) AddModelToProjectResolverFn(p graphql.ResolveParams) (in
 			Request:       map[string]interface{}{"name": modelName, "single_record": singleRecord},
 			BaseDriver:    driver,
 			SkipBaseDDL:   skipBaseDDL,
-			ApplyDDL: func(d interfaces.ProjectDBInterface) error {
-				schema, ddlErr := d.AddModel(cache.Ctx, project, model)
+			ApplyDDL: func(ctx context.Context, d interfaces.ProjectDBInterface) error {
+				schema, ddlErr := d.AddModel(ctx, project, model)
 				if ddlErr != nil {
 					return ddlErr
 				}
@@ -1195,8 +1195,8 @@ func (s *GraphQLServer) AddModelToProjectResolverFn(p graphql.ResolveParams) (in
 				_, refreshErr := s.refreshProjectAndReCache(cache.Ctx, project.ID)
 				return refreshErr
 			},
-			Compensate: func(d interfaces.ProjectDBInterface) error {
-				return d.DropModel(cache.Ctx, project, modelName)
+			Compensate: func(ctx context.Context, d interfaces.ProjectDBInterface) error {
+				return d.DropModel(ctx, project, modelName)
 			},
 		})
 		if err != nil {
@@ -1240,7 +1240,7 @@ func (s *GraphQLServer) RunModelMigrationsResolverFn(p graphql.ResolveParams) (i
 		// temporary fix for sql driver
 		param.ProjectID = cache.Project.ID
 
-		driver, err := s.GraphQLExecutor.GetProjectDriver(cache.Ctx)
+		driver, err := s.GraphQLExecutor.GetProjectDriver(models.ProjectDBContext(cache.Ctx, param))
 		if err != nil {
 			return nil, err
 		}
@@ -1340,7 +1340,9 @@ func (s *GraphQLServer) UpdateModelResolverFn(p graphql.ResolveParams) (interfac
 	}
 	if _type == "update" {
 		if _, ok := p.Args["is_common_model"].(bool); ok {
-			return s.updateModel(cache, project, modelName, p.Args)
+			if err := s.guardCommonModelToggle(cache, project, modelName, p.Args); err != nil {
+				return nil, err
+			}
 		}
 	}
 	return s.tryStageSchemaMutation(cache, project, opType, graphqlArgsMap(p), func() (interface{}, error) {
@@ -1430,7 +1432,7 @@ func (s *GraphQLServer) updateModel(cache *models.ApplicationCache, project *mod
 		Request:       args,
 		BaseDriver:    nil,
 		SkipBaseDDL:   true,
-		ApplyDDL: func(interfaces.ProjectDBInterface) error {
+		ApplyDDL: func(ctx context.Context, d interfaces.ProjectDBInterface) error {
 			return nil
 		},
 		PersistSystem: func() error {
@@ -1444,7 +1446,23 @@ func (s *GraphQLServer) updateModel(cache *models.ApplicationCache, project *mod
 	if err != nil {
 		return nil, err
 	}
+	if strategy, _ := args["common_model_migration"].(string); strings.EqualFold(strings.TrimSpace(strategy), "promote") || models.ModelIsCommon(updatedModel) {
+		if _, migErr := s.reconcileCommonModels(cache.Ctx, project, cache.Param, updatedModel.Name); migErr != nil {
+			return nil, migErr
+		}
+	}
 	return updatedModel, nil
+}
+
+func cloneModelExt(src map[string]interface{}) map[string]interface{} {
+	if src == nil {
+		return nil
+	}
+	out := make(map[string]interface{}, len(src))
+	for k, v := range src {
+		out[k] = v
+	}
+	return out
 }
 
 func (s *GraphQLServer) duplicateModel(ctx context.Context, project *models.Project, newName, modelName string) (interface{}, error) {
@@ -1496,6 +1514,7 @@ func (s *GraphQLServer) duplicateModel(ctx context.Context, project *models.Proj
 				RepeatedGroups:  modelToDuplicate.RepeatedGroups,
 				SystemGenerated: modelToDuplicate.SystemGenerated,
 				HasConnections:  modelToDuplicate.HasConnections,
+				Ext:             cloneModelExt(modelToDuplicate.Ext),
 			}
 			if modelToDuplicate.SinglePageUUID != "" { // assign new id
 				duplicatedModel.SinglePage = true
@@ -2599,7 +2618,7 @@ func (s *GraphQLServer) UpsertFieldToModelResolverFn(p graphql.ResolveParams) (i
 	param.Model = modelType
 	param.FieldInfo = fieldInfo
 
-	driver, skipBaseDDL, err := s.getSchemaBaseProjectDriverIfNeeded(cache.Ctx, project)
+	driver, skipBaseDDL, err := s.getSchemaBaseProjectDriverIfNeeded(cache.Ctx, project, modelType)
 	if err != nil {
 		return nil, err
 	}
@@ -2614,8 +2633,8 @@ func (s *GraphQLServer) UpsertFieldToModelResolverFn(p graphql.ResolveParams) (i
 			},
 			BaseDriver:  driver,
 			SkipBaseDDL: skipBaseDDL,
-			ApplyDDL: func(d interfaces.ProjectDBInterface) error {
-				updated, ddlErr := d.AddFieldToModel(cache.Ctx, param, isUpdate, parentField)
+			ApplyDDL: func(ctx context.Context, d interfaces.ProjectDBInterface) error {
+				updated, ddlErr := d.AddFieldToModel(ctx, param, isUpdate, parentField)
 				if ddlErr != nil {
 					return ddlErr
 				}
@@ -2632,11 +2651,11 @@ func (s *GraphQLServer) UpsertFieldToModelResolverFn(p graphql.ResolveParams) (i
 				_, err := s.refreshProjectAndReCache(cache.Ctx, project.ID)
 				return err
 			},
-			Compensate: func(d interfaces.ProjectDBInterface) error {
+			Compensate: func(ctx context.Context, d interfaces.ProjectDBInterface) error {
 				if isUpdate {
 					return nil
 				}
-				return d.DropField(cache.Ctx, param)
+				return d.DropField(ctx, param)
 			},
 		})
 		if err != nil {
@@ -3017,14 +3036,15 @@ func (s *GraphQLServer) ModelFieldOperationResolverFn(p graphql.ResolveParams) (
 		parentField = val
 	}
 
-	driver, skipBaseDDL, err := s.getSchemaBaseProjectDriverIfNeeded(cache.Ctx, project)
+	driver, skipBaseDDL, err := s.getSchemaBaseProjectDriverIfNeeded(cache.Ctx, project, modelType)
+
 	if err != nil {
 		return nil, err
 	}
 
 	var affectedField *models.FieldInfo
-	var applyDDL func(interfaces.ProjectDBInterface) error
-	var compensate func(interfaces.ProjectDBInterface) error
+	var applyDDL func(ctx context.Context, d interfaces.ProjectDBInterface) error
+	var compensate func(ctx context.Context, d interfaces.ProjectDBInterface) error
 	var beforePersist func() error
 
 	switch _type {
@@ -3061,7 +3081,7 @@ func (s *GraphQLServer) ModelFieldOperationResolverFn(p graphql.ResolveParams) (
 		}
 		if fieldInfo == nil {
 			if s.schemaVersioningActive() {
-				applyDDL = func(interfaces.ProjectDBInterface) error { return nil }
+				applyDDL = func(ctx context.Context, d interfaces.ProjectDBInterface) error { return nil }
 				beforePersist = func() error { return nil }
 				affectedField = &models.FieldInfo{
 					Identifier:  newField.Identifier,
@@ -3091,10 +3111,10 @@ func (s *GraphQLServer) ModelFieldOperationResolverFn(p graphql.ResolveParams) (
 		oldName := fieldName
 
 		if fieldName != newField.Identifier {
-			applyDDL = func(d interfaces.ProjectDBInterface) error {
-				return d.RenameField(cache.Ctx, oldName, parentField, param)
+			applyDDL = func(ctx context.Context, d interfaces.ProjectDBInterface) error {
+				return d.RenameField(ctx, oldName, parentField, param)
 			}
-			compensate = func(d interfaces.ProjectDBInterface) error {
+			compensate = func(ctx context.Context, d interfaces.ProjectDBInterface) error {
 				back := &models.FieldInfo{
 					Identifier:  oldName,
 					Label:       fieldInfo.Label,
@@ -3109,7 +3129,7 @@ func (s *GraphQLServer) ModelFieldOperationResolverFn(p graphql.ResolveParams) (
 				rev.Model = modelType
 				rev.FieldInfo = back
 				rev.SinglePageData = singlePageModel
-				return d.RenameField(cache.Ctx, newField.Identifier, parentField, rev)
+				return d.RenameField(ctx, newField.Identifier, parentField, rev)
 			}
 		}
 		beforePersist = func() error {
@@ -3194,7 +3214,7 @@ func (s *GraphQLServer) ModelFieldOperationResolverFn(p graphql.ResolveParams) (
 		}
 		if deletedField == nil {
 			if s.schemaVersioningActive() {
-				applyDDL = func(interfaces.ProjectDBInterface) error { return nil }
+				applyDDL = func(ctx context.Context, d interfaces.ProjectDBInterface) error { return nil }
 				beforePersist = func() error { return nil }
 				affectedField = &models.FieldInfo{
 					Identifier:  fieldName,
@@ -3209,8 +3229,8 @@ func (s *GraphQLServer) ModelFieldOperationResolverFn(p graphql.ResolveParams) (
 			param.FieldInfo = deletedField
 			param.Model = modelType
 
-			applyDDL = func(d interfaces.ProjectDBInterface) error {
-				return d.DropField(cache.Ctx, param)
+			applyDDL = func(ctx context.Context, d interfaces.ProjectDBInterface) error {
+				return d.DropField(ctx, param)
 			}
 			beforePersist = func() error {
 				affectedField, err = s.searchAndOperateOnFields(&modelType.Fields, &models.ValidIdentifier{
@@ -3222,11 +3242,11 @@ func (s *GraphQLServer) ModelFieldOperationResolverFn(p graphql.ResolveParams) (
 		}
 
 	default:
-		applyDDL = func(interfaces.ProjectDBInterface) error { return nil }
+		applyDDL = func(ctx context.Context, d interfaces.ProjectDBInterface) error { return nil }
 	}
 
 	if applyDDL == nil {
-		applyDDL = func(interfaces.ProjectDBInterface) error { return nil }
+		applyDDL = func(ctx context.Context, d interfaces.ProjectDBInterface) error { return nil }
 	}
 
 	return s.tryStageSchemaMutation(cache, project, models.SchemaOpTypeModelFieldOp, graphqlArgsMap(p), func() (interface{}, error) {
@@ -3588,7 +3608,7 @@ func (s *GraphQLServer) DeleteConnectionFromModelResolverFn(p graphql.ResolvePar
 	}
 
 	return s.tryStageSchemaMutation(cache, project, models.SchemaOpTypeDeleteConnection, graphqlArgsMap(p), func() (interface{}, error) {
-		driver, err := s.GraphQLExecutor.GetProjectDriver(cache.Ctx)
+		driver, err := s.GraphQLExecutor.GetProjectDriver(models.ProjectDBContext(cache.Ctx, &models.CommonSystemParams{Model: fromModelType}))
 		if err != nil {
 			return nil, err
 		}
@@ -3687,11 +3707,6 @@ func (s *GraphQLServer) CreateConnectionTypeResolverFn(p graphql.ResolveParams) 
 	}
 
 	return s.tryStageSchemaMutation(cache, project, models.SchemaOpTypeCreateConnection, graphqlArgsMap(p), func() (interface{}, error) {
-		driver, skipBaseDDL, err := s.getSchemaBaseProjectDriverIfNeeded(cache.Ctx, project)
-		if err != nil {
-			return nil, err
-		}
-
 		var connections []*models.ConnectionType
 		if project.Schema == nil {
 			return nil, ae.SchemaIsNil
@@ -3714,6 +3729,22 @@ func (s *GraphQLServer) CreateConnectionTypeResolverFn(p graphql.ResolveParams) 
 		}
 		if len(toModelType.Fields) == 0 {
 			return nil, fmt.Errorf("can not create relations with %s, because it has no fields.", strings.Title(strings.ToLower(toModelType.Name)))
+		}
+
+		fwdRel, _ := p.Args["forward_connection_type"].(string)
+		revRel, _ := p.Args["reverse_connection_type"].(string)
+		if err := models.ValidateCommonTenantRelation(fromModelType, toModelType, fwdRel, revRel); err != nil {
+			return nil, err
+		}
+
+		skipModel := fromModelType
+		if models.ModelIsCommon(fromModelType) != models.ModelIsCommon(toModelType) {
+			// Mixed common/tenant: FK or pivot lives on the tenant DB only.
+			skipModel = nil
+		}
+		driver, skipBaseDDL, err := s.getSchemaBaseProjectDriverIfNeeded(cache.Ctx, project, skipModel)
+		if err != nil {
+			return nil, err
 		}
 
 		var fromConnectionInfo *models.ConnectionType
@@ -3802,8 +3833,8 @@ func (s *GraphQLServer) CreateConnectionTypeResolverFn(p graphql.ResolveParams) 
 			OperationType: models.SchemaOpTypeCreateConnection,
 			Request:       map[string]interface{}{"from": fromResource, "to": toResource, "known_as": knownAs},
 			BaseDriver:    driver, SkipBaseDDL: skipBaseDDL,
-			ApplyDDL: func(d interfaces.ProjectDBInterface) error {
-				return d.AddRelationFields(cache.Ctx, fwdConn, revConn)
+			ApplyDDL: func(ctx context.Context, d interfaces.ProjectDBInterface) error {
+				return d.AddRelationFields(ctx, fwdConn, revConn)
 			},
 			PersistSystem: func() error {
 				if err := s.SystemDriver.TouchProjectUpdatedAt(cache.Ctx, project.ID); err != nil {
@@ -3818,8 +3849,8 @@ func (s *GraphQLServer) CreateConnectionTypeResolverFn(p graphql.ResolveParams) 
 				_, err := s.refreshProjectAndReCache(cache.Ctx, project.ID)
 				return err
 			},
-			Compensate: func(d interfaces.ProjectDBInterface) error {
-				return d.DeleteRelationDocuments(cache.Ctx, project.ID, fwdConn, revConn)
+			Compensate: func(ctx context.Context, d interfaces.ProjectDBInterface) error {
+				return d.DeleteRelationDocuments(ctx, project.ID, fwdConn, revConn)
 			},
 		})
 		if err != nil {
@@ -3898,7 +3929,7 @@ func (s *GraphQLServer) UpsertModelDataFnFn(p graphql.ResolveParams) (interface{
 		forceUpdate = false
 	}
 
-	driver, err := s.GraphQLExecutor.GetProjectDriver(cache.Ctx)
+	driver, err := s.GraphQLExecutor.GetProjectDriver(models.ProjectDBContext(cache.Ctx, param))
 	if err != nil {
 		return nil, err
 	}
@@ -4160,7 +4191,7 @@ func (s *GraphQLServer) DuplicateModelDataFnFn(p graphql.ResolveParams) (interfa
 	param.ResolveParams = &p
 	param.Model = modelType
 
-	driver, err := s.GraphQLExecutor.GetProjectDriver(cache.Ctx)
+	driver, err := s.GraphQLExecutor.GetProjectDriver(models.ProjectDBContext(cache.Ctx, param))
 	if err != nil {
 		return nil, err
 	}
@@ -4248,7 +4279,7 @@ func (s *GraphQLServer) DeleteModelDataFnFn(p graphql.ResolveParams) (interface{
 	param.DocumentID = docId
 	param.Model = modelType
 
-	driver, err := s.GraphQLExecutor.GetProjectDriver(cache.Ctx)
+	driver, err := s.GraphQLExecutor.GetProjectDriver(models.ProjectDBContext(cache.Ctx, param))
 	if err != nil {
 		return nil, err
 	}

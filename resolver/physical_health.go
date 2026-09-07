@@ -1,6 +1,7 @@
 package resolver
 
 import (
+	"context"
 	"fmt"
 	"strings"
 
@@ -81,7 +82,17 @@ func (s *GraphQLServer) inspectModelPhysicalHealth(
 	if model == nil {
 		return schemasvc.ModelPhysicalHealth{}, fmt.Errorf("nil model")
 	}
-	driver, err := s.getSchemaBaseProjectDriver(cache.Ctx)
+	perTenantSeparate := s.skipSchemaBaseDDL(cache.Ctx, cache.Project, nil)
+	inspectShadow := false
+	var driver interfaces.ProjectDBInterface
+	var err error
+	if models.ModelIsCommon(model) {
+		driver, err = s.getSchemaBaseProjectDriver(cache.Ctx)
+	} else if perTenantSeparate {
+		driver, err = s.firstTenantOrBaseDriver(cache.Ctx, cache.Project)
+	} else {
+		driver, err = s.getSchemaBaseProjectDriver(cache.Ctx)
+	}
 	if err != nil {
 		return schemasvc.ModelPhysicalHealth{}, err
 	}
@@ -109,7 +120,59 @@ func (s *GraphQLServer) inspectModelPhysicalHealth(
 			return schemasvc.ModelPhysicalHealth{}, err
 		}
 	}
-	return schemasvc.BuildModelPhysicalHealth(model, exists, cols), nil
+	h := schemasvc.BuildModelPhysicalHealthScoped(model, exists, cols, inspectShadow)
+	if models.ModelIsCommon(model) && perTenantSeparate {
+		if twarn, werr := s.tenantCommonShadowWarnings(cache, model); werr == nil {
+			h.Warnings = append(h.Warnings, twarn...)
+		}
+	}
+	return h, nil
+}
+
+func (s *GraphQLServer) tenantCommonShadowWarnings(cache *models.ApplicationCache, model *models.ModelType) ([]string, error) {
+	tenant, err := s.firstTenantOrBaseDriver(cache.Ctx, cache.Project)
+	if err != nil || tenant == nil {
+		return nil, err
+	}
+	param := s.NewParam(cache.Param)
+	param.Model = model
+	param.ProjectID = cache.Project.ID
+	exists, err := tenant.CheckTableOrCollectionExists(cache.Ctx, param)
+	if err != nil {
+		return nil, err
+	}
+	var cols []string
+	if exists {
+		lister := physicalColumnLister(tenant)
+		if lister == nil {
+			return nil, nil
+		}
+		cols, err = lister.ListTableColumnNames(cache.Ctx, utility.PhysicalSQLTableName(model.Name))
+		if err != nil {
+			return nil, err
+		}
+	}
+	th := schemasvc.BuildModelPhysicalHealthScoped(model, exists, cols, true)
+	return th.Warnings, nil
+}
+
+func (s *GraphQLServer) firstTenantOrBaseDriver(ctx context.Context, project *models.Project) (interfaces.ProjectDBInterface, error) {
+	if s.Cfg != nil && s.Cfg.SchemaIterateHook != nil && project != nil {
+		var first interfaces.ProjectDBInterface
+		_ = s.Cfg.SchemaIterateHook(ctx, project, func(tctx context.Context, driver interface{}) error {
+			if first != nil {
+				return nil
+			}
+			if td, ok := driver.(interfaces.ProjectDBInterface); ok {
+				first = td
+			}
+			return nil
+		})
+		if first != nil {
+			return first, nil
+		}
+	}
+	return s.GraphQLExecutor.GetProjectDriver(ctx)
 }
 
 // physicalColumnLister unwraps PeelProjectDB wrappers (e.g. slow-query) then

@@ -1,6 +1,7 @@
 package resolver
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"sync"
@@ -108,7 +109,7 @@ func (s *GraphQLServer) RetrySchemaOperationResolverFn(p graphql.ResolveParams) 
 		Ctx:        cache.Ctx,
 		Op:         op,
 		BaseDriver: driver,
-		ApplyDDL: func(d interfaces.ProjectDBInterface) error {
+		ApplyDDL: func(ctx context.Context, d interfaces.ProjectDBInterface) error {
 			return fmt.Errorf("retry schema operation: manual repair required for operation type %s", op.OperationType)
 		},
 		PersistSystem: func() error {
