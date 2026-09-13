@@ -1,3 +1,24 @@
+## 2026-09-13 — preserve project-user ACL + users relation
+
+- **Changed:** `BuildSystemParam` role merge preserves request
+  `IsProjectUser` / `ReadOnlyProject`; persisted-schema stripping retains the
+  hidden `users` descriptor when it has active inverse connections. `/secured/*`
+  `ak_` keys that are login/bootstrap-scoped now 403 with
+  `BOOTSTRAP_KEY_ON_SECURED`; website tenant tokens still pass. Removed
+  temporary token middleware + ACL authorization debug instrumentation/helper.
+- **Why:** Replacing the request role with its stored template erased app-user
+  identity, so `auth` create was denied; dropping connected `users` erased the
+  inverse half of `user_profile.owner`. Login-scoped project keys were rendering
+  empty RBAC schemas on staff GraphQL.
+- **Affected:** `resolver/graphql_server.go`,
+  `models/project_auth_user_model.go`, role/persistence regression tests,
+  `services/token.go`, `services/staff_project_user.go`, and
+  `utility/authorize.go`. Utility tests pass; `services` compiles. Full
+  services tests retain only pre-existing timing-sensitive
+  `TestCustomTokenWithTTL`.
+
+---
+
 ## 2026-09-07 — harden common models
 
 - **Changed:** Promote-only toggle, paginated verified promotion,

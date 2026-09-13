@@ -398,6 +398,9 @@ func (t *ApitoTokenService) ApitoTokenHandler(next echo.HandlerFunc) echo.Handle
 				if err != nil {
 					return ctx.JSON(http.StatusForbidden, map[string]interface{}{"message": ae.InvalidToken})
 				}
+				if IsSecuredAppDataPath(requestPath) && !IsStaffProjectUserKey(verifiedToken) {
+					return ctx.JSON(http.StatusForbidden, map[string]interface{}{"message": BootstrapKeyOnSecuredMessage})
+				}
 			} else if IsAccessToken(rawToken) {
 				ctx.Set("auth_plane", "access_token")
 				if t.accessTokenService == nil {
@@ -473,6 +476,9 @@ func (t *ApitoTokenService) ApitoTokenHandler(next echo.HandlerFunc) echo.Handle
 				verifiedToken, err = t.apiKeyManager.ValidateAndSetContext(ctx, rawToken)
 				if err != nil {
 					return ctx.JSON(http.StatusForbidden, map[string]interface{}{"message": ae.InvalidToken})
+				}
+				if IsSecuredAppDataPath(requestPath) && !IsStaffProjectUserKey(verifiedToken) {
+					return ctx.JSON(http.StatusForbidden, map[string]interface{}{"message": BootstrapKeyOnSecuredMessage})
 				}
 			} else {
 				ctx.Set("auth_plane", "id_token_bearer")

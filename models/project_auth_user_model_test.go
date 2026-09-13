@@ -57,3 +57,36 @@ func TestStripProjectAuthUserModelFromPersistedSchema(t *testing.T) {
 	require.Len(t, schema.Models, 1)
 	require.Equal(t, "book", schema.Models[0].Name)
 }
+
+func TestStripProjectAuthUserModelPreservesInverseConnections(t *testing.T) {
+	users := DefaultProjectAuthUserModel()
+	users.Connections = []*ConnectionType{
+		{
+			Model:    "user_profile",
+			Relation: "has_one",
+			Type:     "backward",
+			KnownAs:  "owner",
+		},
+	}
+	schema := &ProjectSchema{Models: []*ModelType{
+		{
+			Name: "user_profile",
+			Connections: []*ConnectionType{
+				{
+					Model:    ProjectAuthUserModelName,
+					Relation: "has_one",
+					Type:     "forward",
+					KnownAs:  "owner",
+				},
+			},
+		},
+		users,
+	}}
+
+	StripProjectAuthUserModelFromPersistedSchema(schema)
+
+	require.Len(t, schema.Models, 2)
+	require.Same(t, users, schema.Models[1])
+	require.Len(t, schema.Models[1].Connections, 1)
+	require.Equal(t, "user_profile", schema.Models[1].Connections[0].Model)
+}

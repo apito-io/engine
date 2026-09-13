@@ -531,9 +531,18 @@ func IntersectRoleWithPlan(role *models.Role, plan *models.Plan) *models.Role {
 
 	out.APIPermissions = make(map[string]*models.APIPermission, len(modelsSet)+1)
 	for modelName := range modelsSet {
-		roleAP, _ := LookupAPIPermission(role, modelName)
-		if roleAP == nil {
-			roleAP = noneAPIPermission()
+		// Tenant admin has empty APIPermissions (ACL bypass). After IsAdmin is
+		// cleared, missing keys would become none∩plan=none and drop every
+		// model from the public GraphQL schema. Treat pre-clamp admin as full
+		// role CRUD so the plan remains a ceiling, not a wipe.
+		var roleAP *models.APIPermission
+		if role.IsAdmin {
+			roleAP = allAPIPermission()
+		} else {
+			roleAP, _ = LookupAPIPermission(role, modelName)
+			if roleAP == nil {
+				roleAP = noneAPIPermission()
+			}
 		}
 		planAP, ok := LookupPlanAPIPermission(plan, modelName)
 		if !ok || planAP == nil {

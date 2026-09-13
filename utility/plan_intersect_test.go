@@ -67,6 +67,24 @@ func TestIntersectRoleWithPlanClampsAdmin(t *testing.T) {
 	}
 }
 
+func TestIntersectRoleWithPlanAdminEmptyPermsUsesPlanCeiling(t *testing.T) {
+	role := &models.Role{ID: "admin", IsAdmin: true}
+	plan := &models.Plan{
+		ID: "free",
+		APIPermissions: map[string]*models.APIPermission{
+			"branch": {Read: "all", Create: "all", Update: "all", Delete: "none"},
+		},
+	}
+	out := IntersectRoleWithPlan(role, plan)
+	if out.IsAdmin {
+		t.Fatal("IsAdmin must be cleared under a plan")
+	}
+	perm := EffectivePermission(out, "branch")
+	if perm.Read != "all" || perm.Create != "all" || perm.Delete != "none" {
+		t.Fatalf("admin∩plan should keep plan ceiling, got %#v", perm)
+	}
+}
+
 func TestIntersectRoleWithPlanNilIsPassthroughClone(t *testing.T) {
 	role := &models.Role{ID: "teacher", IsAdmin: false, IsProjectUser: true}
 	out := IntersectRoleWithPlan(role, nil)

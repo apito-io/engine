@@ -886,9 +886,15 @@ func (s *GraphQLServer) BuildSystemParam(i echo.Context, project *models.Project
 		param.Role.IsAdmin = true
 		//s.SystemRoles = roles
 	} else {
-		if val, ok := project.Roles[param.Role.ID]; ok {
-			val.ID = param.Role.ID
-			param.Role = val
+		if val, ok := project.Roles[param.Role.ID]; ok && val != nil {
+			// Role templates in project.Roles do not carry request identity.
+			// Replacing param.Role with the cached pointer dropped IsProjectUser
+			// (token ctx true → ACL saw passenger with IsProjectUser false).
+			copied := *val
+			copied.ID = param.Role.ID
+			copied.IsProjectUser = param.Role.IsProjectUser
+			copied.ReadOnlyProject = param.Role.ReadOnlyProject
+			param.Role = &copied
 			//s.SystemRoles = roles
 		} else if param.Role.ID == "demo" {
 			param.Role.SystemGenerated = true

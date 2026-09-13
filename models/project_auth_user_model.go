@@ -104,16 +104,24 @@ func EnsureProjectAuthUserModelInSchema(schema *ProjectSchema) bool {
 	return true
 }
 
-// StripProjectAuthUserModelFromPersistedSchema removes the runtime auth users descriptor
-// before persisting draft/publish JSON (injection happens again on project load).
+// StripProjectAuthUserModelFromPersistedSchema removes an unconnected runtime-only
+// auth users descriptor before persistence. A connected descriptor must survive:
+// its Connections hold the inverse half of relations such as
+// user_profile.owner <-> users. Dropping it leaves a valid GraphQL connect input
+// backed by an incomplete driver relation pair.
 func StripProjectAuthUserModelFromPersistedSchema(schema *ProjectSchema) {
 	if schema == nil || len(schema.Models) == 0 {
 		return
 	}
 	out := schema.Models[:0]
 	for _, m := range schema.Models {
-		if m == nil || ModelIsProjectAuthUserModel(m) || ModelNameIsReservedProjectAuthUser(m.Name) {
+		if m == nil {
 			continue
+		}
+		if ModelIsProjectAuthUserModel(m) || ModelNameIsReservedProjectAuthUser(m.Name) {
+			if len(m.Connections) == 0 {
+				continue
+			}
 		}
 		out = append(out, m)
 	}
