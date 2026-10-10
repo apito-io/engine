@@ -28,6 +28,12 @@ func (s *GraphQLServer) BuildServerQueriesAndMutations() {
 			Type:    privateSchemaObjects.ProjectDetailsObject,
 			Resolve: s.GetCurrentProjectResolverFn,
 		},
+		"previewSchemaRelationTransition": &graphql.Field{
+			Name:    "PreviewSchemaRelationTransition",
+			Type:    relationTransitionPreviewType,
+			Args:    relationTransitionArgs(),
+			Resolve: s.PreviewSchemaRelationTransitionResolverFn,
+		},
 		"auditLogs": &graphql.Field{
 			Name: "GetAuditLogs",
 			Type: graphql.NewList(privateSchemaObjects.AuditLogObject),
@@ -1681,6 +1687,38 @@ func (s *GraphQLServer) BuildServerQueriesAndMutations() {
 				},
 			},
 			Resolve: s.CreateConnectionTypeResolverFn,
+		},
+		"stageRelationTransition": &graphql.Field{
+			Name: "StageRelationTransition",
+			Type: relationTransitionStageType,
+			Args: func() graphql.FieldConfigArgument {
+				args := relationTransitionArgs()
+				args["plan_hash"] = &graphql.ArgumentConfig{Type: graphql.NewNonNull(graphql.String)}
+				args["acknowledgement"] = &graphql.ArgumentConfig{Type: graphql.String}
+				return args
+			}(),
+			Resolve: s.StageRelationTransitionResolverFn,
+		},
+		"upsertUniqueKey": &graphql.Field{
+			Name: "UpsertUniqueKey",
+			Type: privateSchemaObjects.UniqueKeyObject,
+			Args: graphql.FieldConfigArgument{
+				"model_name": &graphql.ArgumentConfig{Type: graphql.NewNonNull(graphql.String)},
+				"name":       &graphql.ArgumentConfig{Type: graphql.NewNonNull(graphql.String)},
+				"columns": &graphql.ArgumentConfig{
+					Type: graphql.NewNonNull(graphql.NewList(graphql.NewNonNull(graphql.String))),
+				},
+			},
+			Resolve: s.UpsertUniqueKeyResolverFn,
+		},
+		"deleteUniqueKey": &graphql.Field{
+			Name: "DeleteUniqueKey",
+			Type: privateSchemaObjects.UniqueKeyObject,
+			Args: graphql.FieldConfigArgument{
+				"model_name": &graphql.ArgumentConfig{Type: graphql.NewNonNull(graphql.String)},
+				"name":       &graphql.ArgumentConfig{Type: graphql.NewNonNull(graphql.String)},
+			},
+			Resolve: s.DeleteUniqueKeyResolverFn,
 		},
 		"deleteConnectionFromModel": &graphql.Field{
 			Name: "RemoveConnectionFromModel",

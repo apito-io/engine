@@ -152,13 +152,28 @@ func (s *SchemaObjects) GetProjectDetailsObject(userDefinedSchemaObj, pluginDeta
 	})
 }
 
-func (s *SchemaObjects) GetModelTypeObject(fieldInfoObj, connectionTypeObj *graphql.Object) *graphql.Object {
+func (s *SchemaObjects) GetUniqueKeyObject() *graphql.Object {
+	return graphql.NewObject(graphql.ObjectConfig{
+		Name: "UniqueKey",
+		Fields: graphql.Fields{
+			"name":         &graphql.Field{Type: graphql.String},
+			"columns":      &graphql.Field{Type: graphql.NewList(graphql.String)},
+			"model_name":   &graphql.Field{Type: graphql.String},
+			"staged":       &graphql.Field{Type: graphql.Boolean},
+			"changeset_id": &graphql.Field{Type: graphql.String},
+			"message":      &graphql.Field{Type: graphql.String},
+		},
+	})
+}
+
+func (s *SchemaObjects) GetModelTypeObject(fieldInfoObj, connectionTypeObj, uniqueKeyObj *graphql.Object) *graphql.Object {
 	return graphql.NewObject(graphql.ObjectConfig{
 		Name: "ModelType",
 		Fields: graphql.Fields{
 			"name":             &graphql.Field{Type: graphql.String},
 			"fields":           &graphql.Field{Type: graphql.NewList(fieldInfoObj)},
 			"connections":      &graphql.Field{Type: graphql.NewList(connectionTypeObj)},
+			"unique_keys":      &graphql.Field{Type: graphql.NewList(uniqueKeyObj)},
 			"hook_ids":         &graphql.Field{Type: graphql.NewList(graphql.String)},
 			"locals":           &graphql.Field{Type: graphql.NewList(graphql.String)},
 			"repeated_groups":  &graphql.Field{Type: graphql.NewList(graphql.String)},

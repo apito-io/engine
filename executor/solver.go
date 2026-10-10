@@ -815,23 +815,25 @@ func (s *GraphQLExecutor) HandlePayloadFormatting(ctx context.Context, param *mo
 				}
 			} else if f.Validation != nil && f.Validation.FixedListElements != nil { // fixed list
 				if userInput, ok := inputPayload[f.Identifier]; ok && userInput != nil {
-					switch userInput := userInput.(type) {
-					case string: // sinngle choise dropdown or radio button
-						// validate the user input based on the fixed list elements
-						if utility.ArrayContainsInterface(f.Validation.FixedListElements, userInput) {
-							dbPayload[identifier] = userInput // assuming the choise is string type
-						} else {
-							return nil, fmt.Errorf("invalid dropdown value %v for %s", userInput, f.Identifier)
-						}
-					case []interface{}: // multi choise checkbox
-						var result []string // assuming the choise is string type
-						for _, item := range userInput {
-							if utility.ArrayContainsInterface(f.Validation.FixedListElements, item) {
-								result = append(result, item.(string))
+					// GraphQL []String lands as []string. A type switch on
+					// []interface{} misses it and reports the whole slice as
+					// one invalid dropdown (e.g. "[dry]", "[a b]").
+					if items, isSlice := normalizeListSlice(userInput); isSlice {
+						var result []string
+						for _, item := range items {
+							text, isString := item.(string)
+							if isString && utility.ArrayContainsInterface(f.Validation.FixedListElements, text) {
+								result = append(result, text)
 							}
 						}
 						dbPayload[identifier] = result
-					default:
+					} else if text, isString := userInput.(string); isString {
+						if utility.ArrayContainsInterface(f.Validation.FixedListElements, text) {
+							dbPayload[identifier] = text
+						} else {
+							return nil, fmt.Errorf("invalid dropdown value %v for %s", userInput, f.Identifier)
+						}
+					} else {
 						return nil, fmt.Errorf("invalid dropdown value %v for %s", userInput, f.Identifier)
 					}
 				}

@@ -31,6 +31,15 @@ type ModelType struct {
 
 	// Ext holds opaque extension data populated by the extension layer (e.g. model classification metadata).
 	Ext map[string]interface{} `json:"ext,omitempty" firestore:"ext,omitempty" bson:"ext,omitempty"`
+
+	// UniqueKeys are optional composite unique indexes. Empty means no extra unique index.
+	UniqueKeys []*UniqueKey `bun:"type:json,nullzero" json:"unique_keys,omitempty" firestore:"unique_keys,omitempty" bson:"unique_keys,omitempty"`
+}
+
+// UniqueKey is a published composite unique index on one model's physical columns.
+type UniqueKey struct {
+	Name    string   `json:"name,omitempty" firestore:"name,omitempty" bson:"name,omitempty"`
+	Columns []string `json:"columns,omitempty" firestore:"columns,omitempty" bson:"columns,omitempty"`
 }
 
 type Validation struct {

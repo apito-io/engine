@@ -1,3 +1,35 @@
+## 2026-10-11 — relation transition preview and stage
+
+- **Changed:** `relationmigrate` plus `previewSchemaRelationTransition` and `stageRelationTransition`. Existing-edge storage changes no longer go through `upsertConnectionToModel`.
+- **Why:** Console and MCP need one classifier, one plan hash, and a fail-closed conflict policy.
+- **Affected:** `relationmigrate/`, `resolver/relation_transition.go`, `resolver/graphql_server_system_schema.go`, `resolver/system_mutations.go`, `interfaces/project_db.go`. Uncommitted. Not tagged.
+
+---
+
+## 2026-10-05 — model unique keys
+
+- **Changed:** `UniqueKey` on `ModelType`. `upsertUniqueKey` / `deleteUniqueKey` stage like other schema mutations. Validation accepts field identifiers and `has_one` foreign keys.
+- **Why:** Suchok needs `UNIQUE (variant_id, warehouse_id)` declared on the model, not patched in SQLite.
+- **Affected:** `models/schema.go`, `models/unique_key.go`, `utility/unique_key.go`, `resolver/unique_key_mutations.go`, `schemas/objects/object_models.go`. Uncommitted. Not tagged.
+
+---
+
+## 2026-09-23 — keep upsert relation error
+
+- **Changed:** `UpsertModelDataFnFn` orphan cleanup no longer overwrites `ConnectDisconnectParamBuilder` / `ConnectBuilder` errors with a nil delete result.
+- **Why:** GraphQL returned `upsertModelData: null` and no `errors`, so the SDK threw `Invalid create response format` on Rosna food-order close.
+- **Affected:** `resolver/system_mutations.go`. Every project upsert with a bad `connect`. Uncommitted. Not tagged. Running `:5050` binary unchanged until restart.
+
+---
+
+## 2026-09-23 — food_order create phase logs
+
+- **Changed:** `createAndConnectDocument` writes debug NDJSON (payload shape, connect counts, format/insert/connect ms, create hooks) for `food_order` only.
+- **Why:** POS creates feel slow; need system-layer time before touching indexes.
+- **Affected:** `resolver/public_schema_mutation.go`, `resolver/food_order_debug_log.go`. Uncommitted. Not tagged.
+
+---
+
 ## 2026-09-13 — preserve project-user ACL + users relation
 
 - **Changed:** `BuildSystemParam` role merge preserves request

@@ -3705,6 +3705,11 @@ func (s *GraphQLServer) CreateConnectionTypeResolverFn(p graphql.ResolveParams) 
 			return nil, err
 		}
 	}
+	forwardType, _ := p.Args["forward_connection_type"].(string)
+	reverseType, _ := p.Args["reverse_connection_type"].(string)
+	if err := rejectStorageChangingConnectionUpsert(project, fromResource, toResource, knownAs, forwardType, reverseType); err != nil {
+		return nil, err
+	}
 
 	return s.tryStageSchemaMutation(cache, project, models.SchemaOpTypeCreateConnection, graphqlArgsMap(p), func() (interface{}, error) {
 		var connections []*models.ConnectionType
@@ -4104,17 +4109,18 @@ func (s *GraphQLServer) UpsertModelDataFnFn(p graphql.ResolveParams) (interface{
 			if connections, ok := p.Args["connect"].(map[string]interface{}); ok && len(connections) > 0 {
 				v, err := utility.ConnectDisconnectParamBuilder(cache.Project, uid, connections, modelType)
 				if err != nil {
-					// if relation error at first then remove the document
+					// Drop the orphan, but keep the relation error. Assigning the
+					// delete result overwrote a successful cleanup with nil and
+					// GraphQL returned a null upsert with no errors.
 					param.DocumentID = doc.ID
-					err = driver.DeleteDocumentFromProject(cache.Ctx, param)
+					_ = driver.DeleteDocumentFromProject(cache.Ctx, param)
 					return nil, err
 				}
 				param.ConDisParam = v
 				err = driver.ConnectBuilder(cache.Ctx, param)
 				if err != nil {
-					// if relation error at first then remove the document
 					param.DocumentID = doc.ID
-					err = driver.DeleteDocumentFromProject(cache.Ctx, param)
+					_ = driver.DeleteDocumentFromProject(cache.Ctx, param)
 					return nil, err
 				}
 			}

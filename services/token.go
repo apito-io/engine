@@ -496,6 +496,9 @@ func (t *ApitoTokenService) ApitoTokenHandler(next echo.HandlerFunc) echo.Handle
 				if err := t.applyAccessTokenScope(ctx, verifiedToken, principal); err != nil {
 					return ctx.JSON(http.StatusForbidden, map[string]interface{}{"message": err.Error()})
 				}
+			} else {
+				// Console JWT sent as Bearer still switches project via X-Apito-Project-Id.
+				t.applySessionProjectOverride(ctx, verifiedToken)
 			}
 
 			t.runPostTokenValidateHook(ctx, verifiedToken)

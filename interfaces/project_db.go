@@ -4,6 +4,7 @@ import (
 	"context"
 
 	"github.com/apito-io/engine/models"
+	"github.com/apito-io/engine/relationmigrate"
 	"github.com/apito-io/types"
 )
 
@@ -46,8 +47,18 @@ type ProjectDBInterface interface {
 	// Relation-related functions
 	// AddRelationFields creates a relation field (has one or has many) between models.
 	AddRelationFields(ctx context.Context, from *models.ConnectionType, to *models.ConnectionType) error
+	// EnsureRelationArtifactsFromSchema reconciles physical relation storage to the schema:
+	// foreign keys, one-to-one unique indexes, and pivot tables. Edge engines create that
+	// storage in AddRelationFields and return nil here.
+	EnsureRelationArtifactsFromSchema(ctx context.Context, modelsList []*models.ModelType) error
 	// DeleteRelationDocuments drops pivot tables, relation keys, or collection tables and all documents within them.
 	DeleteRelationDocuments(ctx context.Context, projectId string, from *models.ConnectionType, to *models.ConnectionType) error
+	// PreviewRelationCardinalityMigration is read-only. It must not create tables or change schema.
+	PreviewRelationCardinalityMigration(ctx context.Context, req *relationmigrate.Request) (*relationmigrate.Preview, error)
+	// MigrateRelationCardinality copies valid pairs, verifies them, then drops obsolete storage.
+	MigrateRelationCardinality(ctx context.Context, req *relationmigrate.Request) (*relationmigrate.Receipt, error)
+	// VerifyRelationCardinalityMigration checks the target physical shape after a migration.
+	VerifyRelationCardinalityMigration(ctx context.Context, req *relationmigrate.Request) (*relationmigrate.Receipt, error)
 	// GetRelationDocument retrieves a relation document by ID.
 	GetRelationDocument(ctx context.Context, param *models.ConnectDisconnectParam) (*models.EdgeRelation, error)
 	// CreateRelation creates a relation in the project.

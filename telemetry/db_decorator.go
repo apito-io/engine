@@ -6,6 +6,7 @@ import (
 
 	"github.com/apito-io/engine/interfaces"
 	"github.com/apito-io/engine/models"
+	"github.com/apito-io/engine/relationmigrate"
 	"github.com/apito-io/engine/utility"
 	"github.com/apito-io/types"
 )
@@ -203,10 +204,28 @@ func (w *projectDBMetrics) AddRelationFields(ctx context.Context, from *models.C
 	return w.run(ctx, "ensure", true, func() error { return w.inner.AddRelationFields(ctx, from, to) })
 }
 
+func (w *projectDBMetrics) EnsureRelationArtifactsFromSchema(ctx context.Context, modelsList []*models.ModelType) error {
+	return w.run(ctx, "ensure", true, func() error {
+		return w.inner.EnsureRelationArtifactsFromSchema(ctx, modelsList)
+	})
+}
+
 func (w *projectDBMetrics) DeleteRelationDocuments(ctx context.Context, projectId string, from *models.ConnectionType, to *models.ConnectionType) error {
 	return w.run(ctx, "delete", false, func() error {
 		return w.inner.DeleteRelationDocuments(ctx, projectId, from, to)
 	})
+}
+
+func (w *projectDBMetrics) PreviewRelationCardinalityMigration(ctx context.Context, req *relationmigrate.Request) (*relationmigrate.Preview, error) {
+	return w.inner.PreviewRelationCardinalityMigration(ctx, req)
+}
+
+func (w *projectDBMetrics) MigrateRelationCardinality(ctx context.Context, req *relationmigrate.Request) (*relationmigrate.Receipt, error) {
+	return w.inner.MigrateRelationCardinality(ctx, req)
+}
+
+func (w *projectDBMetrics) VerifyRelationCardinalityMigration(ctx context.Context, req *relationmigrate.Request) (*relationmigrate.Receipt, error) {
+	return w.inner.VerifyRelationCardinalityMigration(ctx, req)
 }
 
 func (w *projectDBMetrics) GetRelationDocument(ctx context.Context, param *models.ConnectDisconnectParam) (*models.EdgeRelation, error) {

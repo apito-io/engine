@@ -29,6 +29,7 @@ type ObjectModels struct {
 	PlanObject                  *graphql.Object
 	//ProjectRoleObject           *graphql.Object
 	ConnectionTypeObject      *graphql.Object
+	UniqueKeyObject           *graphql.Object
 	FileDetailsTypeObject     *graphql.Object
 	ValidationTypeObject      *graphql.Object
 	FieldInfoObject           *graphql.Object
@@ -80,8 +81,9 @@ func (s *SchemaObjects) InitPrivateObjects() *ObjectModels {
 	cloudFunctionObject := s.GetCloudFunctionObject(cloudFunctionRequestResponseObject, funcEnvVarObject, functionRuntimeConfigObject)
 
 	connectionTypeObject := s.GetConnectionTypeObject()
+	uniqueKeyObject := s.GetUniqueKeyObject()
 
-	modelTypeObject := s.GetModelTypeObject(fieldInfoObject, connectionTypeObject)
+	modelTypeObject := s.GetModelTypeObject(fieldInfoObject, connectionTypeObject, uniqueKeyObject)
 
 	userDefinedSchemaObject := s.GetUserDefinedSchemaObject(modelTypeObject, cloudFunctionObject)
 
@@ -122,6 +124,7 @@ func (s *SchemaObjects) InitPrivateObjects() *ObjectModels {
 		CloudFunctionObject:        cloudFunctionObject,
 		FunctionEnvVariablesObject: funcEnvVarObject,
 		ConnectionTypeObject:       connectionTypeObject,
+		UniqueKeyObject:            uniqueKeyObject,
 		ValidationTypeObject:       validationTypeObject,
 		FieldInfoObject:            fieldInfoObject,
 		RoleObject:                 roleObject,

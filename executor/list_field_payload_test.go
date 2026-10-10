@@ -28,6 +28,28 @@ func TestHandlePayloadFormatting_listField_subjectCodes(t *testing.T) {
 		}
 	})
 
+	t.Run("fixed list typed string slice", func(t *testing.T) {
+		f := &models.FieldInfo{
+			Identifier: "skin_condition",
+			FieldType:  "list",
+			InputType:  "string",
+			Validation: &models.Validation{
+				FixedListElements: []interface{}{"dry", "normal", "rash", "ulcer"},
+			},
+		}
+		payload := map[string]interface{}{
+			"skin_condition": []string{"dry"},
+		}
+		out, err := s.HandlePayloadFormatting(context.Background(), nil, "en", []*models.FieldInfo{f}, payload, make(map[string]interface{}), false)
+		if err != nil {
+			t.Fatal(err)
+		}
+		got, _ := out["skin_condition"].([]string)
+		if len(got) != 1 || got[0] != "dry" {
+			t.Fatalf("skin_condition=%v", out["skin_condition"])
+		}
+	})
+
 	t.Run("slice string", func(t *testing.T) {
 		payload := map[string]interface{}{
 			"subject_codes": []string{"101", "102"},

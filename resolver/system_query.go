@@ -1427,17 +1427,6 @@ func (s *GraphQLServer) ListSingleModelDataInfoResolverFn(p graphql.ResolveParam
 		return nil, err
 	}
 
-	// return empty data if single post data
-	if doc.ID == "" && param.SinglePageData {
-		return &types.DefaultDocumentStructure{
-			Key:      param.Model.SinglePageUUID,
-			ID:       param.Model.SinglePageUUID,
-			Type:     param.Model.Name,
-			Data:     nil,
-			ExpireAt: "",
-		}, nil
-	}
-
 	/* // add the meta
 	docWithMeta, err := s.SystemDriver.AddSystemUserMetaInfo(p.Context, doc)
 	if err != nil {
@@ -1445,7 +1434,33 @@ func (s *GraphQLServer) ListSingleModelDataInfoResolverFn(p graphql.ResolveParam
 	}
 	doc.Meta = docWithMeta.Meta */
 
-	return doc, nil
+	return singleProjectDocumentResult(doc, param.Model, param.SinglePageData), nil
+}
+
+// singleProjectDocumentResult turns a missing row into GraphQL null.
+// SQL drivers return (nil, nil) when the id is absent, and HideDeletedCommonDocument
+// also returns nil for a soft-deleted common-model row. Reading doc.ID on that nil
+// panics getSingleData. A missing single-page model still returns an empty document.
+func singleProjectDocumentResult(doc *types.DefaultDocumentStructure, model *models.ModelType, singlePage bool) interface{} {
+	if doc == nil || (doc.ID == "" && singlePage) {
+		if !singlePage {
+			return nil
+		}
+		id := ""
+		name := ""
+		if model != nil {
+			id = model.SinglePageUUID
+			name = model.Name
+		}
+		return &types.DefaultDocumentStructure{
+			Key:      id,
+			ID:       id,
+			Type:     name,
+			Data:     nil,
+			ExpireAt: "",
+		}
+	}
+	return doc
 }
 
 func (s *GraphQLServer) ListDocumentRevisionInfoResolverFn(p graphql.ResolveParams) (interface{}, error) {
