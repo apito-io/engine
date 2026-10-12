@@ -55,8 +55,7 @@ data/
 keys/private.key
 keys/public.key
 
-# Agent notes and local workflows stay off the public tree.
+# Agent notes stay off the public tree. Release workflows stay on GitHub.
 .cursor/
-.github/workflows/
 .knowledge/
 .memory/
