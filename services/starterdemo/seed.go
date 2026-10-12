@@ -38,7 +38,7 @@ func Ensure(ctx context.Context, cfg *models.Config, systemDB interfaces.ApitoSy
 		return fmt.Errorf("starter demo: name project: %w", err)
 	}
 
-	admin, err := systemDB.GetSystemUserByEmail(ctx, bootstrapmeta.AdminEmail)
+	admin, err := systemDB.GetSystemUserByEmail(ctx, bootstrapmeta.BootstrapAdminEmail())
 	if err != nil {
 		return fmt.Errorf("starter demo: load admin: %w", err)
 	}

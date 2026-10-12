@@ -50,7 +50,9 @@ jobs:
           cd .ci/open_driver/cmd/oss
           go mod edit -replace "github.com/apito-io/engine=${GITHUB_WORKSPACE}"
           go mod edit -replace "github.com/apito-io/open_driver=${GITHUB_WORKSPACE}/.ci/open_driver"
-          go build -o "$GITHUB_WORKSPACE/apito-engine" .
+          CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -trimpath -ldflags '-s -w' -o "$GITHUB_WORKSPACE/apito-engine-linux-amd64" .
+          CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build -trimpath -ldflags '-s -w' -o "$GITHUB_WORKSPACE/apito-engine-linux-arm64" .
+          cp "$GITHUB_WORKSPACE/apito-engine-linux-amd64" "$GITHUB_WORKSPACE/apito-engine"
 
       - name: Public tree license scan
         run: |
@@ -64,7 +66,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           gh release view "${GITHUB_REF_NAME}" >/dev/null 2>&1 || gh release create "${GITHUB_REF_NAME}" --title "${GITHUB_REF_NAME}" --notes "Public engine build"
-          gh release upload "${GITHUB_REF_NAME}" apito-engine --clobber
+          gh release upload "${GITHUB_REF_NAME}" apito-engine apito-engine-linux-amd64 apito-engine-linux-arm64 --clobber
 
       - name: Tell Studio this engine build finished
         env:
