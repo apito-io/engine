@@ -54,3 +54,9 @@ data/
 !.env.example
 keys/private.key
 keys/public.key
+
+# Agent notes and local workflows stay off the public tree.
+.cursor/
+.github/workflows/
+.knowledge/
+.memory/
