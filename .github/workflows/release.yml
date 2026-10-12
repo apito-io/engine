@@ -38,12 +38,12 @@ jobs:
           availability=$(git log -1 --format=%cs)
           scripts/release-license-manifest.sh "${GITHUB_REF_NAME}" "$availability" release-manifest.json
           python3 - <<'PY'
-import json
-doc=json.load(open("release-manifest.json"))
-assert doc["spdx"]=="FSL-1.1-ALv2"
-assert doc["apache_change_date"]
-print(doc["availability_date"], doc["apache_change_date"])
-PY
+          import json
+          doc=json.load(open("release-manifest.json"))
+          assert doc["spdx"]=="FSL-1.1-ALv2"
+          assert doc["apache_change_date"]
+          print(doc["availability_date"], doc["apache_change_date"])
+          PY
 
       - name: Build public engine binary
         run: |
