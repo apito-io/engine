@@ -1,3 +1,19 @@
+## 2026-10-12 — Todo Notes starter
+
+- **Changed:** Public boot seeds notebook, note, and tag with sample rows when the starter project has no note model. The project id is `todo_notes` and the displayed name is Todo Notes.
+- **Why:** A first run should open a real notebook instead of an empty Apito Website project.
+- **Affected:** `services/starterdemo`, `resolver/graphql_server.go`. Local open-core data was wiped once. Uncommitted.
+
+---
+
+## 2026-10-11 — Fair Source public engine
+
+- **Changed:** LICENSE is FSL-1.1-ALv2. Public GraphQL `Plan` no longer exposes payment-provider fields. Unknown JSON stays on `Plan.Host`. Schema drafts and `POST /system/project/sql-query` stay. Release CI refuses `Status: pending counsel`.
+- **Why:** Self-host is a complete builder. Checkout and provider catalogs belong on the Cloud host.
+- **Affected:** `LICENSE`, `models/plan_json.go`, `models/roles_permissions.go`, `schemas/objects/object_models.go`, `resolver/project_sql_query.go`, `router/router.go`, `.github/workflows/release.yml`. Uncommitted. Not tagged.
+
+---
+
 ## 2026-10-11 — relation transition preview and stage
 
 - **Changed:** `relationmigrate` plus `previewSchemaRelationTransition` and `stageRelationTransition`. Existing-edge storage changes no longer go through `upsertConnectionToModel`.

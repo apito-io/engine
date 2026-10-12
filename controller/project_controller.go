@@ -302,7 +302,7 @@ func (a *AuthController) DemoProjectSwitch(c echo.Context) error {
 		})
 	}
 
-	validDemoProject := []string{"quantum_ecommerce_ddlj4", "jira_clone_o5t3r", "apito_website"}
+	validDemoProject := []string{"quantum_ecommerce_ddlj4", "jira_clone_o5t3r", "apito_website", "todo_notes"}
 	if !contains(validDemoProject, req.ID) {
 		return c.JSON(http.StatusBadRequest, &models.HttpResponse{
 			Message: "Invalid Request",

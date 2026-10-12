@@ -436,22 +436,10 @@ func resolveUploadTenantID(c echo.Context, cache *models.ApplicationCache) strin
 	return ""
 }
 
-// isSaaSProjectParam mirrors pro ParamIsSaaSProject without importing pro packages.
-// pro_project_type is set by SetParamProProjectType (1 = SaaS).
+// isSaaSProjectParam is true when ext says this project is SaaS.
 func isSaaSProjectParam(p *models.CommonSystemParams) bool {
-	if p == nil || p.Ext == nil {
+	if p == nil {
 		return false
 	}
-	switch v := p.Ext["pro_project_type"].(type) {
-	case int32:
-		return v == 1
-	case int:
-		return v == 1
-	case int64:
-		return v == 1
-	case float64:
-		return int(v) == 1
-	default:
-		return false
-	}
+	return models.ProjectKindIsSaaS(p.Ext)
 }

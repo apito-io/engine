@@ -5,7 +5,7 @@ import (
 	"fmt"
 )
 
-// Well-known Ext keys shared with the pro layer (open-core must not import pro).
+// Well-known Ext keys shared with a host binary (this module must not import the host).
 const (
 	ExtKeyIsCommonModel             = "is_common_model"
 	ExtKeyPerTenantSeparateDatabase = "per_tenant_separate_db"

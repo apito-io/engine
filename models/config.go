@@ -154,7 +154,7 @@ type Config struct {
 	// Type: func(auth any) echo.HandlerFunc (router type-asserts; avoids importing echo here).
 	DatabaseCheckWrapper interface{} `env:"-"`
 
-	// --- Extension hooks (pro layer registers implementations at startup) ---
+	// --- Optional host hooks (registered at startup when a host binary is present) ---
 
 	// ConnectionRoutingHook returns a scope key for sub-project connection isolation.
 	// If it returns (key, true) with a non-empty key, the executor uses a scoped connection.
@@ -201,12 +201,13 @@ type Config struct {
 	// SchemaMutationHook runs before schema DDL orchestration; handled=true skips runSchemaChange.
 	SchemaMutationHook SchemaMutationHook `env:"-"`
 
-	// SchemaVersioningEnabled stages schema mutations for review (pro registers the hook).
-	SchemaVersioningEnabled bool `env:"PRO_SCHEMA_VERSIONING_ENABLED" env-default:"true"`
+	// SchemaVersioningEnabled stages schema mutations for review. The public engine
+	// ships an in-process stager when no host hook is set. Immediate apply is SCHEMA_STAGING_BYPASS.
+	SchemaVersioningEnabled bool `env:"SCHEMA_STAGING_ENABLED" env-default:"true"`
 	// SchemaVersioningBypass applies schema mutations immediately through orchestration.
-	SchemaVersioningBypass bool `env:"PRO_SCHEMA_VERSIONING_BYPASS" env-default:"false"`
+	SchemaVersioningBypass bool `env:"SCHEMA_STAGING_BYPASS" env-default:"false"`
 
-	// TokenClaimsHook allows the pro layer to inject additional claims into JWT/token payloads.
+	// TokenClaimsHook lets a host binary add claims to JWT/token payloads.
 	TokenClaimsHook func(project *Project, claims map[string]interface{}) `env:"-"`
 
 	// ProjectAPITokenClaimsHook allows optional claim enrichment before project API key issuance.
@@ -252,12 +253,25 @@ type Config struct {
 	// EnsureScopedDatabaseHook runs before default scoped DB creation (e.g. Postgres/MySQL per-scope isolation).
 	EnsureScopedDatabaseHook func(ctx context.Context, projectID string, base, derived *DriverCredentials) error `env:"-"`
 
-	// LoadProjectCacheHook allows the pro layer to modify a project after loading from the system DB.
+	// LoadProjectCacheHook lets a host binary adjust a project after it is loaded from the system DB.
 	LoadProjectCacheHook func(ctx context.Context, project *Project) `env:"-"`
 
-	// PlanDeleteGuardHook runs before deletePlanFromProject. Pro uses it to reject deletes when
-	// any catalog tenant still references the plan slug. Return a non-nil error to block.
+	// PlanDeleteGuardHook runs before deletePlanFromProject. A host may reject deletes when
+	// a catalog tenant still references the plan slug. Return a non-nil error to block.
 	PlanDeleteGuardHook func(ctx context.Context, projectID, planSlug string) error `env:"-"`
+
+	// ApplyPlanCommercial writes host-only commercial arguments onto a plan.
+	// The public engine leaves this nil. Stored JSON is preserved either way.
+	ApplyPlanCommercial func(plan *Plan, args map[string]interface{}) error `env:"-"`
+
+	// PlanCommercialFields returns extra response keys for a plan.
+	// The public engine leaves this nil so those keys are not part of the public API.
+	PlanCommercialFields func(plan *Plan) map[string]interface{} `env:"-"`
+
+	// SchemaRootExtensionHook runs after the public query and mutation maps are built
+	// and before they are published. Either argument may be nil. Concrete type is
+	// github.com/tailor-platform/graphql.Fields.
+	SchemaRootExtensionHook func(queries, mutations interface{}) `env:"-"`
 
 	// RealtimeTopicHook lets the host rewrite a realtime subscription topic before
 	// publish/subscribe (e.g. inject a tenant scope prefix). Open-core builds a
@@ -273,7 +287,7 @@ type Config struct {
 	// When set, Arango naming migration moves legacy root-level tenant_id into ext and sets ext.tenant_model.
 	NamingV2RelationTenantModel func(ctx context.Context, project *Project) string `env:"-"`
 
-	// BuildSystemParamHook allows the pro layer to enrich CommonSystemParams after the base build.
+	// BuildSystemParamHook lets a host binary enrich CommonSystemParams after the base build.
 	BuildSystemParamHook func(ctx context.Context, project *Project, param *CommonSystemParams) `env:"-"`
 
 	// InitProjectBaseHook is for extending the project base initialization.
@@ -291,7 +305,7 @@ type Config struct {
 	PluginAttachGuard func(ctx context.Context, projectID, pluginID string) (allowUncataloged bool, err error) `env:"-"`
 
 	// SchemaObjectsExtensionHook runs inside BuildServerQueriesAndMutations right after
-	// InitPrivateObjects(). The pro layer uses it to AddFieldConfig on core schema objects
+	// InitPrivateObjects(). A host binary uses it to AddFieldConfig on core schema objects
 	// (e.g. ModelType, ProjectModel) before the schema is sent through channels.
 	SchemaObjectsExtensionHook func(objs interface{}) `env:"-"`
 

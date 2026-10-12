@@ -207,6 +207,18 @@ func InitRouter(cfg *models.Config) (*echo.Echo, error) {
 		projectRoutes := systemRoutes.Group("/project")
 		{
 			projectRoutes.POST("/switch", authCtrl.ProjectSwitchV2)
+			projectRoutes.GET("/schema-draft", func(c echo.Context) error {
+				return resolver.HandleLocalSchemaDraft(c, server)
+			})
+			projectRoutes.POST("/schema-draft/publish", func(c echo.Context) error {
+				return resolver.HandleLocalSchemaDraft(c, server)
+			})
+			projectRoutes.DELETE("/schema-draft", func(c echo.Context) error {
+				return resolver.HandleLocalSchemaDraft(c, server)
+			})
+			projectRoutes.POST("/sql-query", func(c echo.Context) error {
+				return resolver.HandleProjectSQLQuery(c, server)
+			})
 			projectRoutes.POST("/create", authCtrl.ProjectCreation)
 			projectRoutes.POST("/demo/switch", authCtrl.DemoProjectSwitch)
 			projectRoutes.POST("/name/check", authCtrl.ProjectNameCheck)

@@ -1,6 +1,7 @@
 package resolver
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
 	"regexp"
@@ -24,43 +25,20 @@ func normalizePlanSlug(raw string) (string, error) {
 	return slug, nil
 }
 
-func planToMap(p *models.Plan) map[string]interface{} {
+func planToMap(p *models.Plan, commercial func(*models.Plan) map[string]interface{}) map[string]interface{} {
 	if p == nil {
 		return nil
 	}
-	models.NormalizePlanMonetization(p)
 	m := map[string]interface{}{
-		"id":                p.ID,
-		"name":              p.Name,
-		"description":       p.Description,
-		"system_generated":  p.SystemGenerated,
-		"currency":          p.Currency,
-		"price_monthly":     p.PriceMonthly,
-		"play_product_id":   p.PlayProductID,
-		"play_base_plan_id": p.PlayBasePlanID,
-		"paddle_price_id":   p.PaddlePriceID,
+		"id":               p.ID,
+		"name":             p.Name,
+		"description":      p.Description,
+		"system_generated": p.SystemGenerated,
 	}
-	if len(p.Prices) > 0 {
-		prices := make([]map[string]interface{}, 0, len(p.Prices))
-		for _, row := range p.Prices {
-			prices = append(prices, map[string]interface{}{
-				"currency": row.Currency,
-				"amount":   row.Amount,
-				"default":  row.Default,
-			})
+	if commercial != nil {
+		for k, v := range commercial(p) {
+			m[k] = v
 		}
-		m["prices"] = prices
-	}
-	if len(p.ProviderProducts) > 0 {
-		pps := make([]map[string]interface{}, 0, len(p.ProviderProducts))
-		for _, row := range p.ProviderProducts {
-			pps = append(pps, map[string]interface{}{
-				"provider":   row.Provider,
-				"product_id": row.ProductID,
-				"variant_id": row.VariantID,
-			})
-		}
-		m["provider_products"] = pps
 	}
 	if p.APIPermissions != nil {
 		perms := make(map[string]interface{}, len(p.APIPermissions))
@@ -87,64 +65,11 @@ func planToMap(p *models.Plan) map[string]interface{} {
 	return m
 }
 
-func parsePlanPricesArg(raw interface{}) ([]models.PlanPrice, error) {
-	list, ok := raw.([]interface{})
-	if !ok {
-		return nil, fmt.Errorf("prices must be an array")
+func (s *GraphQLServer) planCommercialFields() func(*models.Plan) map[string]interface{} {
+	if s == nil || s.Cfg == nil {
+		return nil
 	}
-	out := make([]models.PlanPrice, 0, len(list))
-	for _, item := range list {
-		m, ok := item.(map[string]interface{})
-		if !ok {
-			continue
-		}
-		row := models.PlanPrice{
-			Currency: strings.TrimSpace(fmt.Sprint(m["currency"])),
-		}
-		if row.Currency == "" || row.Currency == "<nil>" {
-			row.Currency = "BDT"
-		}
-		switch n := m["amount"].(type) {
-		case float64:
-			row.Amount = n
-		case int:
-			row.Amount = float64(n)
-		case int64:
-			row.Amount = float64(n)
-		}
-		if d, ok := m["default"].(bool); ok {
-			row.Default = d
-		}
-		out = append(out, row)
-	}
-	return out, nil
-}
-
-func parseProviderProductsArg(raw interface{}) ([]models.PlanProviderProduct, error) {
-	list, ok := raw.([]interface{})
-	if !ok {
-		return nil, fmt.Errorf("provider_products must be an array")
-	}
-	out := make([]models.PlanProviderProduct, 0, len(list))
-	for _, item := range list {
-		m, ok := item.(map[string]interface{})
-		if !ok {
-			continue
-		}
-		row := models.PlanProviderProduct{
-			Provider:  strings.TrimSpace(fmt.Sprint(m["provider"])),
-			ProductID: strings.TrimSpace(fmt.Sprint(m["product_id"])),
-			VariantID: strings.TrimSpace(fmt.Sprint(m["variant_id"])),
-		}
-		if row.Provider == "" || row.Provider == "<nil>" || row.ProductID == "" || row.ProductID == "<nil>" {
-			continue
-		}
-		if row.VariantID == "<nil>" {
-			row.VariantID = ""
-		}
-		out = append(out, row)
-	}
-	return out, nil
+	return s.Cfg.PlanCommercialFields
 }
 
 func (s *GraphQLServer) GetProjectPlansResolverFn(p graphql.ResolveParams) (interface{}, error) {
@@ -152,7 +77,7 @@ func (s *GraphQLServer) GetProjectPlansResolverFn(p graphql.ResolveParams) (inte
 		v      = p.Context.Value
 		router = v("router").(echo.Context)
 	)
-	// CapPlansRead only — mobile/SDK login keys must load catalog (prices, provider_products)
+	// CapPlansRead only — login keys must load the permission catalog
 	// without a full project-admin token. Upsert/delete still require plans.write + admin.
 	if err := requireAccessCapability(router, CapPlansRead); err != nil {
 		return nil, err
@@ -171,7 +96,7 @@ func (s *GraphQLServer) GetProjectPlansResolverFn(p graphql.ResolveParams) (inte
 		if plan == nil {
 			continue
 		}
-		out = append(out, planToMap(plan))
+		out = append(out, planToMap(plan, s.planCommercialFields()))
 	}
 	return out, nil
 }
@@ -268,60 +193,11 @@ func (s *GraphQLServer) UpsertPlanToProjectResolverFn(p graphql.ResolveParams) (
 		plan.Quotas = quotas
 	}
 
-	if _, ok := p.Args["prices"]; ok {
-		prices, err := parsePlanPricesArg(p.Args["prices"])
-		if err != nil {
+	if s.Cfg != nil && s.Cfg.ApplyPlanCommercial != nil {
+		if err := s.Cfg.ApplyPlanCommercial(plan, p.Args); err != nil {
 			return nil, err
 		}
-		plan.Prices = prices
 	}
-	if _, ok := p.Args["provider_products"]; ok {
-		pps, err := parseProviderProductsArg(p.Args["provider_products"])
-		if err != nil {
-			return nil, err
-		}
-		plan.ProviderProducts = pps
-	}
-	if _, ok := p.Args["currency"]; ok {
-		plan.Currency = strings.TrimSpace(getArgString(p.Args, "currency"))
-	}
-	if _, ok := p.Args["price_monthly"]; ok {
-		switch n := p.Args["price_monthly"].(type) {
-		case float64:
-			plan.PriceMonthly = n
-		case int:
-			plan.PriceMonthly = float64(n)
-		case int64:
-			plan.PriceMonthly = float64(n)
-		}
-	}
-	if _, ok := p.Args["play_product_id"]; ok {
-		plan.PlayProductID = strings.TrimSpace(getArgString(p.Args, "play_product_id"))
-	}
-	if _, ok := p.Args["play_base_plan_id"]; ok {
-		plan.PlayBasePlanID = strings.TrimSpace(getArgString(p.Args, "play_base_plan_id"))
-	}
-	if _, ok := p.Args["paddle_price_id"]; ok {
-		plan.PaddlePriceID = strings.TrimSpace(getArgString(p.Args, "paddle_price_id"))
-	}
-	// If only legacy fields were sent, synthesize arrays; always sync both directions.
-	if _, ok := p.Args["prices"]; !ok {
-		if plan.Currency != "" || plan.PriceMonthly > 0 {
-			if len(plan.Prices) == 0 {
-				cur := plan.Currency
-				if cur == "" {
-					cur = "BDT"
-				}
-				plan.Prices = []models.PlanPrice{{Currency: cur, Amount: plan.PriceMonthly, Default: true}}
-			}
-		}
-	}
-	if _, ok := p.Args["provider_products"]; !ok {
-		if len(plan.ProviderProducts) == 0 && (plan.PlayProductID != "" || plan.PaddlePriceID != "") {
-			models.NormalizePlanMonetization(plan)
-		}
-	}
-	models.SyncPlanLegacyMonetization(plan)
 
 	if err := s.SystemDriver.UpdateProject(cache.Ctx, project, true); err != nil {
 		return nil, err
@@ -329,7 +205,7 @@ func (s *GraphQLServer) UpsertPlanToProjectResolverFn(p graphql.ResolveParams) (
 	if _, err := s.refreshProjectAndReCache(cache.Ctx, project.ID); err != nil {
 		return nil, err
 	}
-	return planToMap(plan), nil
+	return planToMap(plan, s.planCommercialFields()), nil
 }
 
 func (s *GraphQLServer) DuplicatePlanInProjectResolverFn(p graphql.ResolveParams) (interface{}, error) {
@@ -380,7 +256,7 @@ func (s *GraphQLServer) DuplicatePlanInProjectResolverFn(p graphql.ResolveParams
 	if _, err := s.refreshProjectAndReCache(cache.Ctx, project.ID); err != nil {
 		return nil, err
 	}
-	return planToMap(cp), nil
+	return planToMap(cp, s.planCommercialFields()), nil
 }
 
 func (s *GraphQLServer) DeletePlanFromProjectResolverFn(p graphql.ResolveParams) (interface{}, error) {
@@ -429,7 +305,7 @@ func (s *GraphQLServer) DeletePlanFromProjectResolverFn(p graphql.ResolveParams)
 	}
 	out := make([]map[string]interface{}, 0, len(project.Plans))
 	for _, pl := range project.Plans {
-		out = append(out, planToMap(pl))
+		out = append(out, planToMap(pl, s.planCommercialFields()))
 	}
 	return out, nil
 }
@@ -438,17 +314,14 @@ func clonePlan(src *models.Plan) *models.Plan {
 	if src == nil {
 		return &models.Plan{}
 	}
-	models.NormalizePlanMonetization(src)
 	dst := &models.Plan{
 		ID:              src.ID,
 		Name:            src.Name,
 		Description:     src.Description,
 		SystemGenerated: src.SystemGenerated,
-		Currency:        src.Currency,
-		PriceMonthly:    src.PriceMonthly,
-		PlayProductID:   src.PlayProductID,
-		PlayBasePlanID:  src.PlayBasePlanID,
-		PaddlePriceID:   src.PaddlePriceID,
+	}
+	if len(src.Host) > 0 {
+		dst.Host = append(json.RawMessage(nil), src.Host...)
 	}
 	if len(src.LogicExecutions) > 0 {
 		dst.LogicExecutions = append([]string(nil), src.LogicExecutions...)
@@ -468,12 +341,6 @@ func clonePlan(src *models.Plan) *models.Plan {
 		for k, v := range src.Quotas {
 			dst.Quotas[k] = v
 		}
-	}
-	if len(src.Prices) > 0 {
-		dst.Prices = append([]models.PlanPrice(nil), src.Prices...)
-	}
-	if len(src.ProviderProducts) > 0 {
-		dst.ProviderProducts = append([]models.PlanProviderProduct(nil), src.ProviderProducts...)
 	}
 	return dst
 }

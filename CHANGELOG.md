@@ -34,7 +34,7 @@ Notable changes to **open-core** only. Release tags use `v1.x` (for example `v1.
 
 ### Removed
 
-- Dropped `PaddleWebhookSecret` from `Config`. Hosted-provider secrets live on pro `ProConfig`, not open-core.
+- Dropped `PaddleWebhookSecret` from `Config`. Hosted-provider secrets stay on the host binary.
 
 ## [1.8.17] - 2026-08-29
 

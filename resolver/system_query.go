@@ -19,7 +19,6 @@ import (
 	"github.com/apito-io/types/protobuff"
 	"github.com/elliotchance/pie/pie"
 	"github.com/labstack/echo/v4"
-	graphqlClient "github.com/machinebox/graphql"
 	"github.com/tailor-platform/graphql"
 )
 
@@ -79,54 +78,6 @@ import (
 		"token": token,
 	}, nil
 } */
-
-func (s *GraphQLServer) ConnectSupportResolverFn(p graphql.ResolveParams) (interface{}, error) {
-
-	var (
-		v      = p.Context.Value
-		router = v("router").(echo.Context)
-	)
-
-	param, err := s.buildCommonSystemParam(router)
-	if err != nil {
-		return nil, err
-	}
-
-	hybridAuthCallToken := "EhltDOqqL0sKV1z38iDQsfQfqQluFWvTfBeFrdmAleirMG0dTrvfqi3qtgaSNx7Zf1aeP49lDnUr6shDgOca8R7RsK0sNRYetvoKguNzgpx4Er4RxSUl2Y1YF6GcIEPgbDTAfv3ltA7JPyHZDJHlbWZjEjbMV24DOKt3ChFCmjA0yUwXMCf6f6e"
-
-	// create a GraphQL client (safe to share across requests)
-	client := graphqlClient.NewClient("https://api.apito.io/secured/graphql")
-
-	// make a request
-	req := graphqlClient.NewRequest(fmt.Sprintf(`
-		   mutation MyMutation {
-			  hybridAuth(payload: {
-				user_id : "%s", 
-				email: "%s" 
-			  }) {
-				JSON
-			  }
-			}`, param.UserID, param.Email))
-
-	// set header fields
-	req.Header.Set("Authorization", "Bearer "+hybridAuthCallToken)
-
-	// run it and capture the response
-	var respData map[string]interface{}
-	if err := client.Run(context.Background(), req, &respData); err != nil {
-		return nil, err
-	}
-
-	if resp, ok := respData["hybridAuth"].(map[string]interface{}); ok {
-		if json, ok := resp["JSON"].(map[string]interface{}); ok {
-			if login, ok := json["userLogin"].(map[string]interface{}); ok {
-				return login, nil
-			}
-		}
-	}
-
-	return nil, nil
-}
 
 func (s *GraphQLServer) ListProjectsResolverFn(p graphql.ResolveParams) (interface{}, error) {
 	s.Lock()

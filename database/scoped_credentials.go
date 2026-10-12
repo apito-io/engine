@@ -45,7 +45,7 @@ func looksLikeConnectionURL(s string) bool {
 }
 
 // genericScopeDatabaseIdentifier returns a stable per-scope name when base.Database is URL-shaped.
-// It does not encode any hosted-provider rules; the pro layer may replace this before hosted-SQL control-plane calls.
+// It does not encode any hosted-provider rules; a host binary may replace this before hosted-SQL control-plane calls.
 func genericScopeDatabaseIdentifier(projectID, scopeKey string) string {
 	pid := strings.ToLower(SanitizeScopeDBSegment(projectID))
 	pid = scopedLogicalNamePart.ReplaceAllString(strings.ReplaceAll(pid, "_", "-"), "-")

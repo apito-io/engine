@@ -10,7 +10,7 @@ import (
 	"github.com/uptrace/bun"
 	"github.com/uptrace/bun/dialect/sqlitedialect"
 	"github.com/uptrace/bun/driver/sqliteshim"
-	coresqlite "gitlab.com/apito.io/open_driver/project/sqlite"
+	coresqlite "github.com/apito-io/open_driver/project/sqlite"
 )
 
 func testSQLiteProjectDriver(t *testing.T) interfaces.ProjectDBInterface {

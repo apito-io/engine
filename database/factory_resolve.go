@@ -9,7 +9,7 @@ import (
 
 func ResolveDriverFactory(cfg *models.Config) (interfaces.DatabaseDriverFactory, error) {
 	if cfg == nil || cfg.DriverFactory == nil {
-		return nil, fmt.Errorf("DriverFactory is required; inject open_driver or pro_driver factory at boot")
+		return nil, fmt.Errorf("DriverFactory is required; inject a database driver factory at boot")
 	}
 	f, ok := cfg.DriverFactory.(interfaces.DatabaseDriverFactory)
 	if !ok {
@@ -20,7 +20,7 @@ func ResolveDriverFactory(cfg *models.Config) (interfaces.DatabaseDriverFactory,
 
 func ResolveRealtimeBusFactory(cfg *models.Config) (interfaces.RealtimeBusFactory, error) {
 	if cfg == nil || cfg.RealtimeBusFactory == nil {
-		return nil, fmt.Errorf("RealtimeBusFactory is required; inject nats_system or open_driver factory at boot")
+		return nil, fmt.Errorf("RealtimeBusFactory is required; inject a realtime bus factory at boot")
 	}
 	f, ok := cfg.RealtimeBusFactory.(interfaces.RealtimeBusFactory)
 	if !ok {
@@ -53,7 +53,7 @@ func ResolveKVFactory(cfg *models.Config) (interfaces.KVFactory, error) {
 
 func ResolvePluginHost(cfg *models.Config) (interfaces.PluginHost, error) {
 	if cfg == nil || cfg.PluginHost == nil {
-		return nil, fmt.Errorf("PluginHost is required; inject plugin_system factory at boot")
+		return nil, fmt.Errorf("PluginHost is required; inject a plugin host at boot")
 	}
 	h, ok := cfg.PluginHost.(interfaces.PluginHost)
 	if !ok {

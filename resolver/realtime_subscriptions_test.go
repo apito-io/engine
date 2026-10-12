@@ -8,7 +8,7 @@ import (
 
 	"github.com/apito-io/engine/models"
 	"github.com/tailor-platform/graphql"
-	"gitlab.com/apito.io/open_driver/realtime/memory"
+	"github.com/apito-io/open_driver/realtime/memory"
 )
 
 func testMemoryGraphQLServer(t *testing.T) *GraphQLServer {

@@ -1,129 +1,79 @@
-name: Build and Release
+name: Release
 
 on:
   push:
     tags:
-      - 'v*.*.*'
+      - "v*"
+  workflow_dispatch:
 
 permissions:
   contents: write
   packages: write
 
 jobs:
-  build:
-    runs-on: ubuntu-latest
-    strategy:
-      matrix:
-        include:
-          - os: ubuntu-latest
-            goos: linux
-            goarch: amd64
-            ext: ""
-          - os: ubuntu-latest
-            goos: linux
-            goarch: arm64
-            ext: ""
-          - os: macos-latest
-            goos: darwin
-            goarch: amd64
-            ext: ""
-          - os: macos-latest
-            goos: darwin
-            goarch: arm64
-            ext: ""
-
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Set up Go
-        uses: actions/setup-go@v5
-        with:
-            go-version: 1.25.4
-
-      - name: Install dependencies
-        run: go mod tidy
-
-      - name: Build static binary
-        run: |
-            CGO_ENABLED=0 GOOS=${{ matrix.goos }} GOARCH=${{ matrix.goarch }} go build -o engine${{ matrix.ext }} -ldflags "-w -s"
-
-      - name: Zip binary
-        run: |
-            zip engine-${{ matrix.goos }}-${{ matrix.goarch }}.zip engine${{ matrix.ext }}
-
-      - name: Upload artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: engine-${{ matrix.goos }}-${{ matrix.goarch }}
-          path: engine-${{ matrix.goos }}-${{ matrix.goarch }}.zip
-  release:
-    needs: build
+  engine:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-      - name: Download all artifacts
-        uses: actions/download-artifact@v4
+      - name: Refuse an unsigned legal review
+        run: |
+          if grep -q 'Status: pending counsel' LEGAL_REVIEW.md; then
+            echo "LEGAL_REVIEW.md is still pending counsel. Do not publish this tag."
+            exit 1
+          fi
 
-      - name: Create GitHub Release
-        uses: softprops/action-gh-release@v1
+      - name: Refuse a private wrapper checkout
+        run: |
+          if git remote -v | grep -q 'gitlab.com/apito.io/engine'; then
+            echo "This workflow must build the public engine tree."
+            exit 1
+          fi
+
+      - uses: actions/checkout@v4
         with:
-          files: |
-            engine-linux-amd64/engine-linux-amd64.zip
-            engine-linux-arm64/engine-linux-arm64.zip
-            engine-darwin-amd64/engine-darwin-amd64.zip
-            engine-darwin-arm64/engine-darwin-arm64.zip
-          tag_name: ${{ github.ref_name }}
-          name: "Release ${{ github.ref_name }}"
-          body: "This is an automatic release for version ${{ github.ref_name }}."
-          draft: false
-          prerelease: false
+          repository: apito-io/open_driver
+          path: .ci/open_driver
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.25.x"
+
+      - name: License manifest
+        run: |
+          availability=$(git log -1 --format=%cs)
+          scripts/release-license-manifest.sh "${GITHUB_REF_NAME}" "$availability" release-manifest.json
+          python3 - <<'PY'
+import json
+doc=json.load(open("release-manifest.json"))
+assert doc["spdx"]=="FSL-1.1-ALv2"
+assert doc["apache_change_date"]
+print(doc["availability_date"], doc["apache_change_date"])
+PY
+
+      - name: Build public engine binary
+        run: |
+          cd .ci/open_driver/cmd/oss
+          go mod edit -replace "github.com/apito-io/engine=${GITHUB_WORKSPACE}"
+          go mod edit -replace "github.com/apito-io/open_driver=${GITHUB_WORKSPACE}/.ci/open_driver"
+          go build -o "$GITHUB_WORKSPACE/apito-engine" .
+
+      - name: Public tree license scan
+        run: |
+          if grep -RIn --include='*.go' 'gitlab.com/apito.io/engine' . .ci/open_driver; then
+            echo "private engine import found"
+            exit 1
+          fi
+
+      - name: Publish engine binary
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ github.token }}
+        run: gh release upload "${GITHUB_REF_NAME}" apito-engine --clobber
 
-  docker:
-    runs-on: ubuntu-latest
-    timeout-minutes: 30
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
-        with:
-          driver-opts: |
-            network=host
-          buildkitd-flags: --allow-insecure-entitlement network.host
-
-      - name: Login to GitHub Container Registry
-        uses: docker/login-action@v3
-        with:
-          registry: ghcr.io
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Extract metadata
-        id: meta
-        uses: docker/metadata-action@v5
-        with:
-          images: ghcr.io/${{ github.repository_owner }}/engine
-          tags: |
-            type=ref,event=tag
-            type=raw,value=latest,enable={{is_default_branch}}
-
-      - name: Build and push Docker image
-        uses: docker/build-push-action@v5
-        with:
-          context: .
-          platforms: linux/amd64,linux/arm64
-          push: true
-          tags: ${{ steps.meta.outputs.tags }}
-          labels: ${{ steps.meta.outputs.labels }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
-          build-args: |
-            BUILDKIT_INLINE_CACHE=1
-          provenance: false
-          sbom: false
+      - name: Tell Studio this engine build finished
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh api repos/apito-io/studio/dispatches --input - <<EOF
+          {"event_type":"component_ready","client_payload":{"component":"engine","ref":"${GITHUB_REF_NAME}"}}
+          EOF

@@ -22,7 +22,7 @@ func (s *GraphQLServer) BuildServerQueriesAndMutations() {
 		s.Cfg.SchemaObjectsExtensionHook(privateSchemaObjects)
 	}
 
-	s.SystemQueriesChan <- &graphql.Fields{
+	queries := graphql.Fields{
 		"currentProject": &graphql.Field{
 			Name:    "GetCurrentProject",
 			Type:    privateSchemaObjects.ProjectDetailsObject,
@@ -681,16 +681,6 @@ func (s *GraphQLServer) BuildServerQueriesAndMutations() {
 			}),
 			Resolve: s.ListAvailableFunctionsResolverFn,
 		},
-		"connectSupport": &graphql.Field{
-			Name: "ConnectSupport",
-			Type: graphql.NewObject(graphql.ObjectConfig{
-				Name: "ConnectSupportResponse",
-				Fields: graphql.Fields{
-					"id_token": &graphql.Field{Type: graphql.String},
-				},
-			}),
-			Resolve: s.ConnectSupportResolverFn,
-		},
 		/*		"switchProjects": &graphql.Field{
 				Name: "SwitchProjects",
 				Type: graphql.NewObject(graphql.ObjectConfig{
@@ -712,7 +702,11 @@ func (s *GraphQLServer) BuildServerQueriesAndMutations() {
 				Resolve: server.SwitchProjectResolverFn,
 			},*/
 	}
-	s.SystemMutationsChan <- &graphql.Fields{
+	if s.Cfg != nil && s.Cfg.SchemaRootExtensionHook != nil {
+		s.Cfg.SchemaRootExtensionHook(queries, nil)
+	}
+	s.SystemQueriesChan <- &queries
+	mutations := graphql.Fields{
 		// This the mutation that sends messages to the server.
 		"send": &graphql.Field{
 			Args: graphql.FieldConfigArgument{
@@ -1271,27 +1265,6 @@ func (s *GraphQLServer) BuildServerQueriesAndMutations() {
 					Type: graphql.NewList(graphql.String),
 				},
 				"quotas": &graphql.ArgumentConfig{
-					Type: scaler.ScalarJSON,
-				},
-				"currency": &graphql.ArgumentConfig{
-					Type: graphql.String,
-				},
-				"price_monthly": &graphql.ArgumentConfig{
-					Type: graphql.Float,
-				},
-				"play_product_id": &graphql.ArgumentConfig{
-					Type: graphql.String,
-				},
-				"play_base_plan_id": &graphql.ArgumentConfig{
-					Type: graphql.String,
-				},
-				"paddle_price_id": &graphql.ArgumentConfig{
-					Type: graphql.String,
-				},
-				"prices": &graphql.ArgumentConfig{
-					Type: scaler.ScalarJSON,
-				},
-				"provider_products": &graphql.ArgumentConfig{
 					Type: scaler.ScalarJSON,
 				},
 			},
@@ -1863,4 +1836,8 @@ func (s *GraphQLServer) BuildServerQueriesAndMutations() {
 			Resolve: s.ReconcileCommonModelsResolverFn,
 		},
 	}
+	if s.Cfg != nil && s.Cfg.SchemaRootExtensionHook != nil {
+		s.Cfg.SchemaRootExtensionHook(nil, mutations)
+	}
+	s.SystemMutationsChan <- &mutations
 }

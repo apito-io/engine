@@ -2,11 +2,15 @@
   <img src="https://raw.githubusercontent.com/apito-io/engine/main/docs/cover-photo.png" alt="Apito Logo" />
 </p>
 
-# Apito open-core
+# Apito Engine
 
-**Build, scale, and ship GraphQL APIs with Apito open-core**
+**Build locally. Scale when you’re ready.**
 
-Apito open-core is the open-source GraphQL stack that turns your database into a production-ready API in minutes. Built with Go and designed for extensibility, it offers a plugin-first architecture that scales from prototype to demanding production workloads.
+Apito Engine is a Fair Source GraphQL stack that turns your database into a production-ready API. Self-host it on infrastructure you control. When you want managed hosting, sync the same project to Apito Cloud.
+
+Current releases are **Fair Source — converts to Apache 2.0 after two years** (FSL-1.1-ALv2). They are not OSI open source. Tags published through `v1.8.25` remain Apache 2.0. See [LICENSING.md](LICENSING.md).
+
+The self-hosted binary is `github.com/apito-io/open_driver/cmd/oss`. It injects the public database, cache, key-value, and in-process realtime factories. `go run` in this module alone does not inject those factories. Plugins and a networked realtime bus are optional and stay out of the default binary.
 
 <p align="center">
   <a href="https://apito.io"><strong>Website</strong></a> ·
@@ -16,7 +20,7 @@ Apito open-core is the open-source GraphQL stack that turns your database into a
 
 <p align="center">
   <a href="https://github.com/apito-io/engine/blob/main/LICENSE">
-    <img src="https://img.shields.io/badge/license-Apache%202.0-blue.svg" alt="License" />
+    <img src="https://img.shields.io/badge/license-Fair%20Source%20(FSL--1.1--ALv2)-blue.svg" alt="Fair Source — converts to Apache 2.0 after two years" />
   </a>
   <a href="https://github.com/apito-io/engine/releases">
     <img src="https://img.shields.io/github/v/release/apito-io/engine" alt="Release" />

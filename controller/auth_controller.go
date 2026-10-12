@@ -18,9 +18,9 @@ import (
 	"github.com/ilyakaznacheev/cleanenv"
 	"github.com/labstack/echo/v4"
 	"github.com/tailor-platform/graphql"
-	"gitlab.com/apito.io/open_driver/project"
-	"gitlab.com/apito.io/open_driver/project/bbolt"
-	"gitlab.com/apito.io/open_driver/project/mongo"
+	"github.com/apito-io/open_driver/project"
+	"github.com/apito-io/open_driver/project/bbolt"
+	"github.com/apito-io/open_driver/project/mongo"
 	"golang.org/x/crypto/bcrypt"
 )
 

@@ -7,8 +7,8 @@ import (
 	"github.com/labstack/echo/v4"
 )
 
-// DatabaseDriverFactory interface for creating database drivers
-// This allows pro version to inject its own drivers while keeping core intact
+// DatabaseDriverFactory interface for creating database drivers.
+// A host binary may inject its own drivers while keeping this module intact.
 type DatabaseDriverFactory interface {
 	// CreateSystemDriver creates a system database driver
 	CreateSystemDriver(conf *models.Config, engineConfig *models.DriverCredentials) (ApitoSystemDB, error)
@@ -20,14 +20,15 @@ type DatabaseDriverFactory interface {
 	SupportsEngine(engine string) bool
 }
 
-// ProProjectDriverFactory is implemented by factories that need pro-only credentials (e.g. Firestore service account JSON) when creating project DB drivers.
-type ProProjectDriverFactory interface {
+// ProjectDriverExtrasFactory is implemented by factories that accept extra host
+// credentials when creating project database drivers.
+type ProjectDriverExtrasFactory interface {
 	DatabaseDriverFactory
-	CreateProjectDriverWithProExtras(conf *models.Config, engineConfig *models.DriverCredentials, proExtras interface{}) (ProjectDBInterface, error)
+	CreateProjectDriverWithExtras(conf *models.Config, engineConfig *models.DriverCredentials, extras interface{}) (ProjectDBInterface, error)
 }
 
-// GraphQLServerFactory interface for creating GraphQL servers
-// This allows pro version to inject its own enhanced GraphQL server while keeping core intact
+// GraphQLServerFactory interface for creating GraphQL servers.
+// A host binary may inject its own server while keeping this module intact.
 type GraphQLServerFactory interface {
 	// SupportsVersion returns true if this factory can create servers for the given version/edition
 	SupportsVersion(version string) bool

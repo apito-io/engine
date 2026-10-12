@@ -10,7 +10,7 @@ import (
 	"sync"
 	"time"
 
-	"gitlab.com/apito.io/open_driver/project"
+	"github.com/apito-io/open_driver/project"
 	"github.com/apito-io/engine/interfaces"
 	"github.com/apito-io/engine/models"
 	"github.com/apito-io/engine/telemetry"
@@ -155,8 +155,8 @@ func (cm *ConnectionManager) AddDriverCredentials(ctx context.Context, config *m
 	cm.configs[projectID] = config
 }
 
-// AddProDriverExtras registers pro-only driver metadata for a project (or scope composite key). Nil removes the entry.
-func (cm *ConnectionManager) AddProDriverExtras(projectID string, pro interface{}) {
+// AddProjectDriverExtras registers pro-only driver metadata for a project (or scope composite key). Nil removes the entry.
+func (cm *ConnectionManager) AddProjectDriverExtras(projectID string, pro interface{}) {
 	cm.mu.Lock()
 	defer cm.mu.Unlock()
 	if cm.proDriverExtras == nil {

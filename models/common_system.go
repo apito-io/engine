@@ -151,7 +151,7 @@ type CommonSystemParams struct {
 
 	UnmarshalStructure interface{} `json:"unmarshal_structure"`
 
-	// Ext holds opaque extension data populated by the pro layer (e.g. scoping metadata).
+	// Ext holds opaque extension data populated by a host binary (for example scoping metadata).
 	Ext map[string]interface{} `json:"ext,omitempty"`
 
 	// RuntimeConfig is the engine Config pointer for optional hooks (QueryFilterHook, DocumentPreInsertHook)

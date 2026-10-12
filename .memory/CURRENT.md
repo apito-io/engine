@@ -1,5 +1,13 @@
 # open-core — Current
 
+## Fair Source public engine (2026-10-11)
+
+- LICENSE is FSL-1.1-ALv2. `LEGAL_REVIEW.md` is `pending counsel`.
+- Public `Plan` keeps permission ceilings (`id`, `name`, `quotas`, `api_permissions`). Payment fields round-trip in `Plan.Host` and are not on the public GraphQL object.
+- Local schema drafts stay. `POST /system/project/sql-query` is read-only project SQL.
+- `cmd` in this module does not inject factories. The self-hosted binary is `github.com/apito-io/open_driver/cmd/oss`.
+- Release workflow refuses a tag while counsel has not signed, and does not check out the private engine. Uncommitted. Ask before commit / `./command.sh save`.
+
 ## Relation transition API (2026-10-11)
 
 - `relationmigrate` classifies shape, safety, reversibility, and `plan_hash`.

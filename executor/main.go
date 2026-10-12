@@ -50,7 +50,7 @@ func (s *GraphQLExecutor) Init(ctx context.Context, _driver *models.InitParams) 
 		}
 	}
 	if projectID != "" {
-		s.connectionManager.AddProDriverExtras(projectID, _driver.ProDriverExtras)
+		s.connectionManager.AddProjectDriverExtras(projectID, _driver.ProjectDriverExtras)
 	}
 
 	/* if s.SharedDriver == nil && _driver.SharedDB != nil {

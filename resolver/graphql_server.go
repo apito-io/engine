@@ -25,12 +25,14 @@ import (
 	dl "github.com/apito-io/engine/resolver/dataloader"
 	"github.com/apito-io/engine/schemas/objects"
 	"github.com/apito-io/engine/services"
+	"github.com/apito-io/engine/services/schemadraft"
+	"github.com/apito-io/engine/services/starterdemo"
 	"github.com/apito-io/engine/utility"
+	"github.com/apito-io/open_driver/system"
 	"github.com/edwingeng/hotswap"
 	svg "github.com/h2non/go-is-svg"
 	"github.com/labstack/echo/v4"
 	"github.com/tailor-platform/graphql"
-	"gitlab.com/apito.io/open_driver/system"
 	"gopkg.in/h2non/filetype.v1"
 )
 
@@ -52,10 +54,10 @@ func (f *CoreGraphQLServerFactory) CreateGraphQLServer(ctx context.Context, cfg 
 	return BuildGraphQL(ctx, cfg, extensionRouter, mainEcho)
 }
 
-// Global factory variable that can be overridden by pro version
+// Global factory variable that a host binary can override.
 var globalGraphQLServerFactory interfaces.GraphQLServerFactory
 
-// SetGraphQLServerFactory allows pro version to inject its own factory
+// SetGraphQLServerFactory lets a host binary inject its own factory.
 func SetGraphQLServerFactory(factory interfaces.GraphQLServerFactory) {
 	globalGraphQLServerFactory = factory
 }
@@ -91,6 +93,9 @@ type GraphQLServer struct {
 	SystemQueriesChan   chan *graphql.Fields
 	SystemMutations     graphql.Fields
 	SystemMutationsChan chan *graphql.Fields
+
+	// SchemaDraft serves the shared pending-draft GraphQL fields.
+	SchemaDraft schemadraft.API
 
 	GraphQLExecutor interfaces.GraphQLExecutorInterface
 
@@ -379,6 +384,15 @@ func BuildGraphQL(ctx context.Context, cfg *models.Config, extensionRouter *echo
 		}
 		srv.GraphQLExecutor = _executor
 
+		if coreSchemaDraftHost() {
+			seedCtx, seedCancel := context.WithTimeout(context.Background(), 60*time.Second)
+			if err := starterdemo.Ensure(seedCtx, cfg, systemDB); err != nil {
+				seedCancel()
+				panic(fmt.Sprintf("starter demo project failed: %v", err))
+			}
+			seedCancel()
+		}
+
 		fmt.Println("building system graphql queries and mutations")
 		srv.BuildServerQueriesAndMutations()
 
@@ -408,7 +422,21 @@ func BuildGraphQL(ctx context.Context, cfg *models.Config, extensionRouter *echo
 
 	//defer conn.Close()
 
+	if coreSchemaDraftHost() && cfg != nil && cfg.SchemaVersioningEnabled && !cfg.SchemaVersioningBypass {
+		srv.SchemaDraft = schemadraft.NewLocal(srv.publishSchemaDraftOps)
+		srv.RegisterSchemaDraftGraphQL()
+	}
+
 	return &srv, nil
+}
+
+func coreSchemaDraftHost() bool {
+	factory := GetGraphQLServerFactory()
+	if factory == nil {
+		return true
+	}
+	_, ok := factory.(*CoreGraphQLServerFactory)
+	return ok
 }
 
 func (s *GraphQLServer) Authorize() echo.MiddlewareFunc {
@@ -513,7 +541,7 @@ func (s *GraphQLServer) refreshProjectAndReCache(ctx context.Context, projectID 
 	return fresh, nil
 }
 
-// RefreshProjectAndReCache reloads project from system DB into ProjectCache (exported for pro publish).
+// RefreshProjectAndReCache reloads project from system DB into ProjectCache (exported for host publish).
 func (s *GraphQLServer) RefreshProjectAndReCache(ctx context.Context, projectID string) (*models.Project, error) {
 	return s.refreshProjectAndReCache(ctx, projectID)
 }

@@ -24,3 +24,33 @@ func ModelIsSaaSTenantControlPlaneModel(m *ModelType) bool {
 	}
 	return false
 }
+
+// PatchModelClassification updates tenant/common flags when the pointers are set.
+// Setting is_common_model clears is_tenant_model, and the reverse.
+func PatchModelClassification(m *ModelType, isTenantModel, isCommonModel *bool) bool {
+	if m == nil || (isTenantModel == nil && isCommonModel == nil) {
+		return false
+	}
+	beforeTenant := ModelIsTenantCatalogue(m)
+	beforeCommon := ModelIsCommon(m)
+	if m.Ext == nil {
+		m.Ext = map[string]interface{}{}
+	}
+	if isCommonModel != nil {
+		if *isCommonModel {
+			m.Ext[ExtKeyIsCommonModel] = true
+			delete(m.Ext, ExtKeyIsTenantModel)
+		} else {
+			delete(m.Ext, ExtKeyIsCommonModel)
+		}
+	}
+	if isTenantModel != nil {
+		if *isTenantModel {
+			m.Ext[ExtKeyIsTenantModel] = true
+			delete(m.Ext, ExtKeyIsCommonModel)
+		} else {
+			delete(m.Ext, ExtKeyIsTenantModel)
+		}
+	}
+	return beforeTenant != ModelIsTenantCatalogue(m) || beforeCommon != ModelIsCommon(m)
+}

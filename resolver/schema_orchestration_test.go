@@ -14,8 +14,8 @@ import (
 	"github.com/uptrace/bun"
 	"github.com/uptrace/bun/dialect/sqlitedialect"
 	"github.com/uptrace/bun/driver/sqliteshim"
-	"gitlab.com/apito.io/open_driver/project/sqlcommon"
-	projectsql "gitlab.com/apito.io/open_driver/project/sqlite"
+	"github.com/apito-io/open_driver/project/sqlcommon"
+	projectsql "github.com/apito-io/open_driver/project/sqlite"
 )
 
 func TestApplySchemaDDLToBaseAndTenants_PropagatesTenantError(t *testing.T) {

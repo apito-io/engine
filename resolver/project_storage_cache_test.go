@@ -6,7 +6,7 @@ import (
 	"testing"
 
 	"github.com/apito-io/engine/models"
-	"gitlab.com/apito.io/open_driver/cache/memory"
+	"github.com/apito-io/open_driver/cache/memory"
 )
 
 type storageSettingsSystemDriver struct {

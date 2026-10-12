@@ -56,6 +56,7 @@ func SetTokenClaimsToRouter(ctx echo.Context, tokenClaims *models.TokenClaims) e
 		// rest is set using id token
 		if projectID := resolveProjectIDFromClaims(ctx, tokenClaims); projectID != "" {
 			ctx.Set("project", projectID)
+			ctx.Set("project_id", projectID)
 		}
 
 		if tokenClaims.Role != "" {

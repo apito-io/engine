@@ -21,7 +21,7 @@ import (
 	"github.com/apito-io/types/protobuff"
 	"github.com/labstack/echo/v4"
 	"github.com/tailor-platform/graphql"
-	projdriver "gitlab.com/apito.io/open_driver/project"
+	projdriver "github.com/apito-io/open_driver/project"
 )
 
 func (s *GraphQLServer) GenerateProjectTokenResolverFn(p graphql.ResolveParams) (interface{}, error) {
@@ -2438,7 +2438,7 @@ func (s *GraphQLServer) UpsertFieldToModelResolverFn(p graphql.ResolveParams) (i
 	}
 
 	if modelType == nil {
-		if s.schemaVersioningActive() || s.schemaMutationHook() != nil {
+		if s.schemaVersioningActive(cache.Ctx) || s.schemaMutationHook() != nil {
 			args := graphqlArgsMap(p)
 			args["model_name"] = modelName
 			args["field"] = identifier
@@ -2468,7 +2468,7 @@ func (s *GraphQLServer) UpsertFieldToModelResolverFn(p graphql.ResolveParams) (i
 		ParentField: parentField,
 	}, nil, nil)
 	if err != nil {
-		if parentField != "" && s.schemaVersioningActive() && errors.Is(err, ae.ErrParentFieldNotFound) {
+		if parentField != "" && s.schemaVersioningActive(cache.Ctx) && errors.Is(err, ae.ErrParentFieldNotFound) {
 			err = nil
 			fieldInfo = nil
 		} else {
@@ -3080,7 +3080,7 @@ func (s *GraphQLServer) ModelFieldOperationResolverFn(p graphql.ResolveParams) (
 			return nil, err
 		}
 		if fieldInfo == nil {
-			if s.schemaVersioningActive() {
+			if s.schemaVersioningActive(cache.Ctx) {
 				applyDDL = func(ctx context.Context, d interfaces.ProjectDBInterface) error { return nil }
 				beforePersist = func() error { return nil }
 				affectedField = &models.FieldInfo{
@@ -3213,7 +3213,7 @@ func (s *GraphQLServer) ModelFieldOperationResolverFn(p graphql.ResolveParams) (
 			return nil, err
 		}
 		if deletedField == nil {
-			if s.schemaVersioningActive() {
+			if s.schemaVersioningActive(cache.Ctx) {
 				applyDDL = func(ctx context.Context, d interfaces.ProjectDBInterface) error { return nil }
 				beforePersist = func() error { return nil }
 				affectedField = &models.FieldInfo{

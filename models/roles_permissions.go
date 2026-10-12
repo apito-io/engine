@@ -54,31 +54,10 @@ type Plan struct {
 	Quotas          map[string]int `json:"quotas,omitempty" firestore:"quotas,omitempty" bson:"quotas,omitempty"`
 	SystemGenerated bool           `json:"system_generated,omitempty" firestore:"system_generated,omitempty" bson:"system_generated,omitempty"`
 
-	// Monetization (ApitoProjectPayment) — optional list price + store SKUs. Not used by ApitoPayment (platform Paddle).
-	Currency       string  `json:"currency,omitempty" firestore:"currency,omitempty" bson:"currency,omitempty"`                      // derived from default prices[] row
-	PriceMonthly   float64 `json:"price_monthly,omitempty" firestore:"price_monthly,omitempty" bson:"price_monthly,omitempty"`       // derived from default prices[] row
-	PlayProductID  string  `json:"play_product_id,omitempty" firestore:"play_product_id,omitempty" bson:"play_product_id,omitempty"` // legacy; prefer ProviderProducts
-	PlayBasePlanID string  `json:"play_base_plan_id,omitempty" firestore:"play_base_plan_id,omitempty" bson:"play_base_plan_id,omitempty"`
-	PaddlePriceID  string  `json:"paddle_price_id,omitempty" firestore:"paddle_price_id,omitempty" bson:"paddle_price_id,omitempty"`
-
-	// Prices is the source of truth for multi-currency list prices.
-	Prices []PlanPrice `json:"prices,omitempty" firestore:"prices,omitempty" bson:"prices,omitempty"`
-	// ProviderProducts links this plan to store/catalog IDs (google_play, paddle, stripe, …).
-	ProviderProducts []PlanProviderProduct `json:"provider_products,omitempty" firestore:"provider_products,omitempty" bson:"provider_products,omitempty"`
-}
-
-// PlanPrice is one currency amount for a tenant SaaS plan.
-type PlanPrice struct {
-	Currency string  `json:"currency,omitempty" firestore:"currency,omitempty" bson:"currency,omitempty"`
-	Amount   float64 `json:"amount,omitempty" firestore:"amount,omitempty" bson:"amount,omitempty"`
-	Default  bool    `json:"default,omitempty" firestore:"default,omitempty" bson:"default,omitempty"`
-}
-
-// PlanProviderProduct maps a billing provider to this plan's product_id (common name).
-type PlanProviderProduct struct {
-	Provider  string `json:"provider,omitempty" firestore:"provider,omitempty" bson:"provider,omitempty"`
-	ProductID string `json:"product_id,omitempty" firestore:"product_id,omitempty" bson:"product_id,omitempty"`
-	VariantID string `json:"variant_id,omitempty" firestore:"variant_id,omitempty" bson:"variant_id,omitempty"`
+	// Host keeps JSON keys this module does not model (commercial catalog fields
+	// written by a host binary). Marshal/Unmarshal round-trips them so a save
+	// does not drop stored provider ids.
+	Host json.RawMessage `json:"-" firestore:"-" bson:"-"`
 }
 
 // DefaultSeededPlans returns the only system-generated starter plan: free.

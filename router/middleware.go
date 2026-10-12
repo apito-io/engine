@@ -2,7 +2,6 @@ package router
 
 import (
 	"github.com/gin-gonic/gin"
-	//"gitlab.com/protiva-cor/gateway/router/middleware/jwt"
 	"github.com/apito-io/engine/models"
 )
 

@@ -1,8 +1,8 @@
 package resolver
 
 import (
+	"context"
 	"errors"
-	"fmt"
 
 	"github.com/apito-io/engine/models"
 	"github.com/tailor-platform/graphql"
@@ -15,9 +15,14 @@ func (s *GraphQLServer) schemaMutationHook() models.SchemaMutationHook {
 	return s.Cfg.SchemaMutationHook
 }
 
-func (s *GraphQLServer) schemaVersioningActive() bool {
+func (s *GraphQLServer) schemaVersioningActive(ctx context.Context) bool {
 	if s == nil || s.Cfg == nil {
 		return false
+	}
+	if ctx != nil {
+		if on, _ := ctx.Value(localSchemaReplayKey{}).(bool); on {
+			return false
+		}
 	}
 	return s.Cfg.SchemaVersioningEnabled && !s.Cfg.SchemaVersioningBypass
 }
@@ -29,8 +34,12 @@ func (s *GraphQLServer) tryStageSchemaMutation(
 	args map[string]interface{},
 	defaultFn func() (interface{}, error),
 ) (interface{}, error) {
-	if s.schemaVersioningActive() && s.schemaMutationHook() == nil {
-		return nil, fmt.Errorf("schema versioning is enabled but SchemaMutationHook is not registered")
+	ctx := context.Background()
+	if cache != nil && cache.Ctx != nil {
+		ctx = cache.Ctx
+	}
+	if s.schemaVersioningActive(ctx) && s.schemaMutationHook() == nil {
+		return s.stageLocalSchemaDraft(project, operationType, args)
 	}
 
 	hook := s.schemaMutationHook()
@@ -56,7 +65,7 @@ func (s *GraphQLServer) tryStageSchemaMutation(
 		return nil, err
 	}
 	if !handled {
-		if s.schemaVersioningActive() {
+		if s.schemaVersioningActive(ctx) {
 			return nil, errors.New("schema versioning hook declined to stage mutation")
 		}
 		return defaultFn()

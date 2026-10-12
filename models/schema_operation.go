@@ -70,6 +70,22 @@ type SchemaOperation struct {
 	UpdatedAt        string `bun:"updated_at,type:timestamp,notnull"`
 }
 
+// CloneProjectSchema returns a deep copy. A nil schema becomes an empty schema.
+func CloneProjectSchema(schema *ProjectSchema) (*ProjectSchema, error) {
+	if schema == nil {
+		return &ProjectSchema{}, nil
+	}
+	raw, err := json.Marshal(schema)
+	if err != nil {
+		return nil, err
+	}
+	var out ProjectSchema
+	if err := json.Unmarshal(raw, &out); err != nil {
+		return nil, err
+	}
+	return &out, nil
+}
+
 // Steps decodes StepsJSON into structured steps.
 func (o *SchemaOperation) Steps() ([]SchemaOperationStep, error) {
 	if o == nil || o.StepsJSON == "" {

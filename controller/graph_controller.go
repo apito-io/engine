@@ -968,7 +968,7 @@ func (g *GraphCtrl) PublicSubscriptionWrapHandler(c echo.Context) error {
 		})
 	}
 
-	// Prefer cache.Ctx (enriched with tenant/routing keys by the pro layer) so
+	// Prefer cache.Ctx (enriched with tenant/routing keys by a host binary) so
 	// the realtime topic hook resolves the same scoped topic as the emit side.
 	base := cache.Ctx
 	if base == nil {

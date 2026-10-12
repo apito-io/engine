@@ -1,5 +1,11 @@
 # Handoff — open-core 2026-10-11
 
+## Fair Source
+
+- **Done:** License packet, public plan type without payment fields, local schema draft routes, read-only project SQL, release workflow.
+- **Next:** Counsel signs `LEGAL_REVIEW.md` before any public FSL tag. Do not regenerate GraphQL by hand.
+- **Do not:** Sign the review. Describe this tree as OSI open source. `./command.sh save` until asked.
+
 ## Relation transition
 
 - **Done:** Preview contract, GraphQL query/mutation, upsert guard. Conflict policy is `abort`.

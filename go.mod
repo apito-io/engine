@@ -179,6 +179,6 @@ require (
 	olympos.io/encoding/edn v0.0.0-20201019073823-d3554ca0b0a3 // indirect
 )
 
-require gitlab.com/apito.io/open_driver v0.0.0
+require github.com/apito-io/open_driver v0.0.0
 
-replace gitlab.com/apito.io/open_driver => ../open_driver
+replace github.com/apito-io/open_driver => ../open_driver

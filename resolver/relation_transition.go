@@ -267,7 +267,7 @@ func (s *GraphQLServer) StageRelationTransitionResolverFn(p graphql.ResolveParam
 		return nil, err
 	}
 	message := "Staged, not applied"
-	if !s.schemaVersioningActive() {
+	if !s.schemaVersioningActive(cache.Ctx) {
 		message = "Applied"
 	}
 	return map[string]interface{}{"staged": true, "message": message, "plan_hash": preview.PlanHash}, nil

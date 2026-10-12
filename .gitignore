@@ -47,5 +47,10 @@ dlv.log
 # IDE and debugging
 *.code-workspace
 .vscode/launch.json
-# env files tracked for single-dev monorepo setup (do not re-ignore .env / .env.local)
-.env.*.local
+# Local databases and machine config stay off the public tree.
+data/
+.env
+.env.*
+!.env.example
+keys/private.key
+keys/public.key

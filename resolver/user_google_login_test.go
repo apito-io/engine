@@ -10,7 +10,7 @@ import (
 	"github.com/uptrace/bun"
 	"github.com/uptrace/bun/dialect/sqlitedialect"
 	_ "github.com/uptrace/bun/driver/sqliteshim"
-	"gitlab.com/apito.io/open_driver/project/projectauthusers"
+	"github.com/apito-io/open_driver/project/projectauthusers"
 	"google.golang.org/api/idtoken"
 )
 

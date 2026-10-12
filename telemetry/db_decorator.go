@@ -2,6 +2,7 @@ package telemetry
 
 import (
 	"context"
+	"errors"
 	"time"
 
 	"github.com/apito-io/engine/interfaces"
@@ -485,4 +486,16 @@ func (w *projectDBMetrics) UpdateProjectAuthUser(ctx context.Context, user *mode
 
 func (w *projectDBMetrics) DeleteProjectAuthUser(ctx context.Context, userID string) error {
 	return w.run(ctx, "delete", false, func() error { return w.inner.DeleteProjectAuthUser(ctx, userID) })
+}
+
+// QueryReadOnly forwards project SQL exploration through the metrics wrapper.
+func (w *projectDBMetrics) QueryReadOnly(ctx context.Context, query string, limit int) ([]string, [][]interface{}, error) {
+	runner, ok := w.inner.(interfaces.ProjectReadOnlySQL)
+	if !ok || runner == nil {
+		return nil, nil, errors.New("this project database does not support SQL exploration")
+	}
+	start := time.Now()
+	cols, rows, err := runner.QueryReadOnly(ctx, query, limit)
+	RecordDBOperation(ctx, w.cfg, w.engine, "query", err, time.Since(start))
+	return cols, rows, err
 }

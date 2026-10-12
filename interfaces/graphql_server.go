@@ -1,5 +1,5 @@
 // Package interfaces defines the contracts for all components in the Apito Engine.
-// This allows for dependency injection and modular architecture between core and pro versions.
+// This allows for dependency injection between the public engine and a host binary.
 package interfaces
 
 import (
@@ -12,7 +12,7 @@ import (
 )
 
 // GraphQLServerInterface defines the contract for GraphQL server implementations
-// This allows pro version to extend core functionality while maintaining compatibility
+// A host binary can extend core functionality while staying compatible with this contract.
 type GraphQLServerInterface interface {
 	// Authentication middleware
 	Authorize() echo.MiddlewareFunc

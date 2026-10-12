@@ -427,15 +427,8 @@ func (s *SchemaObjects) GetPlanObject() *graphql.Object {
 			"description":       &graphql.Field{Type: graphql.String},
 			"api_permissions":   &graphql.Field{Type: scaler.ScalarJSON},
 			"logic_executions":  &graphql.Field{Type: graphql.NewList(graphql.String)},
-			"quotas":            &graphql.Field{Type: scaler.ScalarJSON},
-			"system_generated":  &graphql.Field{Type: graphql.Boolean},
-			"currency":          &graphql.Field{Type: graphql.String},
-			"price_monthly":     &graphql.Field{Type: graphql.Float},
-			"play_product_id":   &graphql.Field{Type: graphql.String},
-			"play_base_plan_id": &graphql.Field{Type: graphql.String},
-			"paddle_price_id":   &graphql.Field{Type: graphql.String},
-			"prices":            &graphql.Field{Type: scaler.ScalarJSON},
-			"provider_products": &graphql.Field{Type: scaler.ScalarJSON},
+			"quotas":           &graphql.Field{Type: scaler.ScalarJSON},
+			"system_generated": &graphql.Field{Type: graphql.Boolean},
 		},
 	})
 }
