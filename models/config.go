@@ -15,6 +15,11 @@ type Config struct {
 	CORSOrigin   string `env:"CORS_ORIGIN" env-default:"http://localhost:4000"`
 	CookieDomain string `env:"COOKIE_DOMAIN" env-default:"localhost"`
 
+	// MCPPublicURL is the browser-facing MCP resource. Empty uses the forwarded host.
+	MCPPublicURL string `env:"MCP_PUBLIC_URL" env-default:""`
+	// MCPOAuthStore is the durable OAuth transaction file. Empty uses the data directory.
+	MCPOAuthStore string `env:"MCP_OAUTH_STORE" env-default:""`
+
 	UptraceDNS string `env:"UPTRACE_DNS" env-default:""`
 
 	PluginPath string `env:"PLUGIN_PATH" env-default:"plugins"`
@@ -213,6 +218,10 @@ type Config struct {
 	// ProjectAPITokenClaimsHook allows optional claim enrichment before project API key issuance.
 	// Open-core stays policy-free and simply invokes this hook when set.
 	ProjectAPITokenClaimsHook func(ctx echo.Context, project *Project, claims *TokenClaims) `env:"-"`
+
+	// HostCLICapabilitiesHook lets a host add capability flags for /system/cli/v1/capabilities.
+	// Open-core does not infer Cloud features from private schema names.
+	HostCLICapabilitiesHook func() map[string]bool `env:"-"`
 
 	// ProjectUserGraphQLHooks allows the host to override project end-user GraphQL resolvers before the open-core default.
 	// Type: *resolver.ProjectUserGraphQLHooks (set by pro at boot).

@@ -168,6 +168,13 @@ func InitRouter(cfg *models.Config) (*echo.Echo, error) {
 	adminAPI := router.Group("/admin")
 	adminAPI.POST("/reset-password", authCtrl.AdminResetPasswordV2)
 
+	router.POST("/system/cli/v1/login/start", authCtrl.CLILoginStart)
+	router.POST("/system/cli/v1/login/poll", authCtrl.CLILoginPoll)
+	router.GET("/system/cli/v1/login/verify", authCtrl.CLILoginVerify)
+	router.POST("/system/mcp/v1/login/start", authCtrl.MCPLoginStart)
+	router.POST("/system/mcp/v1/login/poll", authCtrl.MCPLoginPoll)
+	router.GET("/system/mcp/v1/login/verify", authCtrl.MCPLoginVerify)
+
 	/*authv3ProtectedRoutes := router.Group("auth/v3")
 	authv3ProtectedRoutes.Use(server.Authorize())
 	{
@@ -248,6 +255,9 @@ func InitRouter(cfg *models.Config) (*echo.Echo, error) {
 		//systemRoutes.POST("/plugin/upload", graphCtrl.PluginUpload) deprecated
 
 		systemRoutes.GET("/health", graphCtrl.SystemHealth)
+		systemRoutes.GET("/cli/v1/capabilities", authCtrl.CLICapabilities)
+		systemRoutes.POST("/cli/v1/login/approve", authCtrl.CLILoginApprove)
+		systemRoutes.POST("/mcp/v1/login/approve", authCtrl.MCPLoginApprove)
 
 		// Plugin management routes with cloud sync authentication
 		//pluginRoutes := systemRoutes.Group("/plugin", middleware.CloudSyncKeyAuth())
@@ -348,6 +358,10 @@ func InitRouter(cfg *models.Config) (*echo.Echo, error) {
 			panic(err)
 		}
 	}()*/
+
+	if err := authCtrl.MountRemoteMCP(router, server.Authorize()); err != nil {
+		return nil, err
+	}
 
 	return router, nil
 }

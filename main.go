@@ -13,6 +13,7 @@ import (
 	ae "github.com/apito-io/engine/err"
 	"github.com/apito-io/engine/models"
 	"github.com/apito-io/engine/router"
+	odfactory "github.com/apito-io/open_driver/factory"
 	"github.com/cloudflare/tableflip"
 	"github.com/getsentry/sentry-go"
 	"github.com/ilyakaznacheev/cleanenv"
@@ -33,6 +34,12 @@ func main() {
 	if err != nil {
 		panic(fmt.Sprintf("Failed to load configuration: %v", err))
 	}
+
+	cfg.DriverFactory = odfactory.NewDefaultFactory()
+	cfg.CacheFactory = odfactory.NewDefaultCacheFactory()
+	cfg.KVFactory = odfactory.NewDefaultKVFactory()
+	cfg.RealtimeBusFactory = odfactory.NewDefaultMemoryRealtimeFactory()
+	cfg.PluginHost = odfactory.NewNoopPluginHost()
 
 	if cfg.SentryKey != "" {
 		err := sentry.Init(sentry.ClientOptions{
