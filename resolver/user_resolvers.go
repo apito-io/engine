@@ -254,6 +254,17 @@ func (s *GraphQLServer) LoginUserResolverFn(p graphql.ResolveParams) (interface{
 		}
 		return s.completeGeneralGoogleLogin(ctx, cache, svc, payload)
 
+	case "facebook_access_token":
+		token := strings.TrimSpace(getArgString(p.Args, "access_token"))
+		if token == "" {
+			return nil, errors.New("access_token is required for facebook_access_token login")
+		}
+		identity, err := ResolveFacebookAccessToken(ctx, authProject, token)
+		if err != nil {
+			return nil, err
+		}
+		return s.completeOAuthProviderLogin(ctx, cache, svc, identity)
+
 	case "facebook", "github", "x", "linkedin":
 		provider, ok := models.ParseOAuthProviderID(authMethod)
 		if !ok {

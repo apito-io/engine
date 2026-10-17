@@ -22,6 +22,8 @@ type OAuthIdentity struct {
 	Subject       string
 	Email         string
 	EmailVerified bool
+	Name          string
+	PhotoURL      string
 }
 
 func oauth2ConfigForProvider(provider models.OAuthProviderID, cred models.OAuthProviderCredentials) (*oauth2.Config, error) {

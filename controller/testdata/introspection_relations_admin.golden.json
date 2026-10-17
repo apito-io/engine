@@ -117,177 +117,7 @@
         ],
         "interfaces": null,
         "kind": "INPUT_OBJECT",
-        "name": "AUTHORLIST_COUNT_GROUPBY_INPUT",
-        "possibleTypes": null
-      },
-      {
-        "description": "",
-        "enumValues": null,
-        "fields": null,
-        "inputFields": [
-          {
-            "defaultValue": null,
-            "description": "",
-            "name": "name",
-            "type": {
-              "kind": "ENUM",
-              "name": "SORT_ENUM",
-              "ofType": null
-            }
-          }
-        ],
-        "interfaces": null,
-        "kind": "INPUT_OBJECT",
-        "name": "AUTHORLIST_COUNT_INPUT_SORT_PAYLOAD",
-        "possibleTypes": null
-      },
-      {
-        "description": "",
-        "enumValues": null,
-        "fields": null,
-        "inputFields": [
-          {
-            "defaultValue": null,
-            "description": "",
-            "name": "OR",
-            "type": {
-              "kind": "INPUT_OBJECT",
-              "name": "AUTHORLIST_COUNT_OR_CONDITION",
-              "ofType": null
-            }
-          },
-          {
-            "defaultValue": null,
-            "description": "",
-            "name": "name",
-            "type": {
-              "kind": "INPUT_OBJECT",
-              "name": "AUTHOR_NAME_COMMON_FILTER_CONDITION",
-              "ofType": null
-            }
-          }
-        ],
-        "interfaces": null,
-        "kind": "INPUT_OBJECT",
-        "name": "AUTHORLIST_COUNT_INPUT_WHERE_PAYLOAD",
-        "possibleTypes": null
-      },
-      {
-        "description": "Filter by document _key ids. If this is used, the where filter will be ignored.",
-        "enumValues": null,
-        "fields": null,
-        "inputFields": [
-          {
-            "defaultValue": null,
-            "description": "",
-            "name": "eq",
-            "type": {
-              "kind": "SCALAR",
-              "name": "String",
-              "ofType": null
-            }
-          },
-          {
-            "defaultValue": null,
-            "description": "",
-            "name": "in",
-            "type": {
-              "kind": "LIST",
-              "name": null,
-              "ofType": {
-                "kind": "SCALAR",
-                "name": "String",
-                "ofType": null
-              }
-            }
-          },
-          {
-            "defaultValue": null,
-            "description": "",
-            "name": "ne",
-            "type": {
-              "kind": "SCALAR",
-              "name": "String",
-              "ofType": null
-            }
-          }
-        ],
-        "interfaces": null,
-        "kind": "INPUT_OBJECT",
-        "name": "AUTHORLIST_COUNT_KEY_CONDITION",
-        "possibleTypes": null
-      },
-      {
-        "description": "",
-        "enumValues": null,
-        "fields": null,
-        "inputFields": [
-          {
-            "defaultValue": null,
-            "description": "",
-            "name": "name",
-            "type": {
-              "kind": "INPUT_OBJECT",
-              "name": "AUTHOR_NAME_COMMON_FILTER_CONDITION",
-              "ofType": null
-            }
-          }
-        ],
-        "interfaces": null,
-        "kind": "INPUT_OBJECT",
-        "name": "AUTHORLIST_COUNT_OR_CONDITION",
-        "possibleTypes": null
-      },
-      {
-        "description": "Group by fields with key-value pairs for both user input and editable fields",
-        "enumValues": null,
-        "fields": null,
-        "inputFields": [
-          {
-            "defaultValue": null,
-            "description": "Field name to group by",
-            "name": "key",
-            "type": {
-              "kind": "SCALAR",
-              "name": "String",
-              "ofType": null
-            }
-          },
-          {
-            "defaultValue": null,
-            "description": "Value to group by",
-            "name": "value",
-            "type": {
-              "kind": "SCALAR",
-              "name": "String",
-              "ofType": null
-            }
-          }
-        ],
-        "interfaces": null,
-        "kind": "INPUT_OBJECT",
         "name": "AUTHORLIST_GROUPBY_INPUT",
-        "possibleTypes": null
-      },
-      {
-        "description": "",
-        "enumValues": null,
-        "fields": null,
-        "inputFields": [
-          {
-            "defaultValue": null,
-            "description": "",
-            "name": "name",
-            "type": {
-              "kind": "ENUM",
-              "name": "SORT_ENUM",
-              "ofType": null
-            }
-          }
-        ],
-        "interfaces": null,
-        "kind": "INPUT_OBJECT",
-        "name": "AUTHORLIST_INPUT_SORT_PAYLOAD",
         "possibleTypes": null
       },
       {
@@ -311,7 +141,7 @@
             "name": "name",
             "type": {
               "kind": "INPUT_OBJECT",
-              "name": "AUTHOR_NAME_COMMON_FILTER_CONDITION",
+              "name": "AUTHOR__FIELD__NAME__COMMON_FILTER_CONDITION",
               "ofType": null
             }
           }
@@ -377,7 +207,7 @@
             "name": "name",
             "type": {
               "kind": "INPUT_OBJECT",
-              "name": "AUTHOR_NAME_COMMON_FILTER_CONDITION",
+              "name": "AUTHOR__FIELD__NAME__COMMON_FILTER_CONDITION",
               "ofType": null
             }
           }
@@ -385,6 +215,134 @@
         "interfaces": null,
         "kind": "INPUT_OBJECT",
         "name": "AUTHORLIST_OR_CONDITION",
+        "possibleTypes": null
+      },
+      {
+        "description": "Group by fields with key-value pairs for both user input and editable fields",
+        "enumValues": null,
+        "fields": null,
+        "inputFields": [
+          {
+            "defaultValue": null,
+            "description": "Field name to group by",
+            "name": "key",
+            "type": {
+              "kind": "SCALAR",
+              "name": "String",
+              "ofType": null
+            }
+          },
+          {
+            "defaultValue": null,
+            "description": "Value to group by",
+            "name": "value",
+            "type": {
+              "kind": "SCALAR",
+              "name": "String",
+              "ofType": null
+            }
+          }
+        ],
+        "interfaces": null,
+        "kind": "INPUT_OBJECT",
+        "name": "AUTHOR_LIST_COUNT_GROUPBY_INPUT",
+        "possibleTypes": null
+      },
+      {
+        "description": "",
+        "enumValues": null,
+        "fields": null,
+        "inputFields": [
+          {
+            "defaultValue": null,
+            "description": "",
+            "name": "OR",
+            "type": {
+              "kind": "INPUT_OBJECT",
+              "name": "AUTHOR_LIST_COUNT_OR_CONDITION",
+              "ofType": null
+            }
+          },
+          {
+            "defaultValue": null,
+            "description": "",
+            "name": "name",
+            "type": {
+              "kind": "INPUT_OBJECT",
+              "name": "AUTHOR__FIELD__NAME__COMMON_FILTER_CONDITION",
+              "ofType": null
+            }
+          }
+        ],
+        "interfaces": null,
+        "kind": "INPUT_OBJECT",
+        "name": "AUTHOR_LIST_COUNT_INPUT_WHERE_PAYLOAD",
+        "possibleTypes": null
+      },
+      {
+        "description": "Filter by document _key ids. If this is used, the where filter will be ignored.",
+        "enumValues": null,
+        "fields": null,
+        "inputFields": [
+          {
+            "defaultValue": null,
+            "description": "",
+            "name": "eq",
+            "type": {
+              "kind": "SCALAR",
+              "name": "String",
+              "ofType": null
+            }
+          },
+          {
+            "defaultValue": null,
+            "description": "",
+            "name": "in",
+            "type": {
+              "kind": "LIST",
+              "name": null,
+              "ofType": {
+                "kind": "SCALAR",
+                "name": "String",
+                "ofType": null
+              }
+            }
+          },
+          {
+            "defaultValue": null,
+            "description": "",
+            "name": "ne",
+            "type": {
+              "kind": "SCALAR",
+              "name": "String",
+              "ofType": null
+            }
+          }
+        ],
+        "interfaces": null,
+        "kind": "INPUT_OBJECT",
+        "name": "AUTHOR_LIST_COUNT_KEY_CONDITION",
+        "possibleTypes": null
+      },
+      {
+        "description": "",
+        "enumValues": null,
+        "fields": null,
+        "inputFields": [
+          {
+            "defaultValue": null,
+            "description": "",
+            "name": "name",
+            "type": {
+              "kind": "INPUT_OBJECT",
+              "name": "AUTHOR__FIELD__NAME__COMMON_FILTER_CONDITION",
+              "ofType": null
+            }
+          }
+        ],
+        "interfaces": null,
+        "kind": "INPUT_OBJECT",
+        "name": "AUTHOR_LIST_COUNT_OR_CONDITION",
         "possibleTypes": null
       },
       {
@@ -453,7 +411,7 @@
         ],
         "interfaces": null,
         "kind": "INPUT_OBJECT",
-        "name": "AUTHOR_NAME_COMMON_FILTER_CONDITION",
+        "name": "AUTHOR__FIELD__NAME__COMMON_FILTER_CONDITION",
         "possibleTypes": null
       },
       {
@@ -468,7 +426,7 @@
             "name": "data",
             "type": {
               "kind": "OBJECT",
-              "name": "Author_RawModel",
+              "name": "Author_Raw_Model",
               "ofType": null
             }
           },
@@ -522,87 +480,12 @@
           {
             "args": [],
             "deprecationReason": null,
-            "description": "",
-            "isDeprecated": false,
-            "name": "name",
-            "type": {
-              "kind": "SCALAR",
-              "name": "String",
-              "ofType": null
-            }
-          }
-        ],
-        "inputFields": null,
-        "interfaces": [],
-        "kind": "OBJECT",
-        "name": "Author_RawModel",
-        "possibleTypes": null
-      },
-      {
-        "description": "",
-        "enumValues": null,
-        "fields": null,
-        "inputFields": [
-          {
-            "defaultValue": null,
-            "description": "",
-            "name": "_id",
-            "type": {
-              "kind": "SCALAR",
-              "name": "String",
-              "ofType": null
-            }
-          },
-          {
-            "defaultValue": null,
-            "description": "",
-            "name": "name",
-            "type": {
-              "kind": "SCALAR",
-              "name": "String",
-              "ofType": null
-            }
-          }
-        ],
-        "interfaces": null,
-        "kind": "INPUT_OBJECT",
-        "name": "Author_create_payload",
-        "possibleTypes": null
-      },
-      {
-        "description": "",
-        "enumValues": null,
-        "fields": null,
-        "inputFields": [
-          {
-            "defaultValue": null,
-            "description": "",
-            "name": "name",
-            "type": {
-              "kind": "SCALAR",
-              "name": "String",
-              "ofType": null
-            }
-          }
-        ],
-        "interfaces": null,
-        "kind": "INPUT_OBJECT",
-        "name": "Author_update_payload",
-        "possibleTypes": null
-      },
-      {
-        "description": "",
-        "enumValues": null,
-        "fields": [
-          {
-            "args": [],
-            "deprecationReason": null,
             "description": "Field Details",
             "isDeprecated": false,
             "name": "data",
             "type": {
               "kind": "OBJECT",
-              "name": "Author_RawModel",
+              "name": "Author_Raw_Model",
               "ofType": null
             }
           },
@@ -646,30 +529,7 @@
         "inputFields": null,
         "interfaces": [],
         "kind": "OBJECT",
-        "name": "Authorlist",
-        "possibleTypes": null
-      },
-      {
-        "description": "",
-        "enumValues": null,
-        "fields": [
-          {
-            "args": [],
-            "deprecationReason": null,
-            "description": "",
-            "isDeprecated": false,
-            "name": "total",
-            "type": {
-              "kind": "SCALAR",
-              "name": "Int",
-              "ofType": null
-            }
-          }
-        ],
-        "inputFields": null,
-        "interfaces": [],
-        "kind": "OBJECT",
-        "name": "Authorlist_connection",
+        "name": "AuthorList",
         "possibleTypes": null
       },
       {
@@ -700,18 +560,41 @@
         ],
         "interfaces": null,
         "kind": "INPUT_OBJECT",
-        "name": "Authorlist_upsert_payload",
+        "name": "Author_Create_Payload",
         "possibleTypes": null
       },
       {
-        "description": "Group by fields with key-value pairs for both user input and editable fields",
+        "description": "",
+        "enumValues": null,
+        "fields": [
+          {
+            "args": [],
+            "deprecationReason": null,
+            "description": "",
+            "isDeprecated": false,
+            "name": "total",
+            "type": {
+              "kind": "SCALAR",
+              "name": "Int",
+              "ofType": null
+            }
+          }
+        ],
+        "inputFields": null,
+        "interfaces": [],
+        "kind": "OBJECT",
+        "name": "Author_List_Connection",
+        "possibleTypes": null
+      },
+      {
+        "description": "",
         "enumValues": null,
         "fields": null,
         "inputFields": [
           {
             "defaultValue": null,
-            "description": "Field name to group by",
-            "name": "key",
+            "description": "",
+            "name": "_id",
             "type": {
               "kind": "SCALAR",
               "name": "String",
@@ -720,8 +603,8 @@
           },
           {
             "defaultValue": null,
-            "description": "Value to group by",
-            "name": "value",
+            "description": "",
+            "name": "name",
             "type": {
               "kind": "SCALAR",
               "name": "String",
@@ -731,7 +614,30 @@
         ],
         "interfaces": null,
         "kind": "INPUT_OBJECT",
-        "name": "BUCKETLIST_COUNT_GROUPBY_INPUT",
+        "name": "Author_List_Upsert_Payload",
+        "possibleTypes": null
+      },
+      {
+        "description": "",
+        "enumValues": null,
+        "fields": [
+          {
+            "args": [],
+            "deprecationReason": null,
+            "description": "",
+            "isDeprecated": false,
+            "name": "name",
+            "type": {
+              "kind": "SCALAR",
+              "name": "String",
+              "ofType": null
+            }
+          }
+        ],
+        "inputFields": null,
+        "interfaces": [],
+        "kind": "OBJECT",
+        "name": "Author_Raw_Model",
         "possibleTypes": null
       },
       {
@@ -744,82 +650,6 @@
             "description": "",
             "name": "name",
             "type": {
-              "kind": "ENUM",
-              "name": "SORT_ENUM",
-              "ofType": null
-            }
-          }
-        ],
-        "interfaces": null,
-        "kind": "INPUT_OBJECT",
-        "name": "BUCKETLIST_COUNT_INPUT_SORT_PAYLOAD",
-        "possibleTypes": null
-      },
-      {
-        "description": "",
-        "enumValues": null,
-        "fields": null,
-        "inputFields": [
-          {
-            "defaultValue": null,
-            "description": "",
-            "name": "OR",
-            "type": {
-              "kind": "INPUT_OBJECT",
-              "name": "BUCKETLIST_COUNT_OR_CONDITION",
-              "ofType": null
-            }
-          },
-          {
-            "defaultValue": null,
-            "description": "",
-            "name": "name",
-            "type": {
-              "kind": "INPUT_OBJECT",
-              "name": "BUCKET_NAME_COMMON_FILTER_CONDITION",
-              "ofType": null
-            }
-          }
-        ],
-        "interfaces": null,
-        "kind": "INPUT_OBJECT",
-        "name": "BUCKETLIST_COUNT_INPUT_WHERE_PAYLOAD",
-        "possibleTypes": null
-      },
-      {
-        "description": "Filter by document _key ids. If this is used, the where filter will be ignored.",
-        "enumValues": null,
-        "fields": null,
-        "inputFields": [
-          {
-            "defaultValue": null,
-            "description": "",
-            "name": "eq",
-            "type": {
-              "kind": "SCALAR",
-              "name": "String",
-              "ofType": null
-            }
-          },
-          {
-            "defaultValue": null,
-            "description": "",
-            "name": "in",
-            "type": {
-              "kind": "LIST",
-              "name": null,
-              "ofType": {
-                "kind": "SCALAR",
-                "name": "String",
-                "ofType": null
-              }
-            }
-          },
-          {
-            "defaultValue": null,
-            "description": "",
-            "name": "ne",
-            "type": {
               "kind": "SCALAR",
               "name": "String",
               "ofType": null
@@ -828,28 +658,7 @@
         ],
         "interfaces": null,
         "kind": "INPUT_OBJECT",
-        "name": "BUCKETLIST_COUNT_KEY_CONDITION",
-        "possibleTypes": null
-      },
-      {
-        "description": "",
-        "enumValues": null,
-        "fields": null,
-        "inputFields": [
-          {
-            "defaultValue": null,
-            "description": "",
-            "name": "name",
-            "type": {
-              "kind": "INPUT_OBJECT",
-              "name": "BUCKET_NAME_COMMON_FILTER_CONDITION",
-              "ofType": null
-            }
-          }
-        ],
-        "interfaces": null,
-        "kind": "INPUT_OBJECT",
-        "name": "BUCKETLIST_COUNT_OR_CONDITION",
+        "name": "Author_Update_Payload",
         "possibleTypes": null
       },
       {
@@ -891,27 +700,6 @@
           {
             "defaultValue": null,
             "description": "",
-            "name": "name",
-            "type": {
-              "kind": "ENUM",
-              "name": "SORT_ENUM",
-              "ofType": null
-            }
-          }
-        ],
-        "interfaces": null,
-        "kind": "INPUT_OBJECT",
-        "name": "BUCKETLIST_INPUT_SORT_PAYLOAD",
-        "possibleTypes": null
-      },
-      {
-        "description": "",
-        "enumValues": null,
-        "fields": null,
-        "inputFields": [
-          {
-            "defaultValue": null,
-            "description": "",
             "name": "OR",
             "type": {
               "kind": "INPUT_OBJECT",
@@ -925,7 +713,7 @@
             "name": "name",
             "type": {
               "kind": "INPUT_OBJECT",
-              "name": "BUCKET_NAME_COMMON_FILTER_CONDITION",
+              "name": "BUCKET__FIELD__NAME__COMMON_FILTER_CONDITION",
               "ofType": null
             }
           }
@@ -991,7 +779,7 @@
             "name": "name",
             "type": {
               "kind": "INPUT_OBJECT",
-              "name": "BUCKET_NAME_COMMON_FILTER_CONDITION",
+              "name": "BUCKET__FIELD__NAME__COMMON_FILTER_CONDITION",
               "ofType": null
             }
           }
@@ -1029,28 +817,7 @@
         ],
         "interfaces": null,
         "kind": "INPUT_OBJECT",
-        "name": "BUCKETTAGLIST_GROUPBY_INPUT",
-        "possibleTypes": null
-      },
-      {
-        "description": "",
-        "enumValues": null,
-        "fields": null,
-        "inputFields": [
-          {
-            "defaultValue": null,
-            "description": "",
-            "name": "label",
-            "type": {
-              "kind": "ENUM",
-              "name": "SORT_ENUM",
-              "ofType": null
-            }
-          }
-        ],
-        "interfaces": null,
-        "kind": "INPUT_OBJECT",
-        "name": "BUCKETTAGLIST_INPUT_SORT_PAYLOAD",
+        "name": "BUCKETTAGSLIST_GROUPBY_INPUT",
         "possibleTypes": null
       },
       {
@@ -1064,7 +831,7 @@
             "name": "OR",
             "type": {
               "kind": "INPUT_OBJECT",
-              "name": "BUCKETTAGLIST_OR_CONDITION",
+              "name": "BUCKETTAGSLIST_OR_CONDITION",
               "ofType": null
             }
           },
@@ -1074,14 +841,14 @@
             "name": "label",
             "type": {
               "kind": "INPUT_OBJECT",
-              "name": "TAG_LABEL_COMMON_FILTER_CONDITION",
+              "name": "TAG__FIELD__LABEL__COMMON_FILTER_CONDITION",
               "ofType": null
             }
           }
         ],
         "interfaces": null,
         "kind": "INPUT_OBJECT",
-        "name": "BUCKETTAGLIST_INPUT_WHERE_PAYLOAD",
+        "name": "BUCKETTAGSLIST_INPUT_WHERE_PAYLOAD",
         "possibleTypes": null
       },
       {
@@ -1126,7 +893,7 @@
         ],
         "interfaces": null,
         "kind": "INPUT_OBJECT",
-        "name": "BUCKETTAGLIST_KEY_CONDITION",
+        "name": "BUCKETTAGSLIST_KEY_CONDITION",
         "possibleTypes": null
       },
       {
@@ -1140,14 +907,14 @@
             "name": "label",
             "type": {
               "kind": "INPUT_OBJECT",
-              "name": "TAG_LABEL_COMMON_FILTER_CONDITION",
+              "name": "TAG__FIELD__LABEL__COMMON_FILTER_CONDITION",
               "ofType": null
             }
           }
         ],
         "interfaces": null,
         "kind": "INPUT_OBJECT",
-        "name": "BUCKETTAGLIST_OR_CONDITION",
+        "name": "BUCKETTAGSLIST_OR_CONDITION",
         "possibleTypes": null
       },
       {
@@ -1199,6 +966,245 @@
         "interfaces": null,
         "kind": "INPUT_OBJECT",
         "name": "BUCKET_CONNECTION_FILTER_CONDITION",
+        "possibleTypes": null
+      },
+      {
+        "description": "Group by fields with key-value pairs for both user input and editable fields",
+        "enumValues": null,
+        "fields": null,
+        "inputFields": [
+          {
+            "defaultValue": null,
+            "description": "Field name to group by",
+            "name": "key",
+            "type": {
+              "kind": "SCALAR",
+              "name": "String",
+              "ofType": null
+            }
+          },
+          {
+            "defaultValue": null,
+            "description": "Value to group by",
+            "name": "value",
+            "type": {
+              "kind": "SCALAR",
+              "name": "String",
+              "ofType": null
+            }
+          }
+        ],
+        "interfaces": null,
+        "kind": "INPUT_OBJECT",
+        "name": "BUCKET_LIST_COUNT_GROUPBY_INPUT",
+        "possibleTypes": null
+      },
+      {
+        "description": "",
+        "enumValues": null,
+        "fields": null,
+        "inputFields": [
+          {
+            "defaultValue": null,
+            "description": "",
+            "name": "OR",
+            "type": {
+              "kind": "INPUT_OBJECT",
+              "name": "BUCKET_LIST_COUNT_OR_CONDITION",
+              "ofType": null
+            }
+          },
+          {
+            "defaultValue": null,
+            "description": "",
+            "name": "name",
+            "type": {
+              "kind": "INPUT_OBJECT",
+              "name": "BUCKET__FIELD__NAME__COMMON_FILTER_CONDITION",
+              "ofType": null
+            }
+          }
+        ],
+        "interfaces": null,
+        "kind": "INPUT_OBJECT",
+        "name": "BUCKET_LIST_COUNT_INPUT_WHERE_PAYLOAD",
+        "possibleTypes": null
+      },
+      {
+        "description": "Filter by document _key ids. If this is used, the where filter will be ignored.",
+        "enumValues": null,
+        "fields": null,
+        "inputFields": [
+          {
+            "defaultValue": null,
+            "description": "",
+            "name": "eq",
+            "type": {
+              "kind": "SCALAR",
+              "name": "String",
+              "ofType": null
+            }
+          },
+          {
+            "defaultValue": null,
+            "description": "",
+            "name": "in",
+            "type": {
+              "kind": "LIST",
+              "name": null,
+              "ofType": {
+                "kind": "SCALAR",
+                "name": "String",
+                "ofType": null
+              }
+            }
+          },
+          {
+            "defaultValue": null,
+            "description": "",
+            "name": "ne",
+            "type": {
+              "kind": "SCALAR",
+              "name": "String",
+              "ofType": null
+            }
+          }
+        ],
+        "interfaces": null,
+        "kind": "INPUT_OBJECT",
+        "name": "BUCKET_LIST_COUNT_KEY_CONDITION",
+        "possibleTypes": null
+      },
+      {
+        "description": "",
+        "enumValues": null,
+        "fields": null,
+        "inputFields": [
+          {
+            "defaultValue": null,
+            "description": "",
+            "name": "name",
+            "type": {
+              "kind": "INPUT_OBJECT",
+              "name": "BUCKET__FIELD__NAME__COMMON_FILTER_CONDITION",
+              "ofType": null
+            }
+          }
+        ],
+        "interfaces": null,
+        "kind": "INPUT_OBJECT",
+        "name": "BUCKET_LIST_COUNT_OR_CONDITION",
+        "possibleTypes": null
+      },
+      {
+        "description": "Filter related documents by id.",
+        "enumValues": null,
+        "fields": null,
+        "inputFields": [
+          {
+            "defaultValue": null,
+            "description": "",
+            "name": "eq",
+            "type": {
+              "kind": "SCALAR",
+              "name": "String",
+              "ofType": null
+            }
+          },
+          {
+            "defaultValue": null,
+            "description": "",
+            "name": "in",
+            "type": {
+              "kind": "LIST",
+              "name": null,
+              "ofType": {
+                "kind": "SCALAR",
+                "name": "String",
+                "ofType": null
+              }
+            }
+          },
+          {
+            "defaultValue": null,
+            "description": "",
+            "name": "ne",
+            "type": {
+              "kind": "SCALAR",
+              "name": "String",
+              "ofType": null
+            }
+          },
+          {
+            "defaultValue": null,
+            "description": "",
+            "name": "not_in",
+            "type": {
+              "kind": "LIST",
+              "name": null,
+              "ofType": {
+                "kind": "SCALAR",
+                "name": "String",
+                "ofType": null
+              }
+            }
+          }
+        ],
+        "interfaces": null,
+        "kind": "INPUT_OBJECT",
+        "name": "BUCKET_TAGS_RELATION_ID_FILTER_CONDITION",
+        "possibleTypes": null
+      },
+      {
+        "description": "",
+        "enumValues": null,
+        "fields": null,
+        "inputFields": [
+          {
+            "defaultValue": null,
+            "description": "",
+            "name": "_id",
+            "type": {
+              "kind": "INPUT_OBJECT",
+              "name": "BUCKET_TAGS_RELATION_ID_FILTER_CONDITION",
+              "ofType": null
+            }
+          },
+          {
+            "defaultValue": null,
+            "description": "",
+            "name": "label",
+            "type": {
+              "kind": "INPUT_OBJECT",
+              "name": "TAG__FIELD__LABEL__COMMON_FILTER_CONDITION",
+              "ofType": null
+            }
+          }
+        ],
+        "interfaces": null,
+        "kind": "INPUT_OBJECT",
+        "name": "BUCKET_TAGS_WHERE_RELATION_FILTER_CONDITION",
+        "possibleTypes": null
+      },
+      {
+        "description": "",
+        "enumValues": null,
+        "fields": null,
+        "inputFields": [
+          {
+            "defaultValue": null,
+            "description": "",
+            "name": "tags",
+            "type": {
+              "kind": "INPUT_OBJECT",
+              "name": "BUCKET_TAGS_WHERE_RELATION_FILTER_CONDITION",
+              "ofType": null
+            }
+          }
+        ],
+        "interfaces": null,
+        "kind": "INPUT_OBJECT",
+        "name": "BUCKET_WHERE_RELATION_FILTER_CONDITION",
         "possibleTypes": null
       },
       {
@@ -1267,49 +1273,7 @@
         ],
         "interfaces": null,
         "kind": "INPUT_OBJECT",
-        "name": "BUCKET_NAME_COMMON_FILTER_CONDITION",
-        "possibleTypes": null
-      },
-      {
-        "description": "",
-        "enumValues": null,
-        "fields": null,
-        "inputFields": [
-          {
-            "defaultValue": null,
-            "description": "",
-            "name": "label",
-            "type": {
-              "kind": "INPUT_OBJECT",
-              "name": "TAG_LABEL_COMMON_FILTER_CONDITION",
-              "ofType": null
-            }
-          }
-        ],
-        "interfaces": null,
-        "kind": "INPUT_OBJECT",
-        "name": "BUCKET_TAG_WHERE_RELATION_FILTER_CONDITION",
-        "possibleTypes": null
-      },
-      {
-        "description": "",
-        "enumValues": null,
-        "fields": null,
-        "inputFields": [
-          {
-            "defaultValue": null,
-            "description": "",
-            "name": "tag",
-            "type": {
-              "kind": "INPUT_OBJECT",
-              "name": "BUCKET_TAG_WHERE_RELATION_FILTER_CONDITION",
-              "ofType": null
-            }
-          }
-        ],
-        "interfaces": null,
-        "kind": "INPUT_OBJECT",
-        "name": "BUCKET_WHERE_RELATION_FILTER_CONDITION",
+        "name": "BUCKET__FIELD__NAME__COMMON_FILTER_CONDITION",
         "possibleTypes": null
       },
       {
@@ -1334,7 +1298,7 @@
             "name": "data",
             "type": {
               "kind": "OBJECT",
-              "name": "Bucket_RawModel",
+              "name": "Bucket_Raw_Model",
               "ofType": null
             }
           },
@@ -1382,7 +1346,7 @@
                 "name": "_key",
                 "type": {
                   "kind": "INPUT_OBJECT",
-                  "name": "BUCKETTAGLIST_KEY_CONDITION",
+                  "name": "BUCKETTAGSLIST_KEY_CONDITION",
                   "ofType": null
                 }
               },
@@ -1395,7 +1359,7 @@
                   "name": null,
                   "ofType": {
                     "kind": "INPUT_OBJECT",
-                    "name": "BUCKETTAGLIST_GROUPBY_INPUT",
+                    "name": "BUCKETTAGSLIST_GROUPBY_INPUT",
                     "ofType": null
                   }
                 }
@@ -1433,10 +1397,150 @@
               {
                 "defaultValue": null,
                 "description": "",
-                "name": "sort",
+                "name": "status",
+                "type": {
+                  "kind": "ENUM",
+                  "name": "FILTER_STATUS_TYPE_ENUM",
+                  "ofType": null
+                }
+              },
+              {
+                "defaultValue": null,
+                "description": "",
+                "name": "where",
                 "type": {
                   "kind": "INPUT_OBJECT",
-                  "name": "BUCKETTAGLIST_INPUT_SORT_PAYLOAD",
+                  "name": "BUCKETTAGSLIST_INPUT_WHERE_PAYLOAD",
+                  "ofType": null
+                }
+              }
+            ],
+            "deprecationReason": null,
+            "description": "Has many tag",
+            "isDeprecated": false,
+            "name": "tags_list",
+            "type": {
+              "kind": "LIST",
+              "name": null,
+              "ofType": {
+                "kind": "OBJECT",
+                "name": "bucket_has_many_bucketTagsList_connections",
+                "ofType": null
+              }
+            }
+          }
+        ],
+        "inputFields": null,
+        "interfaces": [],
+        "kind": "OBJECT",
+        "name": "Bucket",
+        "possibleTypes": null
+      },
+      {
+        "description": "",
+        "enumValues": null,
+        "fields": [
+          {
+            "args": [],
+            "deprecationReason": null,
+            "description": "Field Details",
+            "isDeprecated": false,
+            "name": "data",
+            "type": {
+              "kind": "OBJECT",
+              "name": "Bucket_Raw_Model",
+              "ofType": null
+            }
+          },
+          {
+            "args": [],
+            "deprecationReason": null,
+            "description": "",
+            "isDeprecated": false,
+            "name": "id",
+            "type": {
+              "kind": "SCALAR",
+              "name": "String",
+              "ofType": null
+            }
+          },
+          {
+            "args": [],
+            "deprecationReason": null,
+            "description": "Meta Fields",
+            "isDeprecated": false,
+            "name": "meta",
+            "type": {
+              "kind": "OBJECT",
+              "name": "MetaFields",
+              "ofType": null
+            }
+          },
+          {
+            "args": [],
+            "deprecationReason": null,
+            "description": "",
+            "isDeprecated": false,
+            "name": "relation_doc_id",
+            "type": {
+              "kind": "SCALAR",
+              "name": "String",
+              "ofType": null
+            }
+          },
+          {
+            "args": [
+              {
+                "defaultValue": null,
+                "description": "",
+                "name": "_key",
+                "type": {
+                  "kind": "INPUT_OBJECT",
+                  "name": "BUCKETTAGSLIST_KEY_CONDITION",
+                  "ofType": null
+                }
+              },
+              {
+                "defaultValue": null,
+                "description": "",
+                "name": "groupBy",
+                "type": {
+                  "kind": "LIST",
+                  "name": null,
+                  "ofType": {
+                    "kind": "INPUT_OBJECT",
+                    "name": "BUCKETTAGSLIST_GROUPBY_INPUT",
+                    "ofType": null
+                  }
+                }
+              },
+              {
+                "defaultValue": null,
+                "description": "",
+                "name": "limit",
+                "type": {
+                  "kind": "SCALAR",
+                  "name": "Int",
+                  "ofType": null
+                }
+              },
+              {
+                "defaultValue": null,
+                "description": "",
+                "name": "local",
+                "type": {
+                  "kind": "ENUM",
+                  "name": "LOCAL_TYPE_ENUM",
+                  "ofType": null
+                }
+              },
+              {
+                "defaultValue": null,
+                "description": "",
+                "name": "page",
+                "type": {
+                  "kind": "SCALAR",
+                  "name": "Int",
                   "ofType": null
                 }
               },
@@ -1456,7 +1560,7 @@
                 "name": "where",
                 "type": {
                   "kind": "INPUT_OBJECT",
-                  "name": "BUCKETTAGLIST_INPUT_WHERE_PAYLOAD",
+                  "name": "BUCKETTAGSLIST_INPUT_WHERE_PAYLOAD",
                   "ofType": null
                 }
               }
@@ -1464,13 +1568,13 @@
             "deprecationReason": null,
             "description": "Has many tag",
             "isDeprecated": false,
-            "name": "tagList",
+            "name": "tags_list",
             "type": {
               "kind": "LIST",
               "name": null,
               "ofType": {
                 "kind": "OBJECT",
-                "name": "bucket_has_many_bucketTagList_connections",
+                "name": "bucket_has_many_bucketTagsList_connections",
                 "ofType": null
               }
             }
@@ -1479,30 +1583,7 @@
         "inputFields": null,
         "interfaces": [],
         "kind": "OBJECT",
-        "name": "Bucket",
-        "possibleTypes": null
-      },
-      {
-        "description": "",
-        "enumValues": null,
-        "fields": [
-          {
-            "args": [],
-            "deprecationReason": null,
-            "description": "",
-            "isDeprecated": false,
-            "name": "name",
-            "type": {
-              "kind": "SCALAR",
-              "name": "String",
-              "ofType": null
-            }
-          }
-        ],
-        "inputFields": null,
-        "interfaces": [],
-        "kind": "OBJECT",
-        "name": "Bucket_RawModel",
+        "name": "BucketList",
         "possibleTypes": null
       },
       {
@@ -1516,7 +1597,7 @@
             "name": "_connect",
             "type": {
               "kind": "INPUT_OBJECT",
-              "name": "Bucketlist_connect",
+              "name": "Bucket_List_Connect",
               "ofType": null
             }
           },
@@ -1543,7 +1624,7 @@
         ],
         "interfaces": null,
         "kind": "INPUT_OBJECT",
-        "name": "Bucket_create_payload",
+        "name": "Bucket_Create_Payload",
         "possibleTypes": null
       },
       {
@@ -1568,238 +1649,7 @@
         ],
         "interfaces": null,
         "kind": "INPUT_OBJECT",
-        "name": "Bucket_relation_connect_payload",
-        "possibleTypes": null
-      },
-      {
-        "description": "",
-        "enumValues": null,
-        "fields": null,
-        "inputFields": [
-          {
-            "defaultValue": null,
-            "description": "",
-            "name": "tags_ids",
-            "type": {
-              "kind": "LIST",
-              "name": null,
-              "ofType": {
-                "kind": "SCALAR",
-                "name": "String",
-                "ofType": null
-              }
-            }
-          }
-        ],
-        "interfaces": null,
-        "kind": "INPUT_OBJECT",
-        "name": "Bucket_relation_disconnect_payload",
-        "possibleTypes": null
-      },
-      {
-        "description": "",
-        "enumValues": null,
-        "fields": null,
-        "inputFields": [
-          {
-            "defaultValue": null,
-            "description": "",
-            "name": "name",
-            "type": {
-              "kind": "SCALAR",
-              "name": "String",
-              "ofType": null
-            }
-          }
-        ],
-        "interfaces": null,
-        "kind": "INPUT_OBJECT",
-        "name": "Bucket_update_payload",
-        "possibleTypes": null
-      },
-      {
-        "description": "",
-        "enumValues": null,
-        "fields": [
-          {
-            "args": [],
-            "deprecationReason": null,
-            "description": "Field Details",
-            "isDeprecated": false,
-            "name": "data",
-            "type": {
-              "kind": "OBJECT",
-              "name": "Bucket_RawModel",
-              "ofType": null
-            }
-          },
-          {
-            "args": [],
-            "deprecationReason": null,
-            "description": "",
-            "isDeprecated": false,
-            "name": "id",
-            "type": {
-              "kind": "SCALAR",
-              "name": "String",
-              "ofType": null
-            }
-          },
-          {
-            "args": [],
-            "deprecationReason": null,
-            "description": "Meta Fields",
-            "isDeprecated": false,
-            "name": "meta",
-            "type": {
-              "kind": "OBJECT",
-              "name": "MetaFields",
-              "ofType": null
-            }
-          },
-          {
-            "args": [],
-            "deprecationReason": null,
-            "description": "",
-            "isDeprecated": false,
-            "name": "relation_doc_id",
-            "type": {
-              "kind": "SCALAR",
-              "name": "String",
-              "ofType": null
-            }
-          },
-          {
-            "args": [
-              {
-                "defaultValue": null,
-                "description": "",
-                "name": "_key",
-                "type": {
-                  "kind": "INPUT_OBJECT",
-                  "name": "BUCKETTAGLIST_KEY_CONDITION",
-                  "ofType": null
-                }
-              },
-              {
-                "defaultValue": null,
-                "description": "",
-                "name": "groupBy",
-                "type": {
-                  "kind": "LIST",
-                  "name": null,
-                  "ofType": {
-                    "kind": "INPUT_OBJECT",
-                    "name": "BUCKETTAGLIST_GROUPBY_INPUT",
-                    "ofType": null
-                  }
-                }
-              },
-              {
-                "defaultValue": null,
-                "description": "",
-                "name": "limit",
-                "type": {
-                  "kind": "SCALAR",
-                  "name": "Int",
-                  "ofType": null
-                }
-              },
-              {
-                "defaultValue": null,
-                "description": "",
-                "name": "local",
-                "type": {
-                  "kind": "ENUM",
-                  "name": "LOCAL_TYPE_ENUM",
-                  "ofType": null
-                }
-              },
-              {
-                "defaultValue": null,
-                "description": "",
-                "name": "page",
-                "type": {
-                  "kind": "SCALAR",
-                  "name": "Int",
-                  "ofType": null
-                }
-              },
-              {
-                "defaultValue": null,
-                "description": "",
-                "name": "sort",
-                "type": {
-                  "kind": "INPUT_OBJECT",
-                  "name": "BUCKETTAGLIST_INPUT_SORT_PAYLOAD",
-                  "ofType": null
-                }
-              },
-              {
-                "defaultValue": null,
-                "description": "",
-                "name": "status",
-                "type": {
-                  "kind": "ENUM",
-                  "name": "FILTER_STATUS_TYPE_ENUM",
-                  "ofType": null
-                }
-              },
-              {
-                "defaultValue": null,
-                "description": "",
-                "name": "where",
-                "type": {
-                  "kind": "INPUT_OBJECT",
-                  "name": "BUCKETTAGLIST_INPUT_WHERE_PAYLOAD",
-                  "ofType": null
-                }
-              }
-            ],
-            "deprecationReason": null,
-            "description": "Has many tag",
-            "isDeprecated": false,
-            "name": "tagList",
-            "type": {
-              "kind": "LIST",
-              "name": null,
-              "ofType": {
-                "kind": "OBJECT",
-                "name": "bucket_has_many_bucketTagList_connections",
-                "ofType": null
-              }
-            }
-          }
-        ],
-        "inputFields": null,
-        "interfaces": [],
-        "kind": "OBJECT",
-        "name": "Bucketlist",
-        "possibleTypes": null
-      },
-      {
-        "description": "",
-        "enumValues": null,
-        "fields": null,
-        "inputFields": [
-          {
-            "defaultValue": null,
-            "description": "",
-            "name": "tags_ids",
-            "type": {
-              "kind": "LIST",
-              "name": null,
-              "ofType": {
-                "kind": "SCALAR",
-                "name": "String",
-                "ofType": null
-              }
-            }
-          }
-        ],
-        "interfaces": null,
-        "kind": "INPUT_OBJECT",
-        "name": "Bucketlist_connect",
+        "name": "Bucket_List_Connect",
         "possibleTypes": null
       },
       {
@@ -1822,7 +1672,7 @@
         "inputFields": null,
         "interfaces": [],
         "kind": "OBJECT",
-        "name": "Bucketlist_connection",
+        "name": "Bucket_List_Connection",
         "possibleTypes": null
       },
       {
@@ -1836,7 +1686,7 @@
             "name": "_connect",
             "type": {
               "kind": "INPUT_OBJECT",
-              "name": "Bucketlist_connect",
+              "name": "Bucket_List_Connect",
               "ofType": null
             }
           },
@@ -1863,7 +1713,101 @@
         ],
         "interfaces": null,
         "kind": "INPUT_OBJECT",
-        "name": "Bucketlist_upsert_payload",
+        "name": "Bucket_List_Upsert_Payload",
+        "possibleTypes": null
+      },
+      {
+        "description": "",
+        "enumValues": null,
+        "fields": [
+          {
+            "args": [],
+            "deprecationReason": null,
+            "description": "",
+            "isDeprecated": false,
+            "name": "name",
+            "type": {
+              "kind": "SCALAR",
+              "name": "String",
+              "ofType": null
+            }
+          }
+        ],
+        "inputFields": null,
+        "interfaces": [],
+        "kind": "OBJECT",
+        "name": "Bucket_Raw_Model",
+        "possibleTypes": null
+      },
+      {
+        "description": "",
+        "enumValues": null,
+        "fields": null,
+        "inputFields": [
+          {
+            "defaultValue": null,
+            "description": "",
+            "name": "tags_ids",
+            "type": {
+              "kind": "LIST",
+              "name": null,
+              "ofType": {
+                "kind": "SCALAR",
+                "name": "String",
+                "ofType": null
+              }
+            }
+          }
+        ],
+        "interfaces": null,
+        "kind": "INPUT_OBJECT",
+        "name": "Bucket_Relation_Connect_Payload",
+        "possibleTypes": null
+      },
+      {
+        "description": "",
+        "enumValues": null,
+        "fields": null,
+        "inputFields": [
+          {
+            "defaultValue": null,
+            "description": "",
+            "name": "tags_ids",
+            "type": {
+              "kind": "LIST",
+              "name": null,
+              "ofType": {
+                "kind": "SCALAR",
+                "name": "String",
+                "ofType": null
+              }
+            }
+          }
+        ],
+        "interfaces": null,
+        "kind": "INPUT_OBJECT",
+        "name": "Bucket_Relation_Disconnect_Payload",
+        "possibleTypes": null
+      },
+      {
+        "description": "",
+        "enumValues": null,
+        "fields": null,
+        "inputFields": [
+          {
+            "defaultValue": null,
+            "description": "",
+            "name": "name",
+            "type": {
+              "kind": "SCALAR",
+              "name": "String",
+              "ofType": null
+            }
+          }
+        ],
+        "interfaces": null,
+        "kind": "INPUT_OBJECT",
+        "name": "Bucket_Update_Payload",
         "possibleTypes": null
       },
       {
@@ -1901,7 +1845,7 @@
             "name": "data",
             "type": {
               "kind": "OBJECT",
-              "name": "Author_RawModel",
+              "name": "Author_Raw_Model",
               "ofType": null
             }
           },
@@ -1960,7 +1904,7 @@
             "name": "data",
             "type": {
               "kind": "OBJECT",
-              "name": "Bucket_RawModel",
+              "name": "Bucket_Raw_Model",
               "ofType": null
             }
           },
@@ -2008,7 +1952,7 @@
                 "name": "_key",
                 "type": {
                   "kind": "INPUT_OBJECT",
-                  "name": "BUCKETTAGLIST_KEY_CONDITION",
+                  "name": "BUCKETTAGSLIST_KEY_CONDITION",
                   "ofType": null
                 }
               },
@@ -2021,7 +1965,7 @@
                   "name": null,
                   "ofType": {
                     "kind": "INPUT_OBJECT",
-                    "name": "BUCKETTAGLIST_GROUPBY_INPUT",
+                    "name": "BUCKETTAGSLIST_GROUPBY_INPUT",
                     "ofType": null
                   }
                 }
@@ -2059,16 +2003,6 @@
               {
                 "defaultValue": null,
                 "description": "",
-                "name": "sort",
-                "type": {
-                  "kind": "INPUT_OBJECT",
-                  "name": "BUCKETTAGLIST_INPUT_SORT_PAYLOAD",
-                  "ofType": null
-                }
-              },
-              {
-                "defaultValue": null,
-                "description": "",
                 "name": "status",
                 "type": {
                   "kind": "ENUM",
@@ -2082,7 +2016,7 @@
                 "name": "where",
                 "type": {
                   "kind": "INPUT_OBJECT",
-                  "name": "BUCKETTAGLIST_INPUT_WHERE_PAYLOAD",
+                  "name": "BUCKETTAGSLIST_INPUT_WHERE_PAYLOAD",
                   "ofType": null
                 }
               }
@@ -2090,13 +2024,13 @@
             "deprecationReason": null,
             "description": "Has many tag",
             "isDeprecated": false,
-            "name": "tagList",
+            "name": "tags_list",
             "type": {
               "kind": "LIST",
               "name": null,
               "ofType": {
                 "kind": "OBJECT",
-                "name": "bucket_has_many_bucketTagList_connections",
+                "name": "bucket_has_many_bucketTagsList_connections",
                 "ofType": null
               }
             }
@@ -2132,7 +2066,7 @@
             "name": "data",
             "type": {
               "kind": "OBJECT",
-              "name": "Post_RawModel",
+              "name": "Post_Raw_Model",
               "ofType": null
             }
           },
@@ -2191,7 +2125,7 @@
             "name": "data",
             "type": {
               "kind": "OBJECT",
-              "name": "Tag_RawModel",
+              "name": "Tag_Raw_Model",
               "ofType": null
             }
           },
@@ -2390,6 +2324,16 @@
         "possibleTypes": null
       },
       {
+        "description": "খাটি JSON object, key:value pair",
+        "enumValues": null,
+        "fields": null,
+        "inputFields": null,
+        "interfaces": null,
+        "kind": "SCALAR",
+        "name": "JSON",
+        "possibleTypes": null
+      },
+      {
         "description": "",
         "enumValues": [
           {
@@ -2514,9 +2458,19 @@
                   "name": null,
                   "ofType": {
                     "kind": "INPUT_OBJECT",
-                    "name": "Author_create_payload",
+                    "name": "Author_Create_Payload",
                     "ofType": null
                   }
+                }
+              },
+              {
+                "defaultValue": null,
+                "description": "",
+                "name": "status",
+                "type": {
+                  "kind": "ENUM",
+                  "name": "PUBLISH_STATUS_TYPE_ENUM",
+                  "ofType": null
                 }
               }
             ],
@@ -2538,7 +2492,7 @@
                 "name": "connect",
                 "type": {
                   "kind": "INPUT_OBJECT",
-                  "name": "Bucket_relation_connect_payload",
+                  "name": "Bucket_Relation_Connect_Payload",
                   "ofType": null
                 }
               },
@@ -2561,7 +2515,7 @@
                   "name": null,
                   "ofType": {
                     "kind": "INPUT_OBJECT",
-                    "name": "Bucket_create_payload",
+                    "name": "Bucket_Create_Payload",
                     "ofType": null
                   }
                 }
@@ -2595,7 +2549,7 @@
                 "name": "connect",
                 "type": {
                   "kind": "INPUT_OBJECT",
-                  "name": "Post_relation_connect_payload",
+                  "name": "Post_Relation_Connect_Payload",
                   "ofType": null
                 }
               },
@@ -2618,7 +2572,7 @@
                   "name": null,
                   "ofType": {
                     "kind": "INPUT_OBJECT",
-                    "name": "Post_create_payload",
+                    "name": "Post_Create_Payload",
                     "ofType": null
                   }
                 }
@@ -2665,9 +2619,19 @@
                   "name": null,
                   "ofType": {
                     "kind": "INPUT_OBJECT",
-                    "name": "Tag_create_payload",
+                    "name": "Tag_Create_Payload",
                     "ofType": null
                   }
+                }
+              },
+              {
+                "defaultValue": null,
+                "description": "",
+                "name": "status",
+                "type": {
+                  "kind": "ENUM",
+                  "name": "PUBLISH_STATUS_TYPE_ENUM",
+                  "ofType": null
                 }
               }
             ],
@@ -2857,7 +2821,17 @@
                 "name": "payload",
                 "type": {
                   "kind": "INPUT_OBJECT",
-                  "name": "Author_update_payload",
+                  "name": "Author_Update_Payload",
+                  "ofType": null
+                }
+              },
+              {
+                "defaultValue": null,
+                "description": "",
+                "name": "status",
+                "type": {
+                  "kind": "ENUM",
+                  "name": "PUBLISH_STATUS_TYPE_ENUM",
                   "ofType": null
                 }
               }
@@ -2894,7 +2868,7 @@
                 "name": "connect",
                 "type": {
                   "kind": "INPUT_OBJECT",
-                  "name": "Bucket_relation_connect_payload",
+                  "name": "Bucket_Relation_Connect_Payload",
                   "ofType": null
                 }
               },
@@ -2914,7 +2888,7 @@
                 "name": "disconnect",
                 "type": {
                   "kind": "INPUT_OBJECT",
-                  "name": "Bucket_relation_disconnect_payload",
+                  "name": "Bucket_Relation_Disconnect_Payload",
                   "ofType": null
                 }
               },
@@ -2944,7 +2918,7 @@
                 "name": "payload",
                 "type": {
                   "kind": "INPUT_OBJECT",
-                  "name": "Bucket_update_payload",
+                  "name": "Bucket_Update_Payload",
                   "ofType": null
                 }
               },
@@ -2991,7 +2965,7 @@
                 "name": "connect",
                 "type": {
                   "kind": "INPUT_OBJECT",
-                  "name": "Post_relation_connect_payload",
+                  "name": "Post_Relation_Connect_Payload",
                   "ofType": null
                 }
               },
@@ -3011,7 +2985,7 @@
                 "name": "disconnect",
                 "type": {
                   "kind": "INPUT_OBJECT",
-                  "name": "Post_relation_disconnect_payload",
+                  "name": "Post_Relation_Disconnect_Payload",
                   "ofType": null
                 }
               },
@@ -3041,7 +3015,7 @@
                 "name": "payload",
                 "type": {
                   "kind": "INPUT_OBJECT",
-                  "name": "Post_update_payload",
+                  "name": "Post_Update_Payload",
                   "ofType": null
                 }
               },
@@ -3118,7 +3092,17 @@
                 "name": "payload",
                 "type": {
                   "kind": "INPUT_OBJECT",
-                  "name": "Tag_update_payload",
+                  "name": "Tag_Update_Payload",
+                  "ofType": null
+                }
+              },
+              {
+                "defaultValue": null,
+                "description": "",
+                "name": "status",
+                "type": {
+                  "kind": "ENUM",
+                  "name": "PUBLISH_STATUS_TYPE_ENUM",
                   "ofType": null
                 }
               }
@@ -3160,76 +3144,7 @@
                       "name": null,
                       "ofType": {
                         "kind": "INPUT_OBJECT",
-                        "name": "Authorlist_upsert_payload",
-                        "ofType": null
-                      }
-                    }
-                  }
-                }
-              }
-            ],
-            "deprecationReason": null,
-            "description": "",
-            "isDeprecated": false,
-            "name": "upsertAuthorlist",
-            "type": {
-              "kind": "LIST",
-              "name": null,
-              "ofType": {
-                "kind": "OBJECT",
-                "name": "Upsert_Authorlist",
-                "ofType": null
-              }
-            }
-          },
-          {
-            "args": [
-              {
-                "defaultValue": null,
-                "description": "",
-                "name": "connect",
-                "type": {
-                  "kind": "INPUT_OBJECT",
-                  "name": "Bucket_relation_connect_payload",
-                  "ofType": null
-                }
-              },
-              {
-                "defaultValue": null,
-                "description": "",
-                "name": "disconnect",
-                "type": {
-                  "kind": "INPUT_OBJECT",
-                  "name": "Bucket_relation_disconnect_payload",
-                  "ofType": null
-                }
-              },
-              {
-                "defaultValue": null,
-                "description": "",
-                "name": "local",
-                "type": {
-                  "kind": "ENUM",
-                  "name": "LOCAL_TYPE_ENUM",
-                  "ofType": null
-                }
-              },
-              {
-                "defaultValue": null,
-                "description": "",
-                "name": "payloads",
-                "type": {
-                  "kind": "NON_NULL",
-                  "name": null,
-                  "ofType": {
-                    "kind": "LIST",
-                    "name": null,
-                    "ofType": {
-                      "kind": "NON_NULL",
-                      "name": null,
-                      "ofType": {
-                        "kind": "INPUT_OBJECT",
-                        "name": "Bucketlist_upsert_payload",
+                        "name": "Author_List_Upsert_Payload",
                         "ofType": null
                       }
                     }
@@ -3250,13 +3165,13 @@
             "deprecationReason": null,
             "description": "",
             "isDeprecated": false,
-            "name": "upsertBucketlist",
+            "name": "upsertAuthorList",
             "type": {
               "kind": "LIST",
               "name": null,
               "ofType": {
                 "kind": "OBJECT",
-                "name": "Upsert_Bucketlist",
+                "name": "Upsert_AuthorList",
                 "ofType": null
               }
             }
@@ -3269,7 +3184,7 @@
                 "name": "connect",
                 "type": {
                   "kind": "INPUT_OBJECT",
-                  "name": "Post_relation_connect_payload",
+                  "name": "Bucket_Relation_Connect_Payload",
                   "ofType": null
                 }
               },
@@ -3279,7 +3194,7 @@
                 "name": "disconnect",
                 "type": {
                   "kind": "INPUT_OBJECT",
-                  "name": "Post_relation_disconnect_payload",
+                  "name": "Bucket_Relation_Disconnect_Payload",
                   "ofType": null
                 }
               },
@@ -3308,7 +3223,7 @@
                       "name": null,
                       "ofType": {
                         "kind": "INPUT_OBJECT",
-                        "name": "Postlist_upsert_payload",
+                        "name": "Bucket_List_Upsert_Payload",
                         "ofType": null
                       }
                     }
@@ -3329,13 +3244,92 @@
             "deprecationReason": null,
             "description": "",
             "isDeprecated": false,
-            "name": "upsertPostlist",
+            "name": "upsertBucketList",
             "type": {
               "kind": "LIST",
               "name": null,
               "ofType": {
                 "kind": "OBJECT",
-                "name": "Upsert_Postlist",
+                "name": "Upsert_BucketList",
+                "ofType": null
+              }
+            }
+          },
+          {
+            "args": [
+              {
+                "defaultValue": null,
+                "description": "",
+                "name": "connect",
+                "type": {
+                  "kind": "INPUT_OBJECT",
+                  "name": "Post_Relation_Connect_Payload",
+                  "ofType": null
+                }
+              },
+              {
+                "defaultValue": null,
+                "description": "",
+                "name": "disconnect",
+                "type": {
+                  "kind": "INPUT_OBJECT",
+                  "name": "Post_Relation_Disconnect_Payload",
+                  "ofType": null
+                }
+              },
+              {
+                "defaultValue": null,
+                "description": "",
+                "name": "local",
+                "type": {
+                  "kind": "ENUM",
+                  "name": "LOCAL_TYPE_ENUM",
+                  "ofType": null
+                }
+              },
+              {
+                "defaultValue": null,
+                "description": "",
+                "name": "payloads",
+                "type": {
+                  "kind": "NON_NULL",
+                  "name": null,
+                  "ofType": {
+                    "kind": "LIST",
+                    "name": null,
+                    "ofType": {
+                      "kind": "NON_NULL",
+                      "name": null,
+                      "ofType": {
+                        "kind": "INPUT_OBJECT",
+                        "name": "Post_List_Upsert_Payload",
+                        "ofType": null
+                      }
+                    }
+                  }
+                }
+              },
+              {
+                "defaultValue": null,
+                "description": "",
+                "name": "status",
+                "type": {
+                  "kind": "ENUM",
+                  "name": "PUBLISH_STATUS_TYPE_ENUM",
+                  "ofType": null
+                }
+              }
+            ],
+            "deprecationReason": null,
+            "description": "",
+            "isDeprecated": false,
+            "name": "upsertPostList",
+            "type": {
+              "kind": "LIST",
+              "name": null,
+              "ofType": {
+                "kind": "OBJECT",
+                "name": "Upsert_PostList",
                 "ofType": null
               }
             }
@@ -3367,24 +3361,34 @@
                       "name": null,
                       "ofType": {
                         "kind": "INPUT_OBJECT",
-                        "name": "Taglist_upsert_payload",
+                        "name": "Tag_List_Upsert_Payload",
                         "ofType": null
                       }
                     }
                   }
+                }
+              },
+              {
+                "defaultValue": null,
+                "description": "",
+                "name": "status",
+                "type": {
+                  "kind": "ENUM",
+                  "name": "PUBLISH_STATUS_TYPE_ENUM",
+                  "ofType": null
                 }
               }
             ],
             "deprecationReason": null,
             "description": "",
             "isDeprecated": false,
-            "name": "upsertTaglist",
+            "name": "upsertTagList",
             "type": {
               "kind": "LIST",
               "name": null,
               "ofType": {
                 "kind": "OBJECT",
-                "name": "Upsert_Taglist",
+                "name": "Upsert_TagList",
                 "ofType": null
               }
             }
@@ -3397,107 +3401,27 @@
         "possibleTypes": null
       },
       {
-        "description": "Group by fields with key-value pairs for both user input and editable fields",
-        "enumValues": null,
-        "fields": null,
-        "inputFields": [
-          {
-            "defaultValue": null,
-            "description": "Field name to group by",
-            "name": "key",
-            "type": {
-              "kind": "SCALAR",
-              "name": "String",
-              "ofType": null
-            }
-          },
-          {
-            "defaultValue": null,
-            "description": "Value to group by",
-            "name": "value",
-            "type": {
-              "kind": "SCALAR",
-              "name": "String",
-              "ofType": null
-            }
-          }
-        ],
-        "interfaces": null,
-        "kind": "INPUT_OBJECT",
-        "name": "POSTLIST_COUNT_GROUPBY_INPUT",
-        "possibleTypes": null
-      },
-      {
         "description": "",
         "enumValues": null,
-        "fields": null,
-        "inputFields": [
+        "fields": [
           {
-            "defaultValue": null,
+            "args": [],
+            "deprecationReason": null,
             "description": "",
-            "name": "title",
-            "type": {
-              "kind": "ENUM",
-              "name": "SORT_ENUM",
-              "ofType": null
-            }
-          }
-        ],
-        "interfaces": null,
-        "kind": "INPUT_OBJECT",
-        "name": "POSTLIST_COUNT_INPUT_SORT_PAYLOAD",
-        "possibleTypes": null
-      },
-      {
-        "description": "",
-        "enumValues": null,
-        "fields": null,
-        "inputFields": [
-          {
-            "defaultValue": null,
-            "description": "",
-            "name": "OR",
-            "type": {
-              "kind": "INPUT_OBJECT",
-              "name": "POSTLIST_COUNT_OR_CONDITION",
-              "ofType": null
-            }
-          },
-          {
-            "defaultValue": null,
-            "description": "",
-            "name": "title",
-            "type": {
-              "kind": "INPUT_OBJECT",
-              "name": "POST_TITLE_COMMON_FILTER_CONDITION",
-              "ofType": null
-            }
-          }
-        ],
-        "interfaces": null,
-        "kind": "INPUT_OBJECT",
-        "name": "POSTLIST_COUNT_INPUT_WHERE_PAYLOAD",
-        "possibleTypes": null
-      },
-      {
-        "description": "Filter by document _key ids. If this is used, the where filter will be ignored.",
-        "enumValues": null,
-        "fields": null,
-        "inputFields": [
-          {
-            "defaultValue": null,
-            "description": "",
-            "name": "eq",
+            "isDeprecated": false,
+            "name": "api_permissions",
             "type": {
               "kind": "SCALAR",
-              "name": "String",
+              "name": "JSON",
               "ofType": null
             }
           },
           {
-            "defaultValue": null,
+            "args": [],
+            "deprecationReason": null,
             "description": "",
-            "name": "in",
+            "isDeprecated": false,
+            "name": "grace_models",
             "type": {
               "kind": "LIST",
               "name": null,
@@ -3509,40 +3433,98 @@
             }
           },
           {
-            "defaultValue": null,
+            "args": [],
+            "deprecationReason": null,
             "description": "",
-            "name": "ne",
+            "isDeprecated": false,
+            "name": "is_admin",
+            "type": {
+              "kind": "SCALAR",
+              "name": "Boolean",
+              "ofType": null
+            }
+          },
+          {
+            "args": [],
+            "deprecationReason": null,
+            "description": "",
+            "isDeprecated": false,
+            "name": "logic_executions",
+            "type": {
+              "kind": "LIST",
+              "name": null,
+              "ofType": {
+                "kind": "SCALAR",
+                "name": "String",
+                "ofType": null
+              }
+            }
+          },
+          {
+            "args": [],
+            "deprecationReason": null,
+            "description": "",
+            "isDeprecated": false,
+            "name": "plan_clamped",
+            "type": {
+              "kind": "SCALAR",
+              "name": "Boolean",
+              "ofType": null
+            }
+          },
+          {
+            "args": [],
+            "deprecationReason": null,
+            "description": "",
+            "isDeprecated": false,
+            "name": "plan_slug",
             "type": {
               "kind": "SCALAR",
               "name": "String",
               "ofType": null
             }
-          }
-        ],
-        "interfaces": null,
-        "kind": "INPUT_OBJECT",
-        "name": "POSTLIST_COUNT_KEY_CONDITION",
-        "possibleTypes": null
-      },
-      {
-        "description": "",
-        "enumValues": null,
-        "fields": null,
-        "inputFields": [
+          },
           {
-            "defaultValue": null,
+            "args": [],
+            "deprecationReason": null,
             "description": "",
-            "name": "title",
+            "isDeprecated": false,
+            "name": "quotas",
             "type": {
-              "kind": "INPUT_OBJECT",
-              "name": "POST_TITLE_COMMON_FILTER_CONDITION",
+              "kind": "SCALAR",
+              "name": "JSON",
+              "ofType": null
+            }
+          },
+          {
+            "args": [],
+            "deprecationReason": null,
+            "description": "",
+            "isDeprecated": false,
+            "name": "role_id",
+            "type": {
+              "kind": "SCALAR",
+              "name": "String",
+              "ofType": null
+            }
+          },
+          {
+            "args": [],
+            "deprecationReason": null,
+            "description": "",
+            "isDeprecated": false,
+            "name": "usage",
+            "type": {
+              "kind": "SCALAR",
+              "name": "JSON",
               "ofType": null
             }
           }
         ],
-        "interfaces": null,
-        "kind": "INPUT_OBJECT",
-        "name": "POSTLIST_COUNT_OR_CONDITION",
+        "inputFields": null,
+        "interfaces": [],
+        "kind": "OBJECT",
+        "name": "MyEffectivePermissionsPayload",
         "possibleTypes": null
       },
       {
@@ -3584,27 +3566,6 @@
           {
             "defaultValue": null,
             "description": "",
-            "name": "title",
-            "type": {
-              "kind": "ENUM",
-              "name": "SORT_ENUM",
-              "ofType": null
-            }
-          }
-        ],
-        "interfaces": null,
-        "kind": "INPUT_OBJECT",
-        "name": "POSTLIST_INPUT_SORT_PAYLOAD",
-        "possibleTypes": null
-      },
-      {
-        "description": "",
-        "enumValues": null,
-        "fields": null,
-        "inputFields": [
-          {
-            "defaultValue": null,
-            "description": "",
             "name": "OR",
             "type": {
               "kind": "INPUT_OBJECT",
@@ -3618,7 +3579,7 @@
             "name": "title",
             "type": {
               "kind": "INPUT_OBJECT",
-              "name": "POST_TITLE_COMMON_FILTER_CONDITION",
+              "name": "POST__FIELD__TITLE__COMMON_FILTER_CONDITION",
               "ofType": null
             }
           }
@@ -3684,7 +3645,7 @@
             "name": "title",
             "type": {
               "kind": "INPUT_OBJECT",
-              "name": "POST_TITLE_COMMON_FILTER_CONDITION",
+              "name": "POST__FIELD__TITLE__COMMON_FILTER_CONDITION",
               "ofType": null
             }
           }
@@ -3695,6 +3656,65 @@
         "possibleTypes": null
       },
       {
+        "description": "Filter related documents by id.",
+        "enumValues": null,
+        "fields": null,
+        "inputFields": [
+          {
+            "defaultValue": null,
+            "description": "",
+            "name": "eq",
+            "type": {
+              "kind": "SCALAR",
+              "name": "String",
+              "ofType": null
+            }
+          },
+          {
+            "defaultValue": null,
+            "description": "",
+            "name": "in",
+            "type": {
+              "kind": "LIST",
+              "name": null,
+              "ofType": {
+                "kind": "SCALAR",
+                "name": "String",
+                "ofType": null
+              }
+            }
+          },
+          {
+            "defaultValue": null,
+            "description": "",
+            "name": "ne",
+            "type": {
+              "kind": "SCALAR",
+              "name": "String",
+              "ofType": null
+            }
+          },
+          {
+            "defaultValue": null,
+            "description": "",
+            "name": "not_in",
+            "type": {
+              "kind": "LIST",
+              "name": null,
+              "ofType": {
+                "kind": "SCALAR",
+                "name": "String",
+                "ofType": null
+              }
+            }
+          }
+        ],
+        "interfaces": null,
+        "kind": "INPUT_OBJECT",
+        "name": "POST_AUTHOR_RELATION_ID_FILTER_CONDITION",
+        "possibleTypes": null
+      },
+      {
         "description": "",
         "enumValues": null,
         "fields": null,
@@ -3702,10 +3722,20 @@
           {
             "defaultValue": null,
             "description": "",
+            "name": "_id",
+            "type": {
+              "kind": "INPUT_OBJECT",
+              "name": "POST_AUTHOR_RELATION_ID_FILTER_CONDITION",
+              "ofType": null
+            }
+          },
+          {
+            "defaultValue": null,
+            "description": "",
             "name": "name",
             "type": {
               "kind": "INPUT_OBJECT",
-              "name": "AUTHOR_NAME_COMMON_FILTER_CONDITION",
+              "name": "AUTHOR__FIELD__NAME__COMMON_FILTER_CONDITION",
               "ofType": null
             }
           }
@@ -3764,6 +3794,155 @@
         "interfaces": null,
         "kind": "INPUT_OBJECT",
         "name": "POST_CONNECTION_FILTER_CONDITION",
+        "possibleTypes": null
+      },
+      {
+        "description": "Group by fields with key-value pairs for both user input and editable fields",
+        "enumValues": null,
+        "fields": null,
+        "inputFields": [
+          {
+            "defaultValue": null,
+            "description": "Field name to group by",
+            "name": "key",
+            "type": {
+              "kind": "SCALAR",
+              "name": "String",
+              "ofType": null
+            }
+          },
+          {
+            "defaultValue": null,
+            "description": "Value to group by",
+            "name": "value",
+            "type": {
+              "kind": "SCALAR",
+              "name": "String",
+              "ofType": null
+            }
+          }
+        ],
+        "interfaces": null,
+        "kind": "INPUT_OBJECT",
+        "name": "POST_LIST_COUNT_GROUPBY_INPUT",
+        "possibleTypes": null
+      },
+      {
+        "description": "",
+        "enumValues": null,
+        "fields": null,
+        "inputFields": [
+          {
+            "defaultValue": null,
+            "description": "",
+            "name": "OR",
+            "type": {
+              "kind": "INPUT_OBJECT",
+              "name": "POST_LIST_COUNT_OR_CONDITION",
+              "ofType": null
+            }
+          },
+          {
+            "defaultValue": null,
+            "description": "",
+            "name": "title",
+            "type": {
+              "kind": "INPUT_OBJECT",
+              "name": "POST__FIELD__TITLE__COMMON_FILTER_CONDITION",
+              "ofType": null
+            }
+          }
+        ],
+        "interfaces": null,
+        "kind": "INPUT_OBJECT",
+        "name": "POST_LIST_COUNT_INPUT_WHERE_PAYLOAD",
+        "possibleTypes": null
+      },
+      {
+        "description": "Filter by document _key ids. If this is used, the where filter will be ignored.",
+        "enumValues": null,
+        "fields": null,
+        "inputFields": [
+          {
+            "defaultValue": null,
+            "description": "",
+            "name": "eq",
+            "type": {
+              "kind": "SCALAR",
+              "name": "String",
+              "ofType": null
+            }
+          },
+          {
+            "defaultValue": null,
+            "description": "",
+            "name": "in",
+            "type": {
+              "kind": "LIST",
+              "name": null,
+              "ofType": {
+                "kind": "SCALAR",
+                "name": "String",
+                "ofType": null
+              }
+            }
+          },
+          {
+            "defaultValue": null,
+            "description": "",
+            "name": "ne",
+            "type": {
+              "kind": "SCALAR",
+              "name": "String",
+              "ofType": null
+            }
+          }
+        ],
+        "interfaces": null,
+        "kind": "INPUT_OBJECT",
+        "name": "POST_LIST_COUNT_KEY_CONDITION",
+        "possibleTypes": null
+      },
+      {
+        "description": "",
+        "enumValues": null,
+        "fields": null,
+        "inputFields": [
+          {
+            "defaultValue": null,
+            "description": "",
+            "name": "title",
+            "type": {
+              "kind": "INPUT_OBJECT",
+              "name": "POST__FIELD__TITLE__COMMON_FILTER_CONDITION",
+              "ofType": null
+            }
+          }
+        ],
+        "interfaces": null,
+        "kind": "INPUT_OBJECT",
+        "name": "POST_LIST_COUNT_OR_CONDITION",
+        "possibleTypes": null
+      },
+      {
+        "description": "",
+        "enumValues": null,
+        "fields": null,
+        "inputFields": [
+          {
+            "defaultValue": null,
+            "description": "",
+            "name": "author",
+            "type": {
+              "kind": "INPUT_OBJECT",
+              "name": "POST_AUTHOR_WHERE_RELATION_FILTER_CONDITION",
+              "ofType": null
+            }
+          }
+        ],
+        "interfaces": null,
+        "kind": "INPUT_OBJECT",
+        "name": "POST_WHERE_RELATION_FILTER_CONDITION",
         "possibleTypes": null
       },
       {
@@ -3832,28 +4011,7 @@
         ],
         "interfaces": null,
         "kind": "INPUT_OBJECT",
-        "name": "POST_TITLE_COMMON_FILTER_CONDITION",
-        "possibleTypes": null
-      },
-      {
-        "description": "",
-        "enumValues": null,
-        "fields": null,
-        "inputFields": [
-          {
-            "defaultValue": null,
-            "description": "",
-            "name": "author",
-            "type": {
-              "kind": "INPUT_OBJECT",
-              "name": "POST_AUTHOR_WHERE_RELATION_FILTER_CONDITION",
-              "ofType": null
-            }
-          }
-        ],
-        "interfaces": null,
-        "kind": "INPUT_OBJECT",
-        "name": "POST_WHERE_RELATION_FILTER_CONDITION",
+        "name": "POST__FIELD__TITLE__COMMON_FILTER_CONDITION",
         "possibleTypes": null
       },
       {
@@ -3903,7 +4061,7 @@
             "name": "data",
             "type": {
               "kind": "OBJECT",
-              "name": "Post_RawModel",
+              "name": "Post_Raw_Model",
               "ofType": null
             }
           },
@@ -3957,133 +4115,6 @@
           {
             "args": [],
             "deprecationReason": null,
-            "description": "",
-            "isDeprecated": false,
-            "name": "title",
-            "type": {
-              "kind": "SCALAR",
-              "name": "String",
-              "ofType": null
-            }
-          }
-        ],
-        "inputFields": null,
-        "interfaces": [],
-        "kind": "OBJECT",
-        "name": "Post_RawModel",
-        "possibleTypes": null
-      },
-      {
-        "description": "",
-        "enumValues": null,
-        "fields": null,
-        "inputFields": [
-          {
-            "defaultValue": null,
-            "description": "",
-            "name": "_connect",
-            "type": {
-              "kind": "INPUT_OBJECT",
-              "name": "Postlist_connect",
-              "ofType": null
-            }
-          },
-          {
-            "defaultValue": null,
-            "description": "",
-            "name": "_id",
-            "type": {
-              "kind": "SCALAR",
-              "name": "String",
-              "ofType": null
-            }
-          },
-          {
-            "defaultValue": null,
-            "description": "",
-            "name": "title",
-            "type": {
-              "kind": "SCALAR",
-              "name": "String",
-              "ofType": null
-            }
-          }
-        ],
-        "interfaces": null,
-        "kind": "INPUT_OBJECT",
-        "name": "Post_create_payload",
-        "possibleTypes": null
-      },
-      {
-        "description": "",
-        "enumValues": null,
-        "fields": null,
-        "inputFields": [
-          {
-            "defaultValue": null,
-            "description": "",
-            "name": "author_id",
-            "type": {
-              "kind": "SCALAR",
-              "name": "String",
-              "ofType": null
-            }
-          }
-        ],
-        "interfaces": null,
-        "kind": "INPUT_OBJECT",
-        "name": "Post_relation_connect_payload",
-        "possibleTypes": null
-      },
-      {
-        "description": "",
-        "enumValues": null,
-        "fields": null,
-        "inputFields": [
-          {
-            "defaultValue": null,
-            "description": "",
-            "name": "author_id",
-            "type": {
-              "kind": "SCALAR",
-              "name": "String",
-              "ofType": null
-            }
-          }
-        ],
-        "interfaces": null,
-        "kind": "INPUT_OBJECT",
-        "name": "Post_relation_disconnect_payload",
-        "possibleTypes": null
-      },
-      {
-        "description": "",
-        "enumValues": null,
-        "fields": null,
-        "inputFields": [
-          {
-            "defaultValue": null,
-            "description": "",
-            "name": "title",
-            "type": {
-              "kind": "SCALAR",
-              "name": "String",
-              "ofType": null
-            }
-          }
-        ],
-        "interfaces": null,
-        "kind": "INPUT_OBJECT",
-        "name": "Post_update_payload",
-        "possibleTypes": null
-      },
-      {
-        "description": "",
-        "enumValues": null,
-        "fields": [
-          {
-            "args": [],
-            "deprecationReason": null,
             "description": "Has one author",
             "isDeprecated": false,
             "name": "author",
@@ -4101,7 +4132,7 @@
             "name": "data",
             "type": {
               "kind": "OBJECT",
-              "name": "Post_RawModel",
+              "name": "Post_Raw_Model",
               "ofType": null
             }
           },
@@ -4145,51 +4176,7 @@
         "inputFields": null,
         "interfaces": [],
         "kind": "OBJECT",
-        "name": "Postlist",
-        "possibleTypes": null
-      },
-      {
-        "description": "",
-        "enumValues": null,
-        "fields": null,
-        "inputFields": [
-          {
-            "defaultValue": null,
-            "description": "",
-            "name": "author_id",
-            "type": {
-              "kind": "SCALAR",
-              "name": "String",
-              "ofType": null
-            }
-          }
-        ],
-        "interfaces": null,
-        "kind": "INPUT_OBJECT",
-        "name": "Postlist_connect",
-        "possibleTypes": null
-      },
-      {
-        "description": "",
-        "enumValues": null,
-        "fields": [
-          {
-            "args": [],
-            "deprecationReason": null,
-            "description": "",
-            "isDeprecated": false,
-            "name": "total",
-            "type": {
-              "kind": "SCALAR",
-              "name": "Int",
-              "ofType": null
-            }
-          }
-        ],
-        "inputFields": null,
-        "interfaces": [],
-        "kind": "OBJECT",
-        "name": "Postlist_connection",
+        "name": "PostList",
         "possibleTypes": null
       },
       {
@@ -4203,7 +4190,7 @@
             "name": "_connect",
             "type": {
               "kind": "INPUT_OBJECT",
-              "name": "Postlist_connect",
+              "name": "Post_List_Connect",
               "ofType": null
             }
           },
@@ -4230,7 +4217,259 @@
         ],
         "interfaces": null,
         "kind": "INPUT_OBJECT",
-        "name": "Postlist_upsert_payload",
+        "name": "Post_Create_Payload",
+        "possibleTypes": null
+      },
+      {
+        "description": "",
+        "enumValues": null,
+        "fields": null,
+        "inputFields": [
+          {
+            "defaultValue": null,
+            "description": "",
+            "name": "author_id",
+            "type": {
+              "kind": "SCALAR",
+              "name": "String",
+              "ofType": null
+            }
+          }
+        ],
+        "interfaces": null,
+        "kind": "INPUT_OBJECT",
+        "name": "Post_List_Connect",
+        "possibleTypes": null
+      },
+      {
+        "description": "",
+        "enumValues": null,
+        "fields": [
+          {
+            "args": [],
+            "deprecationReason": null,
+            "description": "",
+            "isDeprecated": false,
+            "name": "total",
+            "type": {
+              "kind": "SCALAR",
+              "name": "Int",
+              "ofType": null
+            }
+          }
+        ],
+        "inputFields": null,
+        "interfaces": [],
+        "kind": "OBJECT",
+        "name": "Post_List_Connection",
+        "possibleTypes": null
+      },
+      {
+        "description": "",
+        "enumValues": null,
+        "fields": null,
+        "inputFields": [
+          {
+            "defaultValue": null,
+            "description": "",
+            "name": "_connect",
+            "type": {
+              "kind": "INPUT_OBJECT",
+              "name": "Post_List_Connect",
+              "ofType": null
+            }
+          },
+          {
+            "defaultValue": null,
+            "description": "",
+            "name": "_id",
+            "type": {
+              "kind": "SCALAR",
+              "name": "String",
+              "ofType": null
+            }
+          },
+          {
+            "defaultValue": null,
+            "description": "",
+            "name": "title",
+            "type": {
+              "kind": "SCALAR",
+              "name": "String",
+              "ofType": null
+            }
+          }
+        ],
+        "interfaces": null,
+        "kind": "INPUT_OBJECT",
+        "name": "Post_List_Upsert_Payload",
+        "possibleTypes": null
+      },
+      {
+        "description": "",
+        "enumValues": null,
+        "fields": [
+          {
+            "args": [],
+            "deprecationReason": null,
+            "description": "",
+            "isDeprecated": false,
+            "name": "title",
+            "type": {
+              "kind": "SCALAR",
+              "name": "String",
+              "ofType": null
+            }
+          }
+        ],
+        "inputFields": null,
+        "interfaces": [],
+        "kind": "OBJECT",
+        "name": "Post_Raw_Model",
+        "possibleTypes": null
+      },
+      {
+        "description": "",
+        "enumValues": null,
+        "fields": null,
+        "inputFields": [
+          {
+            "defaultValue": null,
+            "description": "",
+            "name": "author_id",
+            "type": {
+              "kind": "SCALAR",
+              "name": "String",
+              "ofType": null
+            }
+          }
+        ],
+        "interfaces": null,
+        "kind": "INPUT_OBJECT",
+        "name": "Post_Relation_Connect_Payload",
+        "possibleTypes": null
+      },
+      {
+        "description": "",
+        "enumValues": null,
+        "fields": null,
+        "inputFields": [
+          {
+            "defaultValue": null,
+            "description": "",
+            "name": "author_id",
+            "type": {
+              "kind": "SCALAR",
+              "name": "String",
+              "ofType": null
+            }
+          }
+        ],
+        "interfaces": null,
+        "kind": "INPUT_OBJECT",
+        "name": "Post_Relation_Disconnect_Payload",
+        "possibleTypes": null
+      },
+      {
+        "description": "",
+        "enumValues": null,
+        "fields": null,
+        "inputFields": [
+          {
+            "defaultValue": null,
+            "description": "",
+            "name": "title",
+            "type": {
+              "kind": "SCALAR",
+              "name": "String",
+              "ofType": null
+            }
+          }
+        ],
+        "interfaces": null,
+        "kind": "INPUT_OBJECT",
+        "name": "Post_Update_Payload",
+        "possibleTypes": null
+      },
+      {
+        "description": "",
+        "enumValues": null,
+        "fields": [
+          {
+            "args": [],
+            "deprecationReason": null,
+            "description": "",
+            "isDeprecated": false,
+            "name": "state",
+            "type": {
+              "kind": "SCALAR",
+              "name": "String",
+              "ofType": null
+            }
+          }
+        ],
+        "inputFields": null,
+        "interfaces": [],
+        "kind": "OBJECT",
+        "name": "PublicGoogleOAuthStatePayload",
+        "possibleTypes": null
+      },
+      {
+        "description": "",
+        "enumValues": null,
+        "fields": [
+          {
+            "args": [],
+            "deprecationReason": null,
+            "description": "",
+            "isDeprecated": false,
+            "name": "token",
+            "type": {
+              "kind": "SCALAR",
+              "name": "String",
+              "ofType": null
+            }
+          },
+          {
+            "args": [],
+            "deprecationReason": null,
+            "description": "",
+            "isDeprecated": false,
+            "name": "user",
+            "type": {
+              "kind": "OBJECT",
+              "name": "UserItem",
+              "ofType": null
+            }
+          }
+        ],
+        "inputFields": null,
+        "interfaces": [],
+        "kind": "OBJECT",
+        "name": "PublicLoginUserPayload",
+        "possibleTypes": null
+      },
+      {
+        "description": "",
+        "enumValues": null,
+        "fields": [
+          {
+            "args": [],
+            "deprecationReason": null,
+            "description": "",
+            "isDeprecated": false,
+            "name": "state",
+            "type": {
+              "kind": "SCALAR",
+              "name": "String",
+              "ofType": null
+            }
+          }
+        ],
+        "inputFields": null,
+        "interfaces": [],
+        "kind": "OBJECT",
+        "name": "PublicOAuthStatePayload",
         "possibleTypes": null
       },
       {
@@ -4333,16 +4572,6 @@
               {
                 "defaultValue": null,
                 "description": "",
-                "name": "sort",
-                "type": {
-                  "kind": "INPUT_OBJECT",
-                  "name": "AUTHORLIST_INPUT_SORT_PAYLOAD",
-                  "ofType": null
-                }
-              },
-              {
-                "defaultValue": null,
-                "description": "",
                 "name": "status",
                 "type": {
                   "kind": "ENUM",
@@ -4370,7 +4599,7 @@
               "name": null,
               "ofType": {
                 "kind": "OBJECT",
-                "name": "Authorlist",
+                "name": "AuthorList",
                 "ofType": null
               }
             }
@@ -4383,7 +4612,7 @@
                 "name": "_key",
                 "type": {
                   "kind": "INPUT_OBJECT",
-                  "name": "AUTHORLIST_COUNT_KEY_CONDITION",
+                  "name": "AUTHOR_LIST_COUNT_KEY_CONDITION",
                   "ofType": null
                 }
               },
@@ -4396,7 +4625,7 @@
                   "name": null,
                   "ofType": {
                     "kind": "INPUT_OBJECT",
-                    "name": "AUTHORLIST_COUNT_GROUPBY_INPUT",
+                    "name": "AUTHOR_LIST_COUNT_GROUPBY_INPUT",
                     "ofType": null
                   }
                 }
@@ -4434,16 +4663,6 @@
               {
                 "defaultValue": null,
                 "description": "",
-                "name": "sort",
-                "type": {
-                  "kind": "INPUT_OBJECT",
-                  "name": "AUTHORLIST_COUNT_INPUT_SORT_PAYLOAD",
-                  "ofType": null
-                }
-              },
-              {
-                "defaultValue": null,
-                "description": "",
                 "name": "status",
                 "type": {
                   "kind": "ENUM",
@@ -4457,7 +4676,7 @@
                 "name": "where",
                 "type": {
                   "kind": "INPUT_OBJECT",
-                  "name": "AUTHORLIST_COUNT_INPUT_WHERE_PAYLOAD",
+                  "name": "AUTHOR_LIST_COUNT_INPUT_WHERE_PAYLOAD",
                   "ofType": null
                 }
               }
@@ -4468,7 +4687,7 @@
             "name": "authorListCount",
             "type": {
               "kind": "OBJECT",
-              "name": "Authorlist_connection",
+              "name": "Author_List_Connection",
               "ofType": null
             }
           },
@@ -4588,16 +4807,6 @@
               {
                 "defaultValue": null,
                 "description": "",
-                "name": "sort",
-                "type": {
-                  "kind": "INPUT_OBJECT",
-                  "name": "BUCKETLIST_INPUT_SORT_PAYLOAD",
-                  "ofType": null
-                }
-              },
-              {
-                "defaultValue": null,
-                "description": "",
                 "name": "status",
                 "type": {
                   "kind": "ENUM",
@@ -4625,7 +4834,7 @@
               "name": null,
               "ofType": {
                 "kind": "OBJECT",
-                "name": "Bucketlist",
+                "name": "BucketList",
                 "ofType": null
               }
             }
@@ -4638,7 +4847,7 @@
                 "name": "_key",
                 "type": {
                   "kind": "INPUT_OBJECT",
-                  "name": "BUCKETLIST_COUNT_KEY_CONDITION",
+                  "name": "BUCKET_LIST_COUNT_KEY_CONDITION",
                   "ofType": null
                 }
               },
@@ -4661,7 +4870,7 @@
                   "name": null,
                   "ofType": {
                     "kind": "INPUT_OBJECT",
-                    "name": "BUCKETLIST_COUNT_GROUPBY_INPUT",
+                    "name": "BUCKET_LIST_COUNT_GROUPBY_INPUT",
                     "ofType": null
                   }
                 }
@@ -4709,16 +4918,6 @@
               {
                 "defaultValue": null,
                 "description": "",
-                "name": "sort",
-                "type": {
-                  "kind": "INPUT_OBJECT",
-                  "name": "BUCKETLIST_COUNT_INPUT_SORT_PAYLOAD",
-                  "ofType": null
-                }
-              },
-              {
-                "defaultValue": null,
-                "description": "",
                 "name": "status",
                 "type": {
                   "kind": "ENUM",
@@ -4732,7 +4931,7 @@
                 "name": "where",
                 "type": {
                   "kind": "INPUT_OBJECT",
-                  "name": "BUCKETLIST_COUNT_INPUT_WHERE_PAYLOAD",
+                  "name": "BUCKET_LIST_COUNT_INPUT_WHERE_PAYLOAD",
                   "ofType": null
                 }
               }
@@ -4743,7 +4942,204 @@
             "name": "bucketListCount",
             "type": {
               "kind": "OBJECT",
-              "name": "Bucketlist_connection",
+              "name": "Bucket_List_Connection",
+              "ofType": null
+            }
+          },
+          {
+            "args": [
+              {
+                "defaultValue": null,
+                "description": "",
+                "name": "project_id",
+                "type": {
+                  "kind": "NON_NULL",
+                  "name": null,
+                  "ofType": {
+                    "kind": "SCALAR",
+                    "name": "String",
+                    "ofType": null
+                  }
+                }
+              }
+            ],
+            "deprecationReason": null,
+            "description": "",
+            "isDeprecated": false,
+            "name": "googleOAuthState",
+            "type": {
+              "kind": "OBJECT",
+              "name": "PublicGoogleOAuthStatePayload",
+              "ofType": null
+            }
+          },
+          {
+            "args": [
+              {
+                "defaultValue": null,
+                "description": "",
+                "name": "access_token",
+                "type": {
+                  "kind": "SCALAR",
+                  "name": "String",
+                  "ofType": null
+                }
+              },
+              {
+                "defaultValue": null,
+                "description": "",
+                "name": "auth_method",
+                "type": {
+                  "kind": "SCALAR",
+                  "name": "String",
+                  "ofType": null
+                }
+              },
+              {
+                "defaultValue": null,
+                "description": "",
+                "name": "code",
+                "type": {
+                  "kind": "SCALAR",
+                  "name": "String",
+                  "ofType": null
+                }
+              },
+              {
+                "defaultValue": null,
+                "description": "",
+                "name": "email",
+                "type": {
+                  "kind": "SCALAR",
+                  "name": "String",
+                  "ofType": null
+                }
+              },
+              {
+                "defaultValue": null,
+                "description": "",
+                "name": "id_token",
+                "type": {
+                  "kind": "SCALAR",
+                  "name": "String",
+                  "ofType": null
+                }
+              },
+              {
+                "defaultValue": null,
+                "description": "",
+                "name": "password",
+                "type": {
+                  "kind": "SCALAR",
+                  "name": "String",
+                  "ofType": null
+                }
+              },
+              {
+                "defaultValue": null,
+                "description": "",
+                "name": "phone",
+                "type": {
+                  "kind": "SCALAR",
+                  "name": "String",
+                  "ofType": null
+                }
+              },
+              {
+                "defaultValue": null,
+                "description": "",
+                "name": "project_id",
+                "type": {
+                  "kind": "NON_NULL",
+                  "name": null,
+                  "ofType": {
+                    "kind": "SCALAR",
+                    "name": "String",
+                    "ofType": null
+                  }
+                }
+              },
+              {
+                "defaultValue": null,
+                "description": "",
+                "name": "signup",
+                "type": {
+                  "kind": "SCALAR",
+                  "name": "Boolean",
+                  "ofType": null
+                }
+              },
+              {
+                "defaultValue": null,
+                "description": "",
+                "name": "state",
+                "type": {
+                  "kind": "SCALAR",
+                  "name": "String",
+                  "ofType": null
+                }
+              }
+            ],
+            "deprecationReason": null,
+            "description": "",
+            "isDeprecated": false,
+            "name": "loginUser",
+            "type": {
+              "kind": "OBJECT",
+              "name": "PublicLoginUserPayload",
+              "ofType": null
+            }
+          },
+          {
+            "args": [],
+            "deprecationReason": null,
+            "description": "Effective app-user permissions after tenant plan ceiling (scopes, quotas, grace).",
+            "isDeprecated": false,
+            "name": "myEffectivePermissions",
+            "type": {
+              "kind": "OBJECT",
+              "name": "MyEffectivePermissionsPayload",
+              "ofType": null
+            }
+          },
+          {
+            "args": [
+              {
+                "defaultValue": null,
+                "description": "",
+                "name": "project_id",
+                "type": {
+                  "kind": "NON_NULL",
+                  "name": null,
+                  "ofType": {
+                    "kind": "SCALAR",
+                    "name": "String",
+                    "ofType": null
+                  }
+                }
+              },
+              {
+                "defaultValue": null,
+                "description": "",
+                "name": "provider",
+                "type": {
+                  "kind": "NON_NULL",
+                  "name": null,
+                  "ofType": {
+                    "kind": "SCALAR",
+                    "name": "String",
+                    "ofType": null
+                  }
+                }
+              }
+            ],
+            "deprecationReason": null,
+            "description": "",
+            "isDeprecated": false,
+            "name": "oauthState",
+            "type": {
+              "kind": "OBJECT",
+              "name": "PublicOAuthStatePayload",
               "ofType": null
             }
           },
@@ -4863,16 +5259,6 @@
               {
                 "defaultValue": null,
                 "description": "",
-                "name": "sort",
-                "type": {
-                  "kind": "INPUT_OBJECT",
-                  "name": "POSTLIST_INPUT_SORT_PAYLOAD",
-                  "ofType": null
-                }
-              },
-              {
-                "defaultValue": null,
-                "description": "",
                 "name": "status",
                 "type": {
                   "kind": "ENUM",
@@ -4900,7 +5286,7 @@
               "name": null,
               "ofType": {
                 "kind": "OBJECT",
-                "name": "Postlist",
+                "name": "PostList",
                 "ofType": null
               }
             }
@@ -4913,7 +5299,7 @@
                 "name": "_key",
                 "type": {
                   "kind": "INPUT_OBJECT",
-                  "name": "POSTLIST_COUNT_KEY_CONDITION",
+                  "name": "POST_LIST_COUNT_KEY_CONDITION",
                   "ofType": null
                 }
               },
@@ -4936,7 +5322,7 @@
                   "name": null,
                   "ofType": {
                     "kind": "INPUT_OBJECT",
-                    "name": "POSTLIST_COUNT_GROUPBY_INPUT",
+                    "name": "POST_LIST_COUNT_GROUPBY_INPUT",
                     "ofType": null
                   }
                 }
@@ -4984,16 +5370,6 @@
               {
                 "defaultValue": null,
                 "description": "",
-                "name": "sort",
-                "type": {
-                  "kind": "INPUT_OBJECT",
-                  "name": "POSTLIST_COUNT_INPUT_SORT_PAYLOAD",
-                  "ofType": null
-                }
-              },
-              {
-                "defaultValue": null,
-                "description": "",
                 "name": "status",
                 "type": {
                   "kind": "ENUM",
@@ -5007,7 +5383,7 @@
                 "name": "where",
                 "type": {
                   "kind": "INPUT_OBJECT",
-                  "name": "POSTLIST_COUNT_INPUT_WHERE_PAYLOAD",
+                  "name": "POST_LIST_COUNT_INPUT_WHERE_PAYLOAD",
                   "ofType": null
                 }
               }
@@ -5018,7 +5394,7 @@
             "name": "postListCount",
             "type": {
               "kind": "OBJECT",
-              "name": "Postlist_connection",
+              "name": "Post_List_Connection",
               "ofType": null
             }
           },
@@ -5118,16 +5494,6 @@
               {
                 "defaultValue": null,
                 "description": "",
-                "name": "sort",
-                "type": {
-                  "kind": "INPUT_OBJECT",
-                  "name": "TAGLIST_INPUT_SORT_PAYLOAD",
-                  "ofType": null
-                }
-              },
-              {
-                "defaultValue": null,
-                "description": "",
                 "name": "status",
                 "type": {
                   "kind": "ENUM",
@@ -5155,7 +5521,7 @@
               "name": null,
               "ofType": {
                 "kind": "OBJECT",
-                "name": "Taglist",
+                "name": "TagList",
                 "ofType": null
               }
             }
@@ -5168,7 +5534,7 @@
                 "name": "_key",
                 "type": {
                   "kind": "INPUT_OBJECT",
-                  "name": "TAGLIST_COUNT_KEY_CONDITION",
+                  "name": "TAG_LIST_COUNT_KEY_CONDITION",
                   "ofType": null
                 }
               },
@@ -5181,7 +5547,7 @@
                   "name": null,
                   "ofType": {
                     "kind": "INPUT_OBJECT",
-                    "name": "TAGLIST_COUNT_GROUPBY_INPUT",
+                    "name": "TAG_LIST_COUNT_GROUPBY_INPUT",
                     "ofType": null
                   }
                 }
@@ -5219,16 +5585,6 @@
               {
                 "defaultValue": null,
                 "description": "",
-                "name": "sort",
-                "type": {
-                  "kind": "INPUT_OBJECT",
-                  "name": "TAGLIST_COUNT_INPUT_SORT_PAYLOAD",
-                  "ofType": null
-                }
-              },
-              {
-                "defaultValue": null,
-                "description": "",
                 "name": "status",
                 "type": {
                   "kind": "ENUM",
@@ -5242,7 +5598,7 @@
                 "name": "where",
                 "type": {
                   "kind": "INPUT_OBJECT",
-                  "name": "TAGLIST_COUNT_INPUT_WHERE_PAYLOAD",
+                  "name": "TAG_LIST_COUNT_INPUT_WHERE_PAYLOAD",
                   "ofType": null
                 }
               }
@@ -5253,7 +5609,7 @@
             "name": "tagListCount",
             "type": {
               "kind": "OBJECT",
-              "name": "Taglist_connection",
+              "name": "Tag_List_Connection",
               "ofType": null
             }
           }
@@ -5288,29 +5644,6 @@
         "possibleTypes": null
       },
       {
-        "description": "",
-        "enumValues": [
-          {
-            "deprecationReason": null,
-            "description": "SORT BY ASC",
-            "isDeprecated": false,
-            "name": "ASC"
-          },
-          {
-            "deprecationReason": null,
-            "description": "SORT BY DESC",
-            "isDeprecated": false,
-            "name": "DESC"
-          }
-        ],
-        "fields": null,
-        "inputFields": null,
-        "interfaces": null,
-        "kind": "ENUM",
-        "name": "SORT_ENUM",
-        "possibleTypes": null
-      },
-      {
         "description": "The `String` scalar type represents textual data, represented as UTF-8 character sequences. The String type is most often used by GraphQL to represent free-form human-readable text.",
         "enumValues": null,
         "fields": null,
@@ -5318,155 +5651,6 @@
         "interfaces": null,
         "kind": "SCALAR",
         "name": "String",
-        "possibleTypes": null
-      },
-      {
-        "description": "Group by fields with key-value pairs for both user input and editable fields",
-        "enumValues": null,
-        "fields": null,
-        "inputFields": [
-          {
-            "defaultValue": null,
-            "description": "Field name to group by",
-            "name": "key",
-            "type": {
-              "kind": "SCALAR",
-              "name": "String",
-              "ofType": null
-            }
-          },
-          {
-            "defaultValue": null,
-            "description": "Value to group by",
-            "name": "value",
-            "type": {
-              "kind": "SCALAR",
-              "name": "String",
-              "ofType": null
-            }
-          }
-        ],
-        "interfaces": null,
-        "kind": "INPUT_OBJECT",
-        "name": "TAGLIST_COUNT_GROUPBY_INPUT",
-        "possibleTypes": null
-      },
-      {
-        "description": "",
-        "enumValues": null,
-        "fields": null,
-        "inputFields": [
-          {
-            "defaultValue": null,
-            "description": "",
-            "name": "label",
-            "type": {
-              "kind": "ENUM",
-              "name": "SORT_ENUM",
-              "ofType": null
-            }
-          }
-        ],
-        "interfaces": null,
-        "kind": "INPUT_OBJECT",
-        "name": "TAGLIST_COUNT_INPUT_SORT_PAYLOAD",
-        "possibleTypes": null
-      },
-      {
-        "description": "",
-        "enumValues": null,
-        "fields": null,
-        "inputFields": [
-          {
-            "defaultValue": null,
-            "description": "",
-            "name": "OR",
-            "type": {
-              "kind": "INPUT_OBJECT",
-              "name": "TAGLIST_COUNT_OR_CONDITION",
-              "ofType": null
-            }
-          },
-          {
-            "defaultValue": null,
-            "description": "",
-            "name": "label",
-            "type": {
-              "kind": "INPUT_OBJECT",
-              "name": "TAG_LABEL_COMMON_FILTER_CONDITION",
-              "ofType": null
-            }
-          }
-        ],
-        "interfaces": null,
-        "kind": "INPUT_OBJECT",
-        "name": "TAGLIST_COUNT_INPUT_WHERE_PAYLOAD",
-        "possibleTypes": null
-      },
-      {
-        "description": "Filter by document _key ids. If this is used, the where filter will be ignored.",
-        "enumValues": null,
-        "fields": null,
-        "inputFields": [
-          {
-            "defaultValue": null,
-            "description": "",
-            "name": "eq",
-            "type": {
-              "kind": "SCALAR",
-              "name": "String",
-              "ofType": null
-            }
-          },
-          {
-            "defaultValue": null,
-            "description": "",
-            "name": "in",
-            "type": {
-              "kind": "LIST",
-              "name": null,
-              "ofType": {
-                "kind": "SCALAR",
-                "name": "String",
-                "ofType": null
-              }
-            }
-          },
-          {
-            "defaultValue": null,
-            "description": "",
-            "name": "ne",
-            "type": {
-              "kind": "SCALAR",
-              "name": "String",
-              "ofType": null
-            }
-          }
-        ],
-        "interfaces": null,
-        "kind": "INPUT_OBJECT",
-        "name": "TAGLIST_COUNT_KEY_CONDITION",
-        "possibleTypes": null
-      },
-      {
-        "description": "",
-        "enumValues": null,
-        "fields": null,
-        "inputFields": [
-          {
-            "defaultValue": null,
-            "description": "",
-            "name": "label",
-            "type": {
-              "kind": "INPUT_OBJECT",
-              "name": "TAG_LABEL_COMMON_FILTER_CONDITION",
-              "ofType": null
-            }
-          }
-        ],
-        "interfaces": null,
-        "kind": "INPUT_OBJECT",
-        "name": "TAGLIST_COUNT_OR_CONDITION",
         "possibleTypes": null
       },
       {
@@ -5508,27 +5692,6 @@
           {
             "defaultValue": null,
             "description": "",
-            "name": "label",
-            "type": {
-              "kind": "ENUM",
-              "name": "SORT_ENUM",
-              "ofType": null
-            }
-          }
-        ],
-        "interfaces": null,
-        "kind": "INPUT_OBJECT",
-        "name": "TAGLIST_INPUT_SORT_PAYLOAD",
-        "possibleTypes": null
-      },
-      {
-        "description": "",
-        "enumValues": null,
-        "fields": null,
-        "inputFields": [
-          {
-            "defaultValue": null,
-            "description": "",
             "name": "OR",
             "type": {
               "kind": "INPUT_OBJECT",
@@ -5542,7 +5705,7 @@
             "name": "label",
             "type": {
               "kind": "INPUT_OBJECT",
-              "name": "TAG_LABEL_COMMON_FILTER_CONDITION",
+              "name": "TAG__FIELD__LABEL__COMMON_FILTER_CONDITION",
               "ofType": null
             }
           }
@@ -5608,7 +5771,7 @@
             "name": "label",
             "type": {
               "kind": "INPUT_OBJECT",
-              "name": "TAG_LABEL_COMMON_FILTER_CONDITION",
+              "name": "TAG__FIELD__LABEL__COMMON_FILTER_CONDITION",
               "ofType": null
             }
           }
@@ -5616,6 +5779,134 @@
         "interfaces": null,
         "kind": "INPUT_OBJECT",
         "name": "TAGLIST_OR_CONDITION",
+        "possibleTypes": null
+      },
+      {
+        "description": "Group by fields with key-value pairs for both user input and editable fields",
+        "enumValues": null,
+        "fields": null,
+        "inputFields": [
+          {
+            "defaultValue": null,
+            "description": "Field name to group by",
+            "name": "key",
+            "type": {
+              "kind": "SCALAR",
+              "name": "String",
+              "ofType": null
+            }
+          },
+          {
+            "defaultValue": null,
+            "description": "Value to group by",
+            "name": "value",
+            "type": {
+              "kind": "SCALAR",
+              "name": "String",
+              "ofType": null
+            }
+          }
+        ],
+        "interfaces": null,
+        "kind": "INPUT_OBJECT",
+        "name": "TAG_LIST_COUNT_GROUPBY_INPUT",
+        "possibleTypes": null
+      },
+      {
+        "description": "",
+        "enumValues": null,
+        "fields": null,
+        "inputFields": [
+          {
+            "defaultValue": null,
+            "description": "",
+            "name": "OR",
+            "type": {
+              "kind": "INPUT_OBJECT",
+              "name": "TAG_LIST_COUNT_OR_CONDITION",
+              "ofType": null
+            }
+          },
+          {
+            "defaultValue": null,
+            "description": "",
+            "name": "label",
+            "type": {
+              "kind": "INPUT_OBJECT",
+              "name": "TAG__FIELD__LABEL__COMMON_FILTER_CONDITION",
+              "ofType": null
+            }
+          }
+        ],
+        "interfaces": null,
+        "kind": "INPUT_OBJECT",
+        "name": "TAG_LIST_COUNT_INPUT_WHERE_PAYLOAD",
+        "possibleTypes": null
+      },
+      {
+        "description": "Filter by document _key ids. If this is used, the where filter will be ignored.",
+        "enumValues": null,
+        "fields": null,
+        "inputFields": [
+          {
+            "defaultValue": null,
+            "description": "",
+            "name": "eq",
+            "type": {
+              "kind": "SCALAR",
+              "name": "String",
+              "ofType": null
+            }
+          },
+          {
+            "defaultValue": null,
+            "description": "",
+            "name": "in",
+            "type": {
+              "kind": "LIST",
+              "name": null,
+              "ofType": {
+                "kind": "SCALAR",
+                "name": "String",
+                "ofType": null
+              }
+            }
+          },
+          {
+            "defaultValue": null,
+            "description": "",
+            "name": "ne",
+            "type": {
+              "kind": "SCALAR",
+              "name": "String",
+              "ofType": null
+            }
+          }
+        ],
+        "interfaces": null,
+        "kind": "INPUT_OBJECT",
+        "name": "TAG_LIST_COUNT_KEY_CONDITION",
+        "possibleTypes": null
+      },
+      {
+        "description": "",
+        "enumValues": null,
+        "fields": null,
+        "inputFields": [
+          {
+            "defaultValue": null,
+            "description": "",
+            "name": "label",
+            "type": {
+              "kind": "INPUT_OBJECT",
+              "name": "TAG__FIELD__LABEL__COMMON_FILTER_CONDITION",
+              "ofType": null
+            }
+          }
+        ],
+        "interfaces": null,
+        "kind": "INPUT_OBJECT",
+        "name": "TAG_LIST_COUNT_OR_CONDITION",
         "possibleTypes": null
       },
       {
@@ -5684,7 +5975,7 @@
         ],
         "interfaces": null,
         "kind": "INPUT_OBJECT",
-        "name": "TAG_LABEL_COMMON_FILTER_CONDITION",
+        "name": "TAG__FIELD__LABEL__COMMON_FILTER_CONDITION",
         "possibleTypes": null
       },
       {
@@ -5699,7 +5990,7 @@
             "name": "data",
             "type": {
               "kind": "OBJECT",
-              "name": "Tag_RawModel",
+              "name": "Tag_Raw_Model",
               "ofType": null
             }
           },
@@ -5753,87 +6044,12 @@
           {
             "args": [],
             "deprecationReason": null,
-            "description": "",
-            "isDeprecated": false,
-            "name": "label",
-            "type": {
-              "kind": "SCALAR",
-              "name": "String",
-              "ofType": null
-            }
-          }
-        ],
-        "inputFields": null,
-        "interfaces": [],
-        "kind": "OBJECT",
-        "name": "Tag_RawModel",
-        "possibleTypes": null
-      },
-      {
-        "description": "",
-        "enumValues": null,
-        "fields": null,
-        "inputFields": [
-          {
-            "defaultValue": null,
-            "description": "",
-            "name": "_id",
-            "type": {
-              "kind": "SCALAR",
-              "name": "String",
-              "ofType": null
-            }
-          },
-          {
-            "defaultValue": null,
-            "description": "",
-            "name": "label",
-            "type": {
-              "kind": "SCALAR",
-              "name": "String",
-              "ofType": null
-            }
-          }
-        ],
-        "interfaces": null,
-        "kind": "INPUT_OBJECT",
-        "name": "Tag_create_payload",
-        "possibleTypes": null
-      },
-      {
-        "description": "",
-        "enumValues": null,
-        "fields": null,
-        "inputFields": [
-          {
-            "defaultValue": null,
-            "description": "",
-            "name": "label",
-            "type": {
-              "kind": "SCALAR",
-              "name": "String",
-              "ofType": null
-            }
-          }
-        ],
-        "interfaces": null,
-        "kind": "INPUT_OBJECT",
-        "name": "Tag_update_payload",
-        "possibleTypes": null
-      },
-      {
-        "description": "",
-        "enumValues": null,
-        "fields": [
-          {
-            "args": [],
-            "deprecationReason": null,
             "description": "Field Details",
             "isDeprecated": false,
             "name": "data",
             "type": {
               "kind": "OBJECT",
-              "name": "Tag_RawModel",
+              "name": "Tag_Raw_Model",
               "ofType": null
             }
           },
@@ -5877,30 +6093,7 @@
         "inputFields": null,
         "interfaces": [],
         "kind": "OBJECT",
-        "name": "Taglist",
-        "possibleTypes": null
-      },
-      {
-        "description": "",
-        "enumValues": null,
-        "fields": [
-          {
-            "args": [],
-            "deprecationReason": null,
-            "description": "",
-            "isDeprecated": false,
-            "name": "total",
-            "type": {
-              "kind": "SCALAR",
-              "name": "Int",
-              "ofType": null
-            }
-          }
-        ],
-        "inputFields": null,
-        "interfaces": [],
-        "kind": "OBJECT",
-        "name": "Taglist_connection",
+        "name": "TagList",
         "possibleTypes": null
       },
       {
@@ -5931,7 +6124,105 @@
         ],
         "interfaces": null,
         "kind": "INPUT_OBJECT",
-        "name": "Taglist_upsert_payload",
+        "name": "Tag_Create_Payload",
+        "possibleTypes": null
+      },
+      {
+        "description": "",
+        "enumValues": null,
+        "fields": [
+          {
+            "args": [],
+            "deprecationReason": null,
+            "description": "",
+            "isDeprecated": false,
+            "name": "total",
+            "type": {
+              "kind": "SCALAR",
+              "name": "Int",
+              "ofType": null
+            }
+          }
+        ],
+        "inputFields": null,
+        "interfaces": [],
+        "kind": "OBJECT",
+        "name": "Tag_List_Connection",
+        "possibleTypes": null
+      },
+      {
+        "description": "",
+        "enumValues": null,
+        "fields": null,
+        "inputFields": [
+          {
+            "defaultValue": null,
+            "description": "",
+            "name": "_id",
+            "type": {
+              "kind": "SCALAR",
+              "name": "String",
+              "ofType": null
+            }
+          },
+          {
+            "defaultValue": null,
+            "description": "",
+            "name": "label",
+            "type": {
+              "kind": "SCALAR",
+              "name": "String",
+              "ofType": null
+            }
+          }
+        ],
+        "interfaces": null,
+        "kind": "INPUT_OBJECT",
+        "name": "Tag_List_Upsert_Payload",
+        "possibleTypes": null
+      },
+      {
+        "description": "",
+        "enumValues": null,
+        "fields": [
+          {
+            "args": [],
+            "deprecationReason": null,
+            "description": "",
+            "isDeprecated": false,
+            "name": "label",
+            "type": {
+              "kind": "SCALAR",
+              "name": "String",
+              "ofType": null
+            }
+          }
+        ],
+        "inputFields": null,
+        "interfaces": [],
+        "kind": "OBJECT",
+        "name": "Tag_Raw_Model",
+        "possibleTypes": null
+      },
+      {
+        "description": "",
+        "enumValues": null,
+        "fields": null,
+        "inputFields": [
+          {
+            "defaultValue": null,
+            "description": "",
+            "name": "label",
+            "type": {
+              "kind": "SCALAR",
+              "name": "String",
+              "ofType": null
+            }
+          }
+        ],
+        "interfaces": null,
+        "kind": "INPUT_OBJECT",
+        "name": "Tag_Update_Payload",
         "possibleTypes": null
       },
       {
@@ -5946,7 +6237,7 @@
             "name": "data",
             "type": {
               "kind": "OBJECT",
-              "name": "Author_RawModel",
+              "name": "Author_Raw_Model",
               "ofType": null
             }
           },
@@ -6005,7 +6296,7 @@
             "name": "data",
             "type": {
               "kind": "OBJECT",
-              "name": "Bucket_RawModel",
+              "name": "Bucket_Raw_Model",
               "ofType": null
             }
           },
@@ -6053,7 +6344,7 @@
                 "name": "_key",
                 "type": {
                   "kind": "INPUT_OBJECT",
-                  "name": "BUCKETTAGLIST_KEY_CONDITION",
+                  "name": "BUCKETTAGSLIST_KEY_CONDITION",
                   "ofType": null
                 }
               },
@@ -6066,7 +6357,7 @@
                   "name": null,
                   "ofType": {
                     "kind": "INPUT_OBJECT",
-                    "name": "BUCKETTAGLIST_GROUPBY_INPUT",
+                    "name": "BUCKETTAGSLIST_GROUPBY_INPUT",
                     "ofType": null
                   }
                 }
@@ -6104,16 +6395,6 @@
               {
                 "defaultValue": null,
                 "description": "",
-                "name": "sort",
-                "type": {
-                  "kind": "INPUT_OBJECT",
-                  "name": "BUCKETTAGLIST_INPUT_SORT_PAYLOAD",
-                  "ofType": null
-                }
-              },
-              {
-                "defaultValue": null,
-                "description": "",
                 "name": "status",
                 "type": {
                   "kind": "ENUM",
@@ -6127,7 +6408,7 @@
                 "name": "where",
                 "type": {
                   "kind": "INPUT_OBJECT",
-                  "name": "BUCKETTAGLIST_INPUT_WHERE_PAYLOAD",
+                  "name": "BUCKETTAGSLIST_INPUT_WHERE_PAYLOAD",
                   "ofType": null
                 }
               }
@@ -6135,13 +6416,13 @@
             "deprecationReason": null,
             "description": "Has many tag",
             "isDeprecated": false,
-            "name": "tagList",
+            "name": "tags_list",
             "type": {
               "kind": "LIST",
               "name": null,
               "ofType": {
                 "kind": "OBJECT",
-                "name": "bucket_has_many_bucketTagList_connections",
+                "name": "bucket_has_many_bucketTagsList_connections",
                 "ofType": null
               }
             }
@@ -6177,7 +6458,7 @@
             "name": "data",
             "type": {
               "kind": "OBJECT",
-              "name": "Post_RawModel",
+              "name": "Post_Raw_Model",
               "ofType": null
             }
           },
@@ -6236,7 +6517,7 @@
             "name": "data",
             "type": {
               "kind": "OBJECT",
-              "name": "Tag_RawModel",
+              "name": "Tag_Raw_Model",
               "ofType": null
             }
           },
@@ -6295,7 +6576,7 @@
             "name": "data",
             "type": {
               "kind": "OBJECT",
-              "name": "Author_RawModel",
+              "name": "Author_Raw_Model",
               "ofType": null
             }
           },
@@ -6339,7 +6620,7 @@
         "inputFields": null,
         "interfaces": [],
         "kind": "OBJECT",
-        "name": "Upsert_Authorlist",
+        "name": "Upsert_AuthorList",
         "possibleTypes": null
       },
       {
@@ -6354,7 +6635,7 @@
             "name": "data",
             "type": {
               "kind": "OBJECT",
-              "name": "Bucket_RawModel",
+              "name": "Bucket_Raw_Model",
               "ofType": null
             }
           },
@@ -6402,7 +6683,7 @@
                 "name": "_key",
                 "type": {
                   "kind": "INPUT_OBJECT",
-                  "name": "BUCKETTAGLIST_KEY_CONDITION",
+                  "name": "BUCKETTAGSLIST_KEY_CONDITION",
                   "ofType": null
                 }
               },
@@ -6415,7 +6696,7 @@
                   "name": null,
                   "ofType": {
                     "kind": "INPUT_OBJECT",
-                    "name": "BUCKETTAGLIST_GROUPBY_INPUT",
+                    "name": "BUCKETTAGSLIST_GROUPBY_INPUT",
                     "ofType": null
                   }
                 }
@@ -6453,16 +6734,6 @@
               {
                 "defaultValue": null,
                 "description": "",
-                "name": "sort",
-                "type": {
-                  "kind": "INPUT_OBJECT",
-                  "name": "BUCKETTAGLIST_INPUT_SORT_PAYLOAD",
-                  "ofType": null
-                }
-              },
-              {
-                "defaultValue": null,
-                "description": "",
                 "name": "status",
                 "type": {
                   "kind": "ENUM",
@@ -6476,7 +6747,7 @@
                 "name": "where",
                 "type": {
                   "kind": "INPUT_OBJECT",
-                  "name": "BUCKETTAGLIST_INPUT_WHERE_PAYLOAD",
+                  "name": "BUCKETTAGSLIST_INPUT_WHERE_PAYLOAD",
                   "ofType": null
                 }
               }
@@ -6484,13 +6755,13 @@
             "deprecationReason": null,
             "description": "Has many tag",
             "isDeprecated": false,
-            "name": "tagList",
+            "name": "tags_list",
             "type": {
               "kind": "LIST",
               "name": null,
               "ofType": {
                 "kind": "OBJECT",
-                "name": "bucket_has_many_bucketTagList_connections",
+                "name": "bucket_has_many_bucketTagsList_connections",
                 "ofType": null
               }
             }
@@ -6499,7 +6770,7 @@
         "inputFields": null,
         "interfaces": [],
         "kind": "OBJECT",
-        "name": "Upsert_Bucketlist",
+        "name": "Upsert_BucketList",
         "possibleTypes": null
       },
       {
@@ -6526,7 +6797,7 @@
             "name": "data",
             "type": {
               "kind": "OBJECT",
-              "name": "Post_RawModel",
+              "name": "Post_Raw_Model",
               "ofType": null
             }
           },
@@ -6570,7 +6841,7 @@
         "inputFields": null,
         "interfaces": [],
         "kind": "OBJECT",
-        "name": "Upsert_Postlist",
+        "name": "Upsert_PostList",
         "possibleTypes": null
       },
       {
@@ -6585,7 +6856,7 @@
             "name": "data",
             "type": {
               "kind": "OBJECT",
-              "name": "Tag_RawModel",
+              "name": "Tag_Raw_Model",
               "ofType": null
             }
           },
@@ -6629,7 +6900,126 @@
         "inputFields": null,
         "interfaces": [],
         "kind": "OBJECT",
-        "name": "Upsert_Taglist",
+        "name": "Upsert_TagList",
+        "possibleTypes": null
+      },
+      {
+        "description": "",
+        "enumValues": null,
+        "fields": [
+          {
+            "args": [],
+            "deprecationReason": null,
+            "description": "",
+            "isDeprecated": false,
+            "name": "created_at",
+            "type": {
+              "kind": "SCALAR",
+              "name": "String",
+              "ofType": null
+            }
+          },
+          {
+            "args": [],
+            "deprecationReason": null,
+            "description": "",
+            "isDeprecated": false,
+            "name": "email",
+            "type": {
+              "kind": "SCALAR",
+              "name": "String",
+              "ofType": null
+            }
+          },
+          {
+            "args": [],
+            "deprecationReason": null,
+            "description": "",
+            "isDeprecated": false,
+            "name": "id",
+            "type": {
+              "kind": "SCALAR",
+              "name": "String",
+              "ofType": null
+            }
+          },
+          {
+            "args": [],
+            "deprecationReason": null,
+            "description": "",
+            "isDeprecated": false,
+            "name": "phone",
+            "type": {
+              "kind": "SCALAR",
+              "name": "String",
+              "ofType": null
+            }
+          },
+          {
+            "args": [],
+            "deprecationReason": null,
+            "description": "",
+            "isDeprecated": false,
+            "name": "provider",
+            "type": {
+              "kind": "SCALAR",
+              "name": "String",
+              "ofType": null
+            }
+          },
+          {
+            "args": [],
+            "deprecationReason": null,
+            "description": "",
+            "isDeprecated": false,
+            "name": "role",
+            "type": {
+              "kind": "SCALAR",
+              "name": "String",
+              "ofType": null
+            }
+          },
+          {
+            "args": [],
+            "deprecationReason": null,
+            "description": "",
+            "isDeprecated": false,
+            "name": "status",
+            "type": {
+              "kind": "SCALAR",
+              "name": "String",
+              "ofType": null
+            }
+          },
+          {
+            "args": [],
+            "deprecationReason": null,
+            "description": "",
+            "isDeprecated": false,
+            "name": "updated_at",
+            "type": {
+              "kind": "SCALAR",
+              "name": "String",
+              "ofType": null
+            }
+          },
+          {
+            "args": [],
+            "deprecationReason": null,
+            "description": "",
+            "isDeprecated": false,
+            "name": "username",
+            "type": {
+              "kind": "SCALAR",
+              "name": "String",
+              "ofType": null
+            }
+          }
+        ],
+        "inputFields": null,
+        "interfaces": [],
+        "kind": "OBJECT",
+        "name": "UserItem",
         "possibleTypes": null
       },
       {
@@ -7558,7 +7948,7 @@
             "name": "data",
             "type": {
               "kind": "OBJECT",
-              "name": "Tag_RawModel",
+              "name": "Tag_Raw_Model",
               "ofType": null
             }
           },
@@ -7602,7 +7992,7 @@
         "inputFields": null,
         "interfaces": [],
         "kind": "OBJECT",
-        "name": "bucket_has_many_bucketTagList_connections",
+        "name": "bucket_has_many_bucketTagsList_connections",
         "possibleTypes": null
       },
       {
@@ -7634,7 +8024,7 @@
             "name": "data",
             "type": {
               "kind": "OBJECT",
-              "name": "Author_RawModel",
+              "name": "Author_Raw_Model",
               "ofType": null
             }
           },

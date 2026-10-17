@@ -80,14 +80,17 @@ func (s *GraphQLServer) RegisterUserSchema() {
 	loginUserField := &graphql.Field{
 		Type: loginUserPayload,
 		Args: graphql.FieldConfigArgument{
-			"auth_method": &graphql.ArgumentConfig{Type: graphql.String},
-			"project_id":  &graphql.ArgumentConfig{Type: graphql.NewNonNull(graphql.String)},
-			"phone":       &graphql.ArgumentConfig{Type: graphql.String},
-			"email":       &graphql.ArgumentConfig{Type: graphql.String},
-			"password":    &graphql.ArgumentConfig{Type: graphql.String},
-			"code":        &graphql.ArgumentConfig{Type: graphql.String},
-			"state":       &graphql.ArgumentConfig{Type: graphql.String},
-			"id_token":    &graphql.ArgumentConfig{Type: graphql.String},
+			"auth_method":  &graphql.ArgumentConfig{Type: graphql.String},
+			"project_id":   &graphql.ArgumentConfig{Type: graphql.NewNonNull(graphql.String)},
+			"phone":        &graphql.ArgumentConfig{Type: graphql.String},
+			"email":        &graphql.ArgumentConfig{Type: graphql.String},
+			"password":     &graphql.ArgumentConfig{Type: graphql.String},
+			"code":         &graphql.ArgumentConfig{Type: graphql.String},
+			"state":        &graphql.ArgumentConfig{Type: graphql.String},
+			"id_token":     &graphql.ArgumentConfig{Type: graphql.String},
+			// Optional native provider token. Keep this additive so published
+			// clients that omit it remain valid after an engine deploy.
+			"access_token": &graphql.ArgumentConfig{Type: graphql.String},
 			// When false, Google/OAuth must find an existing account (no auto-provision / create).
 			// Omit or true: keep signup auto-provision when tenant_id is empty.
 			"signup": &graphql.ArgumentConfig{Type: graphql.Boolean},

@@ -117,177 +117,7 @@
         ],
         "interfaces": null,
         "kind": "INPUT_OBJECT",
-        "name": "ARTICLELIST_COUNT_GROUPBY_INPUT",
-        "possibleTypes": null
-      },
-      {
-        "description": "",
-        "enumValues": null,
-        "fields": null,
-        "inputFields": [
-          {
-            "defaultValue": null,
-            "description": "",
-            "name": "title",
-            "type": {
-              "kind": "ENUM",
-              "name": "SORT_ENUM",
-              "ofType": null
-            }
-          }
-        ],
-        "interfaces": null,
-        "kind": "INPUT_OBJECT",
-        "name": "ARTICLELIST_COUNT_INPUT_SORT_PAYLOAD",
-        "possibleTypes": null
-      },
-      {
-        "description": "",
-        "enumValues": null,
-        "fields": null,
-        "inputFields": [
-          {
-            "defaultValue": null,
-            "description": "",
-            "name": "OR",
-            "type": {
-              "kind": "INPUT_OBJECT",
-              "name": "ARTICLELIST_COUNT_OR_CONDITION",
-              "ofType": null
-            }
-          },
-          {
-            "defaultValue": null,
-            "description": "",
-            "name": "title",
-            "type": {
-              "kind": "INPUT_OBJECT",
-              "name": "ARTICLE_TITLE_COMMON_FILTER_CONDITION",
-              "ofType": null
-            }
-          }
-        ],
-        "interfaces": null,
-        "kind": "INPUT_OBJECT",
-        "name": "ARTICLELIST_COUNT_INPUT_WHERE_PAYLOAD",
-        "possibleTypes": null
-      },
-      {
-        "description": "Filter by document _key ids. If this is used, the where filter will be ignored.",
-        "enumValues": null,
-        "fields": null,
-        "inputFields": [
-          {
-            "defaultValue": null,
-            "description": "",
-            "name": "eq",
-            "type": {
-              "kind": "SCALAR",
-              "name": "String",
-              "ofType": null
-            }
-          },
-          {
-            "defaultValue": null,
-            "description": "",
-            "name": "in",
-            "type": {
-              "kind": "LIST",
-              "name": null,
-              "ofType": {
-                "kind": "SCALAR",
-                "name": "String",
-                "ofType": null
-              }
-            }
-          },
-          {
-            "defaultValue": null,
-            "description": "",
-            "name": "ne",
-            "type": {
-              "kind": "SCALAR",
-              "name": "String",
-              "ofType": null
-            }
-          }
-        ],
-        "interfaces": null,
-        "kind": "INPUT_OBJECT",
-        "name": "ARTICLELIST_COUNT_KEY_CONDITION",
-        "possibleTypes": null
-      },
-      {
-        "description": "",
-        "enumValues": null,
-        "fields": null,
-        "inputFields": [
-          {
-            "defaultValue": null,
-            "description": "",
-            "name": "title",
-            "type": {
-              "kind": "INPUT_OBJECT",
-              "name": "ARTICLE_TITLE_COMMON_FILTER_CONDITION",
-              "ofType": null
-            }
-          }
-        ],
-        "interfaces": null,
-        "kind": "INPUT_OBJECT",
-        "name": "ARTICLELIST_COUNT_OR_CONDITION",
-        "possibleTypes": null
-      },
-      {
-        "description": "Group by fields with key-value pairs for both user input and editable fields",
-        "enumValues": null,
-        "fields": null,
-        "inputFields": [
-          {
-            "defaultValue": null,
-            "description": "Field name to group by",
-            "name": "key",
-            "type": {
-              "kind": "SCALAR",
-              "name": "String",
-              "ofType": null
-            }
-          },
-          {
-            "defaultValue": null,
-            "description": "Value to group by",
-            "name": "value",
-            "type": {
-              "kind": "SCALAR",
-              "name": "String",
-              "ofType": null
-            }
-          }
-        ],
-        "interfaces": null,
-        "kind": "INPUT_OBJECT",
         "name": "ARTICLELIST_GROUPBY_INPUT",
-        "possibleTypes": null
-      },
-      {
-        "description": "",
-        "enumValues": null,
-        "fields": null,
-        "inputFields": [
-          {
-            "defaultValue": null,
-            "description": "",
-            "name": "title",
-            "type": {
-              "kind": "ENUM",
-              "name": "SORT_ENUM",
-              "ofType": null
-            }
-          }
-        ],
-        "interfaces": null,
-        "kind": "INPUT_OBJECT",
-        "name": "ARTICLELIST_INPUT_SORT_PAYLOAD",
         "possibleTypes": null
       },
       {
@@ -311,7 +141,7 @@
             "name": "title",
             "type": {
               "kind": "INPUT_OBJECT",
-              "name": "ARTICLE_TITLE_COMMON_FILTER_CONDITION",
+              "name": "ARTICLE__FIELD__TITLE__COMMON_FILTER_CONDITION",
               "ofType": null
             }
           }
@@ -377,7 +207,7 @@
             "name": "title",
             "type": {
               "kind": "INPUT_OBJECT",
-              "name": "ARTICLE_TITLE_COMMON_FILTER_CONDITION",
+              "name": "ARTICLE__FIELD__TITLE__COMMON_FILTER_CONDITION",
               "ofType": null
             }
           }
@@ -385,6 +215,134 @@
         "interfaces": null,
         "kind": "INPUT_OBJECT",
         "name": "ARTICLELIST_OR_CONDITION",
+        "possibleTypes": null
+      },
+      {
+        "description": "Group by fields with key-value pairs for both user input and editable fields",
+        "enumValues": null,
+        "fields": null,
+        "inputFields": [
+          {
+            "defaultValue": null,
+            "description": "Field name to group by",
+            "name": "key",
+            "type": {
+              "kind": "SCALAR",
+              "name": "String",
+              "ofType": null
+            }
+          },
+          {
+            "defaultValue": null,
+            "description": "Value to group by",
+            "name": "value",
+            "type": {
+              "kind": "SCALAR",
+              "name": "String",
+              "ofType": null
+            }
+          }
+        ],
+        "interfaces": null,
+        "kind": "INPUT_OBJECT",
+        "name": "ARTICLE_LIST_COUNT_GROUPBY_INPUT",
+        "possibleTypes": null
+      },
+      {
+        "description": "",
+        "enumValues": null,
+        "fields": null,
+        "inputFields": [
+          {
+            "defaultValue": null,
+            "description": "",
+            "name": "OR",
+            "type": {
+              "kind": "INPUT_OBJECT",
+              "name": "ARTICLE_LIST_COUNT_OR_CONDITION",
+              "ofType": null
+            }
+          },
+          {
+            "defaultValue": null,
+            "description": "",
+            "name": "title",
+            "type": {
+              "kind": "INPUT_OBJECT",
+              "name": "ARTICLE__FIELD__TITLE__COMMON_FILTER_CONDITION",
+              "ofType": null
+            }
+          }
+        ],
+        "interfaces": null,
+        "kind": "INPUT_OBJECT",
+        "name": "ARTICLE_LIST_COUNT_INPUT_WHERE_PAYLOAD",
+        "possibleTypes": null
+      },
+      {
+        "description": "Filter by document _key ids. If this is used, the where filter will be ignored.",
+        "enumValues": null,
+        "fields": null,
+        "inputFields": [
+          {
+            "defaultValue": null,
+            "description": "",
+            "name": "eq",
+            "type": {
+              "kind": "SCALAR",
+              "name": "String",
+              "ofType": null
+            }
+          },
+          {
+            "defaultValue": null,
+            "description": "",
+            "name": "in",
+            "type": {
+              "kind": "LIST",
+              "name": null,
+              "ofType": {
+                "kind": "SCALAR",
+                "name": "String",
+                "ofType": null
+              }
+            }
+          },
+          {
+            "defaultValue": null,
+            "description": "",
+            "name": "ne",
+            "type": {
+              "kind": "SCALAR",
+              "name": "String",
+              "ofType": null
+            }
+          }
+        ],
+        "interfaces": null,
+        "kind": "INPUT_OBJECT",
+        "name": "ARTICLE_LIST_COUNT_KEY_CONDITION",
+        "possibleTypes": null
+      },
+      {
+        "description": "",
+        "enumValues": null,
+        "fields": null,
+        "inputFields": [
+          {
+            "defaultValue": null,
+            "description": "",
+            "name": "title",
+            "type": {
+              "kind": "INPUT_OBJECT",
+              "name": "ARTICLE__FIELD__TITLE__COMMON_FILTER_CONDITION",
+              "ofType": null
+            }
+          }
+        ],
+        "interfaces": null,
+        "kind": "INPUT_OBJECT",
+        "name": "ARTICLE_LIST_COUNT_OR_CONDITION",
         "possibleTypes": null
       },
       {
@@ -453,7 +411,7 @@
         ],
         "interfaces": null,
         "kind": "INPUT_OBJECT",
-        "name": "ARTICLE_TITLE_COMMON_FILTER_CONDITION",
+        "name": "ARTICLE__FIELD__TITLE__COMMON_FILTER_CONDITION",
         "possibleTypes": null
       },
       {
@@ -468,7 +426,7 @@
             "name": "data",
             "type": {
               "kind": "OBJECT",
-              "name": "Article_RawModel",
+              "name": "Article_Raw_Model",
               "ofType": null
             }
           },
@@ -522,87 +480,12 @@
           {
             "args": [],
             "deprecationReason": null,
-            "description": "",
-            "isDeprecated": false,
-            "name": "title",
-            "type": {
-              "kind": "SCALAR",
-              "name": "String",
-              "ofType": null
-            }
-          }
-        ],
-        "inputFields": null,
-        "interfaces": [],
-        "kind": "OBJECT",
-        "name": "Article_RawModel",
-        "possibleTypes": null
-      },
-      {
-        "description": "",
-        "enumValues": null,
-        "fields": null,
-        "inputFields": [
-          {
-            "defaultValue": null,
-            "description": "",
-            "name": "_id",
-            "type": {
-              "kind": "SCALAR",
-              "name": "String",
-              "ofType": null
-            }
-          },
-          {
-            "defaultValue": null,
-            "description": "",
-            "name": "title",
-            "type": {
-              "kind": "SCALAR",
-              "name": "String",
-              "ofType": null
-            }
-          }
-        ],
-        "interfaces": null,
-        "kind": "INPUT_OBJECT",
-        "name": "Article_create_payload",
-        "possibleTypes": null
-      },
-      {
-        "description": "",
-        "enumValues": null,
-        "fields": null,
-        "inputFields": [
-          {
-            "defaultValue": null,
-            "description": "",
-            "name": "title",
-            "type": {
-              "kind": "SCALAR",
-              "name": "String",
-              "ofType": null
-            }
-          }
-        ],
-        "interfaces": null,
-        "kind": "INPUT_OBJECT",
-        "name": "Article_update_payload",
-        "possibleTypes": null
-      },
-      {
-        "description": "",
-        "enumValues": null,
-        "fields": [
-          {
-            "args": [],
-            "deprecationReason": null,
             "description": "Field Details",
             "isDeprecated": false,
             "name": "data",
             "type": {
               "kind": "OBJECT",
-              "name": "Article_RawModel",
+              "name": "Article_Raw_Model",
               "ofType": null
             }
           },
@@ -646,30 +529,7 @@
         "inputFields": null,
         "interfaces": [],
         "kind": "OBJECT",
-        "name": "Articlelist",
-        "possibleTypes": null
-      },
-      {
-        "description": "",
-        "enumValues": null,
-        "fields": [
-          {
-            "args": [],
-            "deprecationReason": null,
-            "description": "",
-            "isDeprecated": false,
-            "name": "total",
-            "type": {
-              "kind": "SCALAR",
-              "name": "Int",
-              "ofType": null
-            }
-          }
-        ],
-        "inputFields": null,
-        "interfaces": [],
-        "kind": "OBJECT",
-        "name": "Articlelist_connection",
+        "name": "ArticleList",
         "possibleTypes": null
       },
       {
@@ -700,7 +560,105 @@
         ],
         "interfaces": null,
         "kind": "INPUT_OBJECT",
-        "name": "Articlelist_upsert_payload",
+        "name": "Article_Create_Payload",
+        "possibleTypes": null
+      },
+      {
+        "description": "",
+        "enumValues": null,
+        "fields": [
+          {
+            "args": [],
+            "deprecationReason": null,
+            "description": "",
+            "isDeprecated": false,
+            "name": "total",
+            "type": {
+              "kind": "SCALAR",
+              "name": "Int",
+              "ofType": null
+            }
+          }
+        ],
+        "inputFields": null,
+        "interfaces": [],
+        "kind": "OBJECT",
+        "name": "Article_List_Connection",
+        "possibleTypes": null
+      },
+      {
+        "description": "",
+        "enumValues": null,
+        "fields": null,
+        "inputFields": [
+          {
+            "defaultValue": null,
+            "description": "",
+            "name": "_id",
+            "type": {
+              "kind": "SCALAR",
+              "name": "String",
+              "ofType": null
+            }
+          },
+          {
+            "defaultValue": null,
+            "description": "",
+            "name": "title",
+            "type": {
+              "kind": "SCALAR",
+              "name": "String",
+              "ofType": null
+            }
+          }
+        ],
+        "interfaces": null,
+        "kind": "INPUT_OBJECT",
+        "name": "Article_List_Upsert_Payload",
+        "possibleTypes": null
+      },
+      {
+        "description": "",
+        "enumValues": null,
+        "fields": [
+          {
+            "args": [],
+            "deprecationReason": null,
+            "description": "",
+            "isDeprecated": false,
+            "name": "title",
+            "type": {
+              "kind": "SCALAR",
+              "name": "String",
+              "ofType": null
+            }
+          }
+        ],
+        "inputFields": null,
+        "interfaces": [],
+        "kind": "OBJECT",
+        "name": "Article_Raw_Model",
+        "possibleTypes": null
+      },
+      {
+        "description": "",
+        "enumValues": null,
+        "fields": null,
+        "inputFields": [
+          {
+            "defaultValue": null,
+            "description": "",
+            "name": "title",
+            "type": {
+              "kind": "SCALAR",
+              "name": "String",
+              "ofType": null
+            }
+          }
+        ],
+        "interfaces": null,
+        "kind": "INPUT_OBJECT",
+        "name": "Article_Update_Payload",
         "possibleTypes": null
       },
       {
@@ -725,7 +683,7 @@
             "name": "data",
             "type": {
               "kind": "OBJECT",
-              "name": "Article_RawModel",
+              "name": "Article_Raw_Model",
               "ofType": null
             }
           },
@@ -855,6 +813,16 @@
         "possibleTypes": null
       },
       {
+        "description": "খাটি JSON object, key:value pair",
+        "enumValues": null,
+        "fields": null,
+        "inputFields": null,
+        "interfaces": null,
+        "kind": "SCALAR",
+        "name": "JSON",
+        "possibleTypes": null
+      },
+      {
         "description": "",
         "enumValues": [
           {
@@ -979,9 +947,19 @@
                   "name": null,
                   "ofType": {
                     "kind": "INPUT_OBJECT",
-                    "name": "Article_create_payload",
+                    "name": "Article_Create_Payload",
                     "ofType": null
                   }
+                }
+              },
+              {
+                "defaultValue": null,
+                "description": "",
+                "name": "status",
+                "type": {
+                  "kind": "ENUM",
+                  "name": "PUBLISH_STATUS_TYPE_ENUM",
+                  "ofType": null
                 }
               }
             ],
@@ -1078,7 +1056,17 @@
                 "name": "payload",
                 "type": {
                   "kind": "INPUT_OBJECT",
-                  "name": "Article_update_payload",
+                  "name": "Article_Update_Payload",
+                  "ofType": null
+                }
+              },
+              {
+                "defaultValue": null,
+                "description": "",
+                "name": "status",
+                "type": {
+                  "kind": "ENUM",
+                  "name": "PUBLISH_STATUS_TYPE_ENUM",
                   "ofType": null
                 }
               }
@@ -1120,24 +1108,34 @@
                       "name": null,
                       "ofType": {
                         "kind": "INPUT_OBJECT",
-                        "name": "Articlelist_upsert_payload",
+                        "name": "Article_List_Upsert_Payload",
                         "ofType": null
                       }
                     }
                   }
+                }
+              },
+              {
+                "defaultValue": null,
+                "description": "",
+                "name": "status",
+                "type": {
+                  "kind": "ENUM",
+                  "name": "PUBLISH_STATUS_TYPE_ENUM",
+                  "ofType": null
                 }
               }
             ],
             "deprecationReason": null,
             "description": "",
             "isDeprecated": false,
-            "name": "upsertArticlelist",
+            "name": "upsertArticleList",
             "type": {
               "kind": "LIST",
               "name": null,
               "ofType": {
                 "kind": "OBJECT",
-                "name": "Upsert_Articlelist",
+                "name": "Upsert_ArticleList",
                 "ofType": null
               }
             }
@@ -1147,6 +1145,237 @@
         "interfaces": [],
         "kind": "OBJECT",
         "name": "MutationType",
+        "possibleTypes": null
+      },
+      {
+        "description": "",
+        "enumValues": null,
+        "fields": [
+          {
+            "args": [],
+            "deprecationReason": null,
+            "description": "",
+            "isDeprecated": false,
+            "name": "api_permissions",
+            "type": {
+              "kind": "SCALAR",
+              "name": "JSON",
+              "ofType": null
+            }
+          },
+          {
+            "args": [],
+            "deprecationReason": null,
+            "description": "",
+            "isDeprecated": false,
+            "name": "grace_models",
+            "type": {
+              "kind": "LIST",
+              "name": null,
+              "ofType": {
+                "kind": "SCALAR",
+                "name": "String",
+                "ofType": null
+              }
+            }
+          },
+          {
+            "args": [],
+            "deprecationReason": null,
+            "description": "",
+            "isDeprecated": false,
+            "name": "is_admin",
+            "type": {
+              "kind": "SCALAR",
+              "name": "Boolean",
+              "ofType": null
+            }
+          },
+          {
+            "args": [],
+            "deprecationReason": null,
+            "description": "",
+            "isDeprecated": false,
+            "name": "logic_executions",
+            "type": {
+              "kind": "LIST",
+              "name": null,
+              "ofType": {
+                "kind": "SCALAR",
+                "name": "String",
+                "ofType": null
+              }
+            }
+          },
+          {
+            "args": [],
+            "deprecationReason": null,
+            "description": "",
+            "isDeprecated": false,
+            "name": "plan_clamped",
+            "type": {
+              "kind": "SCALAR",
+              "name": "Boolean",
+              "ofType": null
+            }
+          },
+          {
+            "args": [],
+            "deprecationReason": null,
+            "description": "",
+            "isDeprecated": false,
+            "name": "plan_slug",
+            "type": {
+              "kind": "SCALAR",
+              "name": "String",
+              "ofType": null
+            }
+          },
+          {
+            "args": [],
+            "deprecationReason": null,
+            "description": "",
+            "isDeprecated": false,
+            "name": "quotas",
+            "type": {
+              "kind": "SCALAR",
+              "name": "JSON",
+              "ofType": null
+            }
+          },
+          {
+            "args": [],
+            "deprecationReason": null,
+            "description": "",
+            "isDeprecated": false,
+            "name": "role_id",
+            "type": {
+              "kind": "SCALAR",
+              "name": "String",
+              "ofType": null
+            }
+          },
+          {
+            "args": [],
+            "deprecationReason": null,
+            "description": "",
+            "isDeprecated": false,
+            "name": "usage",
+            "type": {
+              "kind": "SCALAR",
+              "name": "JSON",
+              "ofType": null
+            }
+          }
+        ],
+        "inputFields": null,
+        "interfaces": [],
+        "kind": "OBJECT",
+        "name": "MyEffectivePermissionsPayload",
+        "possibleTypes": null
+      },
+      {
+        "description": "",
+        "enumValues": [
+          {
+            "deprecationReason": null,
+            "description": "When Document is in Draft",
+            "isDeprecated": false,
+            "name": "draft"
+          },
+          {
+            "deprecationReason": null,
+            "description": "When Document is published",
+            "isDeprecated": false,
+            "name": "published"
+          }
+        ],
+        "fields": null,
+        "inputFields": null,
+        "interfaces": null,
+        "kind": "ENUM",
+        "name": "PUBLISH_STATUS_TYPE_ENUM",
+        "possibleTypes": null
+      },
+      {
+        "description": "",
+        "enumValues": null,
+        "fields": [
+          {
+            "args": [],
+            "deprecationReason": null,
+            "description": "",
+            "isDeprecated": false,
+            "name": "state",
+            "type": {
+              "kind": "SCALAR",
+              "name": "String",
+              "ofType": null
+            }
+          }
+        ],
+        "inputFields": null,
+        "interfaces": [],
+        "kind": "OBJECT",
+        "name": "PublicGoogleOAuthStatePayload",
+        "possibleTypes": null
+      },
+      {
+        "description": "",
+        "enumValues": null,
+        "fields": [
+          {
+            "args": [],
+            "deprecationReason": null,
+            "description": "",
+            "isDeprecated": false,
+            "name": "token",
+            "type": {
+              "kind": "SCALAR",
+              "name": "String",
+              "ofType": null
+            }
+          },
+          {
+            "args": [],
+            "deprecationReason": null,
+            "description": "",
+            "isDeprecated": false,
+            "name": "user",
+            "type": {
+              "kind": "OBJECT",
+              "name": "UserItem",
+              "ofType": null
+            }
+          }
+        ],
+        "inputFields": null,
+        "interfaces": [],
+        "kind": "OBJECT",
+        "name": "PublicLoginUserPayload",
+        "possibleTypes": null
+      },
+      {
+        "description": "",
+        "enumValues": null,
+        "fields": [
+          {
+            "args": [],
+            "deprecationReason": null,
+            "description": "",
+            "isDeprecated": false,
+            "name": "state",
+            "type": {
+              "kind": "SCALAR",
+              "name": "String",
+              "ofType": null
+            }
+          }
+        ],
+        "inputFields": null,
+        "interfaces": [],
+        "kind": "OBJECT",
+        "name": "PublicOAuthStatePayload",
         "possibleTypes": null
       },
       {
@@ -1249,16 +1478,6 @@
               {
                 "defaultValue": null,
                 "description": "",
-                "name": "sort",
-                "type": {
-                  "kind": "INPUT_OBJECT",
-                  "name": "ARTICLELIST_INPUT_SORT_PAYLOAD",
-                  "ofType": null
-                }
-              },
-              {
-                "defaultValue": null,
-                "description": "",
                 "name": "status",
                 "type": {
                   "kind": "ENUM",
@@ -1286,7 +1505,7 @@
               "name": null,
               "ofType": {
                 "kind": "OBJECT",
-                "name": "Articlelist",
+                "name": "ArticleList",
                 "ofType": null
               }
             }
@@ -1299,7 +1518,7 @@
                 "name": "_key",
                 "type": {
                   "kind": "INPUT_OBJECT",
-                  "name": "ARTICLELIST_COUNT_KEY_CONDITION",
+                  "name": "ARTICLE_LIST_COUNT_KEY_CONDITION",
                   "ofType": null
                 }
               },
@@ -1312,7 +1531,7 @@
                   "name": null,
                   "ofType": {
                     "kind": "INPUT_OBJECT",
-                    "name": "ARTICLELIST_COUNT_GROUPBY_INPUT",
+                    "name": "ARTICLE_LIST_COUNT_GROUPBY_INPUT",
                     "ofType": null
                   }
                 }
@@ -1350,16 +1569,6 @@
               {
                 "defaultValue": null,
                 "description": "",
-                "name": "sort",
-                "type": {
-                  "kind": "INPUT_OBJECT",
-                  "name": "ARTICLELIST_COUNT_INPUT_SORT_PAYLOAD",
-                  "ofType": null
-                }
-              },
-              {
-                "defaultValue": null,
-                "description": "",
                 "name": "status",
                 "type": {
                   "kind": "ENUM",
@@ -1373,7 +1582,7 @@
                 "name": "where",
                 "type": {
                   "kind": "INPUT_OBJECT",
-                  "name": "ARTICLELIST_COUNT_INPUT_WHERE_PAYLOAD",
+                  "name": "ARTICLE_LIST_COUNT_INPUT_WHERE_PAYLOAD",
                   "ofType": null
                 }
               }
@@ -1384,7 +1593,204 @@
             "name": "articleListCount",
             "type": {
               "kind": "OBJECT",
-              "name": "Articlelist_connection",
+              "name": "Article_List_Connection",
+              "ofType": null
+            }
+          },
+          {
+            "args": [
+              {
+                "defaultValue": null,
+                "description": "",
+                "name": "project_id",
+                "type": {
+                  "kind": "NON_NULL",
+                  "name": null,
+                  "ofType": {
+                    "kind": "SCALAR",
+                    "name": "String",
+                    "ofType": null
+                  }
+                }
+              }
+            ],
+            "deprecationReason": null,
+            "description": "",
+            "isDeprecated": false,
+            "name": "googleOAuthState",
+            "type": {
+              "kind": "OBJECT",
+              "name": "PublicGoogleOAuthStatePayload",
+              "ofType": null
+            }
+          },
+          {
+            "args": [
+              {
+                "defaultValue": null,
+                "description": "",
+                "name": "access_token",
+                "type": {
+                  "kind": "SCALAR",
+                  "name": "String",
+                  "ofType": null
+                }
+              },
+              {
+                "defaultValue": null,
+                "description": "",
+                "name": "auth_method",
+                "type": {
+                  "kind": "SCALAR",
+                  "name": "String",
+                  "ofType": null
+                }
+              },
+              {
+                "defaultValue": null,
+                "description": "",
+                "name": "code",
+                "type": {
+                  "kind": "SCALAR",
+                  "name": "String",
+                  "ofType": null
+                }
+              },
+              {
+                "defaultValue": null,
+                "description": "",
+                "name": "email",
+                "type": {
+                  "kind": "SCALAR",
+                  "name": "String",
+                  "ofType": null
+                }
+              },
+              {
+                "defaultValue": null,
+                "description": "",
+                "name": "id_token",
+                "type": {
+                  "kind": "SCALAR",
+                  "name": "String",
+                  "ofType": null
+                }
+              },
+              {
+                "defaultValue": null,
+                "description": "",
+                "name": "password",
+                "type": {
+                  "kind": "SCALAR",
+                  "name": "String",
+                  "ofType": null
+                }
+              },
+              {
+                "defaultValue": null,
+                "description": "",
+                "name": "phone",
+                "type": {
+                  "kind": "SCALAR",
+                  "name": "String",
+                  "ofType": null
+                }
+              },
+              {
+                "defaultValue": null,
+                "description": "",
+                "name": "project_id",
+                "type": {
+                  "kind": "NON_NULL",
+                  "name": null,
+                  "ofType": {
+                    "kind": "SCALAR",
+                    "name": "String",
+                    "ofType": null
+                  }
+                }
+              },
+              {
+                "defaultValue": null,
+                "description": "",
+                "name": "signup",
+                "type": {
+                  "kind": "SCALAR",
+                  "name": "Boolean",
+                  "ofType": null
+                }
+              },
+              {
+                "defaultValue": null,
+                "description": "",
+                "name": "state",
+                "type": {
+                  "kind": "SCALAR",
+                  "name": "String",
+                  "ofType": null
+                }
+              }
+            ],
+            "deprecationReason": null,
+            "description": "",
+            "isDeprecated": false,
+            "name": "loginUser",
+            "type": {
+              "kind": "OBJECT",
+              "name": "PublicLoginUserPayload",
+              "ofType": null
+            }
+          },
+          {
+            "args": [],
+            "deprecationReason": null,
+            "description": "Effective app-user permissions after tenant plan ceiling (scopes, quotas, grace).",
+            "isDeprecated": false,
+            "name": "myEffectivePermissions",
+            "type": {
+              "kind": "OBJECT",
+              "name": "MyEffectivePermissionsPayload",
+              "ofType": null
+            }
+          },
+          {
+            "args": [
+              {
+                "defaultValue": null,
+                "description": "",
+                "name": "project_id",
+                "type": {
+                  "kind": "NON_NULL",
+                  "name": null,
+                  "ofType": {
+                    "kind": "SCALAR",
+                    "name": "String",
+                    "ofType": null
+                  }
+                }
+              },
+              {
+                "defaultValue": null,
+                "description": "",
+                "name": "provider",
+                "type": {
+                  "kind": "NON_NULL",
+                  "name": null,
+                  "ofType": {
+                    "kind": "SCALAR",
+                    "name": "String",
+                    "ofType": null
+                  }
+                }
+              }
+            ],
+            "deprecationReason": null,
+            "description": "",
+            "isDeprecated": false,
+            "name": "oauthState",
+            "type": {
+              "kind": "OBJECT",
+              "name": "PublicOAuthStatePayload",
               "ofType": null
             }
           }
@@ -1393,29 +1799,6 @@
         "interfaces": [],
         "kind": "OBJECT",
         "name": "QueryType",
-        "possibleTypes": null
-      },
-      {
-        "description": "",
-        "enumValues": [
-          {
-            "deprecationReason": null,
-            "description": "SORT BY ASC",
-            "isDeprecated": false,
-            "name": "ASC"
-          },
-          {
-            "deprecationReason": null,
-            "description": "SORT BY DESC",
-            "isDeprecated": false,
-            "name": "DESC"
-          }
-        ],
-        "fields": null,
-        "inputFields": null,
-        "interfaces": null,
-        "kind": "ENUM",
-        "name": "SORT_ENUM",
         "possibleTypes": null
       },
       {
@@ -1440,7 +1823,7 @@
             "name": "data",
             "type": {
               "kind": "OBJECT",
-              "name": "Article_RawModel",
+              "name": "Article_Raw_Model",
               "ofType": null
             }
           },
@@ -1499,7 +1882,7 @@
             "name": "data",
             "type": {
               "kind": "OBJECT",
-              "name": "Article_RawModel",
+              "name": "Article_Raw_Model",
               "ofType": null
             }
           },
@@ -1543,7 +1926,126 @@
         "inputFields": null,
         "interfaces": [],
         "kind": "OBJECT",
-        "name": "Upsert_Articlelist",
+        "name": "Upsert_ArticleList",
+        "possibleTypes": null
+      },
+      {
+        "description": "",
+        "enumValues": null,
+        "fields": [
+          {
+            "args": [],
+            "deprecationReason": null,
+            "description": "",
+            "isDeprecated": false,
+            "name": "created_at",
+            "type": {
+              "kind": "SCALAR",
+              "name": "String",
+              "ofType": null
+            }
+          },
+          {
+            "args": [],
+            "deprecationReason": null,
+            "description": "",
+            "isDeprecated": false,
+            "name": "email",
+            "type": {
+              "kind": "SCALAR",
+              "name": "String",
+              "ofType": null
+            }
+          },
+          {
+            "args": [],
+            "deprecationReason": null,
+            "description": "",
+            "isDeprecated": false,
+            "name": "id",
+            "type": {
+              "kind": "SCALAR",
+              "name": "String",
+              "ofType": null
+            }
+          },
+          {
+            "args": [],
+            "deprecationReason": null,
+            "description": "",
+            "isDeprecated": false,
+            "name": "phone",
+            "type": {
+              "kind": "SCALAR",
+              "name": "String",
+              "ofType": null
+            }
+          },
+          {
+            "args": [],
+            "deprecationReason": null,
+            "description": "",
+            "isDeprecated": false,
+            "name": "provider",
+            "type": {
+              "kind": "SCALAR",
+              "name": "String",
+              "ofType": null
+            }
+          },
+          {
+            "args": [],
+            "deprecationReason": null,
+            "description": "",
+            "isDeprecated": false,
+            "name": "role",
+            "type": {
+              "kind": "SCALAR",
+              "name": "String",
+              "ofType": null
+            }
+          },
+          {
+            "args": [],
+            "deprecationReason": null,
+            "description": "",
+            "isDeprecated": false,
+            "name": "status",
+            "type": {
+              "kind": "SCALAR",
+              "name": "String",
+              "ofType": null
+            }
+          },
+          {
+            "args": [],
+            "deprecationReason": null,
+            "description": "",
+            "isDeprecated": false,
+            "name": "updated_at",
+            "type": {
+              "kind": "SCALAR",
+              "name": "String",
+              "ofType": null
+            }
+          },
+          {
+            "args": [],
+            "deprecationReason": null,
+            "description": "",
+            "isDeprecated": false,
+            "name": "username",
+            "type": {
+              "kind": "SCALAR",
+              "name": "String",
+              "ofType": null
+            }
+          }
+        ],
+        "inputFields": null,
+        "interfaces": [],
+        "kind": "OBJECT",
+        "name": "UserItem",
         "possibleTypes": null
       },
       {
