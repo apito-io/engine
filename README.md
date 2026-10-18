@@ -6,21 +6,21 @@
 
 **Build locally. Scale when you’re ready.**
 
-Apito Engine is a Fair Source GraphQL stack that turns your database into a production-ready API. Self-host it on infrastructure you control. When you want managed hosting, sync the same project to Apito Cloud.
+Apito Engine is a self-hosted GraphQL stack. You run it on infrastructure you control. When you want managed hosting, sync the same project to Apito Cloud.
 
-Current releases are **Fair Source — converts to Apache 2.0 after two years** (FSL-1.1-ALv2). They are not OSI open source. Tags published through `v1.8.25` remain Apache 2.0. See [LICENSING.md](LICENSING.md).
+Licensed under AGPL-3.0. You can use, modify and self-host it. If you run a modified version as a network service, you must publish your changes under AGPL-3.0. A commercial license is available from Apito LLC. Releases v1.8.26 to v1.8.30 remain FSL-1.1-ALv2; see LICENSING.md.
 
 The self-hosted binary is `github.com/apito-io/open_driver/cmd/oss`. It injects the public database, cache, key-value, and in-process realtime factories. `go run` in this module alone does not inject those factories. Plugins and a networked realtime bus are optional and stay out of the default binary.
 
 <p align="center">
   <a href="https://apito.io"><strong>Website</strong></a> ·
-  <a href="https://docs.apito.io"><strong>Documentation</strong></a> ·
-  <a href="https://discord.com/invite/fwHgF8pUpt"><strong>Discord</strong></a>
+  <a href="https://apito.io/docs"><strong>Documentation</strong></a> ·
+  <a href="https://discord.gg/Xb7p2ddC6E"><strong>Discord</strong></a>
 </p>
 
 <p align="center">
   <a href="https://github.com/apito-io/engine/blob/main/LICENSE">
-    <img src="https://img.shields.io/badge/license-Fair%20Source%20(FSL--1.1--ALv2)-blue.svg" alt="Fair Source — converts to Apache 2.0 after two years" />
+    <img src="https://img.shields.io/badge/license-AGPL--3.0-blue.svg" alt="AGPL-3.0" />
   </a>
   <a href="https://github.com/apito-io/engine/releases">
     <img src="https://img.shields.io/github/v/release/apito-io/engine" alt="Release" />
@@ -37,14 +37,14 @@ The self-hosted binary is `github.com/apito-io/open_driver/cmd/oss`. It injects 
 
 ## Features
 
-- **🚀 Instant GraphQL APIs** - Connect your database and get a production-ready GraphQL API instantly. [Docs](https://docs.apito.io/graphql)
-- **🔌 Dual Plugin Architecture** - Extend functionality with both high-performance Go plugins and secure process-isolated HashiCorp plugins. [Docs](https://docs.apito.io/plugins)
-- **🗄️ Multi-Database Support** - Works with MongoDB, PostgreSQL, MySQL, MariaDB, MSSQL, SQLite, and more with connection pooling. [Docs](https://docs.apito.io/databases)
-- **🔐 Authentication** - JWT-based auth with role-based access control, API keys, and multi-tenant isolation. [Docs](https://docs.apito.io/auth)
-- **⚡ Real-time Subscriptions** - WebSocket-based GraphQL subscriptions for live data updates. [Docs](https://docs.apito.io/subscriptions)
-- **🎯 Custom Functions** - Serverless-style function execution within GraphQL queries and mutations. [Docs](https://docs.apito.io/functions)
-- **📁 File Storage** - Built-in file upload and management with multiple storage backends. [Docs](https://docs.apito.io/storage)
-- **🏢 Multi-Tenant SaaS** - Native support for building multi-tenant applications with data isolation. [Docs](https://docs.apito.io/multi-tenancy)
+- **GraphQL APIs** - Connect your database and get a GraphQL API. [Docs](https://apito.io/docs)
+- **Plugins** - Extend the engine with Go plugins and process-isolated HashiCorp plugins. [Docs](https://apito.io/docs/developing-plugins/first-plugin/)
+- **Databases** - SQLite, PostgreSQL, MySQL, MariaDB, and MongoDB. DynamoDB, Oracle, and Cassandra are coming soon. [Docs](https://apito.io/docs/platform/database-design/)
+- **Authentication** - JWT auth, role-based access control, API keys, and multi-tenant isolation. [Docs](https://apito.io/docs/platform/auth/)
+- **Subscriptions** - WebSocket GraphQL subscriptions. [Docs](https://apito.io/docs)
+- **Functions** - Function execution inside GraphQL queries and mutations. [Docs](https://apito.io/docs/platform/functions/)
+- **File Storage** - File upload and management. [Docs](https://apito.io/docs/platform/files/)
+- **Multi-tenant SaaS** - Tenant isolation. [Docs](https://apito.io/docs)
 - **📊 Admin Dashboard** - Comprehensive dashboard for schema management, data browsing, and analytics.
 
 ### 🎯 Apito Console
@@ -79,120 +79,33 @@ _Test and explore your GraphQL APIs in real-time_
 
 ## Quick Start
 
-### One-Line Install (Easiest)
+### Install
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/apito-io/engine/main/open-core/install.sh | bash
+curl -fsSL https://get.apito.io/install.sh | bash
+apito start
 ```
 
-This script automatically detects your platform (Linux/macOS, AMD64/ARM64) and installs the latest version.
+The console is at http://localhost:4055. The engine API is at http://localhost:5055.
 
-### Using Docker (Recommended)
-
-```bash
-# Start with MongoDB (local)
-docker run -p 8080:8080 -e DATABASE_ENGINE=mongodb \
-  -e DATABASE_HOST=localhost -e DATABASE_PORT=27017 \
-  -e DATABASE_USERNAME=admin -e DATABASE_PASSWORD=password \
-  ghcr.io/apito-io/engine:latest
-
-# Or with MongoDB Atlas (cloud)
-docker run -p 8080:8080 -e DATABASE_ENGINE=mongodb \
-  -e DATABASE_HOST=cluster0.xyz.mongodb.net \
-  -e DATABASE_USERNAME=admin -e DATABASE_PASSWORD=password \
-  ghcr.io/apito-io/engine:latest
-
-# Or with PostgreSQL
-docker run -p 8080:8080 -e DATABASE_ENGINE=postgresql \
-  -e DATABASE_HOST=localhost -e DATABASE_PORT=5432 \
-  ghcr.io/apito-io/engine:latest
-
-# Or with MySQL/MariaDB
-docker run -p 8080:8080 -e DATABASE_ENGINE=mysql \
-  -e DATABASE_HOST=localhost -e DATABASE_PORT=3306 \
-  ghcr.io/apito-io/engine:latest
-```
+`apito start` pulls `ghcr.io/apito-io/studio`.
 
 ### From Source
 
+The public binary is `github.com/apito-io/open_driver/cmd/oss`. `go run` in this module alone does not inject the database, cache, key-value, and realtime factories.
+
 ```bash
-# Clone the repository
 git clone https://github.com/apito-io/engine
-cd engine/open-core
-
-# Install dependencies
+git clone https://github.com/apito-io/open_driver
+cd open_driver/cmd/oss
+go mod edit -replace github.com/apito-io/engine=/path/to/engine
 go mod tidy
-
-# Start the server
-go run main.go
+go run .
 ```
 
-### Using Pre-built Binaries
+### Pre-built binaries
 
-Download the latest release for your platform from [GitHub Releases](https://github.com/apito-io/engine/releases).
-
-**Available Platforms:**
-
-- `engine-linux-amd64.zip` - Linux x86_64
-- `engine-linux-arm64.zip` - Linux ARM64 (Graviton, Raspberry Pi, etc.)
-- `engine-darwin-amd64.zip` - macOS Intel
-- `engine-darwin-arm64.zip` - macOS Apple Silicon (M1/M2/M3)
-
-**Platform-specific Installation:**
-
-<details>
-<summary>🍎 macOS Apple Silicon (M1/M2/M3)</summary>
-
-```bash
-# Download and install
-wget https://github.com/apito-io/engine/releases/latest/download/engine-darwin-arm64.zip
-unzip engine-darwin-arm64.zip
-chmod +x engine
-./engine
-```
-
-</details>
-
-<details>
-<summary>🍎 macOS Intel</summary>
-
-```bash
-# Download and install
-wget https://github.com/apito-io/engine/releases/latest/download/engine-darwin-amd64.zip
-unzip engine-darwin-amd64.zip
-chmod +x engine
-./engine
-```
-
-</details>
-
-<details>
-<summary>🐧 Linux x86_64</summary>
-
-```bash
-# Download and install
-wget https://github.com/apito-io/engine/releases/latest/download/engine-linux-amd64.zip
-unzip engine-linux-amd64.zip
-chmod +x engine
-./engine
-```
-
-</details>
-
-<details>
-<summary>🐧 Linux ARM64 (AWS Graviton, Raspberry Pi)</summary>
-
-```bash
-# Download and install
-wget https://github.com/apito-io/engine/releases/latest/download/engine-linux-arm64.zip
-unzip engine-linux-arm64.zip
-chmod +x engine
-./engine
-```
-
-</details>
-
-**Visit http://localhost:8080 to access the dashboard** 🚀
+Linux release assets are `apito-engine-linux-amd64` and `apito-engine-linux-arm64` on [GitHub Releases](https://github.com/apito-io/engine/releases).
 
 ## How it works
 
@@ -224,7 +137,6 @@ graph TB
             PostgreSQL[(🐘 PostgreSQL)]
             MySQL[(🐬 MySQL)]
             MariaDB[(🦭 MariaDB)]
-            MSSQL[(🏢 SQL Server)]
             SQLite[(📄 SQLite)]
         end
 
@@ -266,7 +178,7 @@ graph TB
     DBDrivers --> PostgreSQL
     DBDrivers --> MySQL
     DBDrivers --> MariaDB
-    DBDrivers --> MSSQL
+    DBDrivers --> SQLite
     DBDrivers --> SQLite
 
     %% Cache connections
@@ -285,7 +197,7 @@ graph TB
     classDef external fill:#a8e6cf,stroke:#ffffff,stroke-width:2px,color:#000000
 
     class Router,Auth,GraphQL,Realtime,Storage openCoreNode
-    class MongoDB,PostgreSQL,MySQL,MariaDB,MSSQL,SQLite,Redis database
+    class MongoDB,PostgreSQL,MySQL,MariaDB,SQLite database
     class GoPlugins,HCPlugins plugin
     class S3,Monitoring,CDN external
 ```
@@ -295,7 +207,7 @@ graph TB
 - **🧠 GraphQL layer** - Built with [`graphql-go/graphql`](https://github.com/graphql-go/graphql) for dynamic schema generation and high-performance query execution
 - **🌐 Echo Router** - High-performance HTTP router with middleware for REST endpoints and GraphQL over HTTP
 - **🔌 Plugin System** - Dual architecture supporting both Go built-in plugins (`.so` files) and HashiCorp process-isolated plugins
-- **🗄️ Database Drivers** - Multi-database support (MongoDB, PostgreSQL, MySQL, MariaDB, MSSQL, SQLite) with connection pooling and transaction management
+- **Database drivers** - SQLite, PostgreSQL, MySQL, MariaDB, and MongoDB, with connection pooling and transactions
 - **🔐 Auth Service** - JWT-based authentication with RSA signing, API keys, and session management
 - **⚡ Real-time layer** - WebSocket-based subscriptions for live data updates
 - **📁 Storage Service** - File upload and management with multiple backend support
@@ -349,18 +261,11 @@ func main() {
 
 ## Client Libraries
 
-Build applications using our official and community SDKs:
-
-| Language         | Official                                                        | SDK                                                                   | Plugin SDK |
-| ---------------- | --------------------------------------------------------------- | --------------------------------------------------------------------- | ---------- |
-| **🟢 Official**  |                                                                 |                                                                       |            |
-| Go               | [go-internal-sdk](../go-internal-sdk)                           | [go-apito-plugin-sdk](../go-apito-plugin-sdk)                         | ✅         |
-| JavaScript       | [js-internal-sdk](../js-internal-sdk)                           | [js-apito-plugin-sdk](../js-apito-plugin-sdk)                         | ✅         |
-| **💚 Community** |                                                                 |                                                                       |            |
-| Python           | [apito-py](https://github.com/apito-community/apito-py)         | [apito-plugin-py](https://github.com/apito-community/apito-plugin-py) | 🚧         |
-| PHP              | [apito-php](https://github.com/apito-community/apito-php)       | -                                                                     | -          |
-| C#               | [apito-csharp](https://github.com/apito-community/apito-csharp) | -                                                                     | -          |
-| Swift            | [apito-swift](https://github.com/apito-community/apito-swift)   | -                                                                     | -          |
+| Language | Admin SDK | Plugin SDK |
+| --- | --- | --- |
+| JavaScript | [js-admin-sdk](https://github.com/apito-io/js-admin-sdk) | [js-plugin-build-sdk](https://github.com/apito-io/js-plugin-build-sdk) |
+| Go | [go-admin-sdk](https://github.com/apito-io/go-internal-sdk) | [go-apito-plugin-sdk](https://github.com/apito-io/go-apito-plugin-sdk) |
+| Flutter | [flutter_admin_sdk](https://github.com/apito-io/flutter_admin_sdk) | |
 
 ## Examples
 
@@ -453,7 +358,7 @@ Apito can be configured via environment variables or `.env` file:
 
 ```env
 # Database Configuration (choose one)
-DATABASE_ENGINE=mongodb    # mongodb | postgresql | mysql | mariadb | mssql | sqlite
+DATABASE_ENGINE=sqlite    # sqlite | postgresql | mysql | mariadb | mongodb
 
 # MongoDB Configuration
 DATABASE_HOST=localhost     # For Atlas: your-cluster.mongodb.net
@@ -465,10 +370,9 @@ DATABASE_PASSWORD=password
 # Other Database Ports
 # DATABASE_PORT=5432        # PostgreSQL
 # DATABASE_PORT=3306        # MySQL/MariaDB
-# DATABASE_PORT=1433        # SQL Server
 
 # Server Configuration
-PORT=8080
+PORT=5055
 HOST=0.0.0.0
 ENV=development
 
@@ -591,28 +495,25 @@ We welcome contributions! Please see our [Contributing Guide](CONTRIBUTING.md) f
 
 ## Community & Support
 
-- **💬 Discord Community** - Join our [Discord server](https://discord.gg/apito) for real-time discussions and support
-- **📋 GitHub Issues** - Report bugs and request features on [GitHub Issues](https://github.com/apito-io/engine/issues)
-- **💡 GitHub Discussions** - Share ideas and get help in [GitHub Discussions](https://github.com/apito-io/engine/discussions)
-- **📚 Documentation** - Full documentation at [docs.apito.io](https://docs.apito.io)
-- **🐛 Bug Reports** - Security issues should be reported to [security@apito.io](mailto:security@apito.io)
+- **Discord** - [Discord](https://discord.gg/Xb7p2ddC6E)
+- **GitHub Issues** - [GitHub Issues](https://github.com/apito-io/engine/issues)
+- **Documentation** - [apito.io/docs](https://apito.io/docs)
+- **Security** - Report security issues to [security@apito.io](mailto:security@apito.io)
 
 ## Documentation
 
-For comprehensive documentation, visit [docs.apito.io](https://docs.apito.io).
+For documentation, visit [apito.io/docs](https://apito.io/docs).
 
-Key documentation sections:
-
-- [🚀 Quick Start Guide](https://docs.apito.io/quick-start)
-- [🔌 Plugin Development](https://docs.apito.io/plugins)
-- [🗄️ Database Setup](https://docs.apito.io/databases)
-- [🔐 Authentication](https://docs.apito.io/auth)
-- [📡 GraphQL API](https://docs.apito.io/graphql)
-- [🏗️ Architecture](https://docs.apito.io/architecture)
+- [Quick start](https://apito.io/docs/quick-start/)
+- [Plugins](https://apito.io/docs/developing-plugins/first-plugin/)
+- [Databases](https://apito.io/docs/platform/database-design/)
+- [Authentication](https://apito.io/docs/platform/auth/)
+- [GraphQL](https://apito.io/docs)
+- [Functions](https://apito.io/docs/platform/functions/)
 
 ## License
 
-This project is licensed under the Apache 2.0 License - see the [LICENSE](LICENSE) file for details.
+Licensed under AGPL-3.0. You can use, modify and self-host it. If you run a modified version as a network service, you must publish your changes under AGPL-3.0. A commercial license is available from Apito LLC. Releases v1.8.26 to v1.8.30 remain FSL-1.1-ALv2; see LICENSING.md.
 
 ## Badges
 
@@ -640,7 +541,6 @@ This project is licensed under the Apache 2.0 License - see the [LICENSE](LICENS
 
 <p align="center">
   <a href="https://apito.io">Website</a> ·
-  <a href="https://twitter.com/apito_io">Twitter</a> ·
   <a href="https://www.linkedin.com/company/apito-io">LinkedIn</a> ·
   <a href="https://github.com/apito-io">GitHub</a>
 </p>

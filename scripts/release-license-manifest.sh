@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Write a Fair Source release manifest. Dates are immutable once published.
+# Write the license manifest for a new public release.
 # Usage: scripts/release-license-manifest.sh <tag> <availability-date-YYYY-MM-DD> <out-file>
 set -euo pipefail
 
@@ -11,19 +11,15 @@ python3 - "$tag" "$availability" "$out" <<'PY'
 import datetime, json, sys
 tag, availability, out = sys.argv[1:]
 start = datetime.date.fromisoformat(availability)
-change = start.replace(year=start.year + 2)
 doc = {
     "product": "apito-engine",
     "tag": tag,
-    "spdx": "FSL-1.1-ALv2",
-    "also_known_as": "FSL-1.1-Apache-2.0",
+    "spdx": "AGPL-3.0-only",
     "availability_date": start.isoformat(),
-    "apache_change_date": change.isoformat(),
-    "future_license": "Apache-2.0",
-    "note": "Do not describe this release as OSI open source. It converts to Apache-2.0 on apache_change_date.",
+    "note": "Releases after v1.8.30 are AGPL-3.0-only. Tags v1.8.26 through v1.8.30 remain FSL-1.1-ALv2. Tags through v1.8.25 remain Apache-2.0.",
 }
 with open(out, "w", encoding="utf-8") as f:
     json.dump(doc, f, indent=2)
     f.write("\n")
-print(f"{start.isoformat()} -> {change.isoformat()}")
+print(start.isoformat())
 PY

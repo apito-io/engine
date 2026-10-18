@@ -40,9 +40,8 @@ jobs:
           python3 - <<'PY'
           import json
           doc=json.load(open("release-manifest.json"))
-          assert doc["spdx"]=="FSL-1.1-ALv2"
-          assert doc["apache_change_date"]
-          print(doc["availability_date"], doc["apache_change_date"])
+          assert doc["spdx"]=="AGPL-3.0-only"
+          print(doc["availability_date"], doc["spdx"])
           PY
 
       - name: Build public engine binary

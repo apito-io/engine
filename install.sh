@@ -101,10 +101,10 @@ if [ -f "engine" ]; then
     echo -e "   ${YELLOW}http://localhost:8080${NC}"
     echo ""
     echo -e "${BLUE}📚 Documentation:${NC}"
-    echo "   https://docs.apito.io"
+    echo "   https://apito.io/docs"
     echo ""
     echo -e "${BLUE}💬 Support:${NC}"
-    echo "   https://discord.com/invite/fwHgF8pUpt"
+    echo "   https://discord.gg/Xb7p2ddC6E"
 else
     echo -e "${RED}❌ Installation failed. Binary not found.${NC}"
     exit 1
