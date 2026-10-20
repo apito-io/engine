@@ -211,6 +211,9 @@ func (s *GraphQLServer) schemaDraftProject(p graphql.ResolveParams) (*models.Pro
 	if cache == nil || cache.Project == nil {
 		return nil, "", echo.NewHTTPError(400, "project is required")
 	}
+	if err := requireProjectAdmin(cache); err != nil {
+		return nil, "", err
+	}
 	actor := ""
 	if cache.Param != nil {
 		actor = cache.Param.UserID

@@ -14,13 +14,13 @@ import (
 	"github.com/apito-io/engine/models"
 	"github.com/apito-io/engine/resolver"
 	"github.com/apito-io/engine/utility"
+	"github.com/apito-io/open_driver/project"
+	"github.com/apito-io/open_driver/project/bbolt"
+	"github.com/apito-io/open_driver/project/mongo"
 	"github.com/getsentry/sentry-go"
 	"github.com/ilyakaznacheev/cleanenv"
 	"github.com/labstack/echo/v4"
 	"github.com/tailor-platform/graphql"
-	"github.com/apito-io/open_driver/project"
-	"github.com/apito-io/open_driver/project/bbolt"
-	"github.com/apito-io/open_driver/project/mongo"
 	"golang.org/x/crypto/bcrypt"
 )
 
@@ -395,6 +395,23 @@ func (a *AuthController) LogoutV2(c echo.Context) error {
 			Message: "user is missing in the token payload",
 			Code:    http.StatusBadRequest,
 		})
+	}
+
+	if isProjectUser, _ := c.Get("is_project_user").(bool); isProjectUser {
+		projectID, _ := c.Get("project").(string)
+		userID, _ := userId.(string)
+		if a.graphQLServer == nil || a.graphQLServer.ProjectKeyManager == nil {
+			return c.JSON(http.StatusServiceUnavailable, &models.HttpResponse{
+				Message: "project-user session revocation is unavailable",
+				Code:    http.StatusServiceUnavailable,
+			})
+		}
+		if err := a.graphQLServer.ProjectKeyManager.RevokeProjectUserSessionsWithContext(ctx, projectID, userID); err != nil {
+			return c.JSON(http.StatusServiceUnavailable, &models.HttpResponse{
+				Message: "project-user session revocation failed",
+				Code:    http.StatusServiceUnavailable,
+			})
+		}
 	}
 
 	// update user current project id

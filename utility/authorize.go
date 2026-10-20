@@ -2,6 +2,7 @@ package utility
 
 import (
 	"errors"
+	"strings"
 
 	"github.com/apito-io/engine/models"
 )
@@ -115,18 +116,25 @@ func AuthorizeModelDelete(role *models.Role, modelName string, docCreatedByUserI
 	}
 }
 
-// authorizeOwnDocument mirrors public_schema_mutation own checks:
-// user model: deny when IsProjectUser and paramUserID != docID;
-// else: deny when createdBy was supplied (project-user creator) and IDs differ.
+// authorizeOwnDocument fails closed. A caller must be an authenticated project
+// user before an own-scoped permission can authorize a mutation. A missing
+// caller or canonical owner is a denial for every model, including user
+// documents. The persisted IsProjectUser flag on the document is not an
+// ownership signal, but the caller's authenticated role is.
 func authorizeOwnDocument(role *models.Role, docCreatedByUserID string, docIsUserModel bool, paramUserID string, action string) error {
 	msg := "You are not authorized to " + action + " this document"
-	if docIsUserModel {
-		if role != nil && role.IsProjectUser && paramUserID != docCreatedByUserID {
-			return errors.New(msg)
-		}
-		return nil
+	if role == nil || !role.IsProjectUser {
+		return errors.New(msg)
 	}
-	if docCreatedByUserID != "" && docCreatedByUserID != paramUserID {
+	// User-model ownership is represented by the document id by the resolver.
+	// Keep the explicit branch here so a future caller cannot accidentally pass
+	// creator metadata for a user row and bypass the self-only rule.
+	if docIsUserModel && strings.TrimSpace(docCreatedByUserID) == "" {
+		return errors.New(msg)
+	}
+	callerID := strings.TrimSpace(paramUserID)
+	ownerID := strings.TrimSpace(docCreatedByUserID)
+	if callerID == "" || ownerID == "" || callerID != ownerID {
 		return errors.New(msg)
 	}
 	return nil

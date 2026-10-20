@@ -46,6 +46,9 @@ func (s *GraphQLServer) SearchSchemaOperationsResolverFn(p graphql.ResolveParams
 	if err != nil {
 		return nil, err
 	}
+	if err := requireProjectAdmin(cache); err != nil {
+		return nil, err
+	}
 	store := schemasvc.StoreFromSystemDriver(s.SystemDriver)
 	if store == nil {
 		return []*models.SchemaOperation{}, nil
@@ -81,6 +84,9 @@ func (s *GraphQLServer) RetrySchemaOperationResolverFn(p graphql.ResolveParams) 
 	router := v("router").(echo.Context)
 	cache, err := s.GetApplicationCache(router)
 	if err != nil {
+		return nil, err
+	}
+	if err := requireProjectAdmin(cache); err != nil {
 		return nil, err
 	}
 	store := schemasvc.StoreFromSystemDriver(s.SystemDriver)

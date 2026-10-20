@@ -48,6 +48,13 @@ func TestRequireFunctionManage(t *testing.T) {
 			},
 			wantErr: true,
 		},
+		{
+			name: "project user with admin id",
+			cache: &models.ApplicationCache{
+				Param: &models.CommonSystemParams{Role: &models.Role{ID: "admin", IsAdmin: true, IsProjectUser: true}},
+			},
+			wantErr: true,
+		},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -59,5 +66,19 @@ func TestRequireFunctionManage(t *testing.T) {
 				t.Fatalf("unexpected error: %v", err)
 			}
 		})
+	}
+}
+
+func TestRequireProjectAdminRejectsProjectUserRoleConfusion(t *testing.T) {
+	for _, role := range []*models.Role{
+		{ID: "admin", IsAdmin: true, IsProjectUser: true},
+		{ID: "owner", IsProjectUser: true},
+	} {
+		cache := &models.ApplicationCache{
+			Param: &models.CommonSystemParams{Role: role},
+		}
+		if err := requireProjectAdmin(cache); err == nil {
+			t.Fatalf("project-user role %q must not gain system admin access", role.ID)
+		}
 	}
 }

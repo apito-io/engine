@@ -28,6 +28,16 @@ func (s *GraphQLServer) BuildServerQueriesAndMutations() {
 			Type:    privateSchemaObjects.ProjectDetailsObject,
 			Resolve: s.GetCurrentProjectResolverFn,
 		},
+		"clientRuntime": &graphql.Field{
+			Name: "ClientRuntime",
+			Type: platformClientRuntimeObject,
+			Args: graphql.FieldConfigArgument{
+				"platform": &graphql.ArgumentConfig{
+					Type: graphql.NewNonNull(graphql.String),
+				},
+			},
+			Resolve: s.ClientRuntimeResolverFn,
+		},
 		"previewSchemaRelationTransition": &graphql.Field{
 			Name:    "PreviewSchemaRelationTransition",
 			Type:    relationTransitionPreviewType,
@@ -988,6 +998,10 @@ func (s *GraphQLServer) BuildServerQueriesAndMutations() {
 							"auto_soft_delete_idle_tenants": &graphql.InputObjectFieldConfig{
 								Type:        graphql.Boolean,
 								Description: "When true, daily job soft-deletes free-tier idle tenants (never hard-deletes)",
+							},
+							"client_runtime": &graphql.InputObjectFieldConfig{
+								Type:        updateClientRuntimeInput,
+								Description: "Per-platform force update, maintenance, and one-key extras. Project system data, not a content model.",
 							},
 						},
 					}),

@@ -111,6 +111,9 @@ func (s *GraphQLServer) cachedSchemaProject(p graphql.ResolveParams, capability 
 	if cache == nil || cache.Project == nil {
 		return nil, nil, fmt.Errorf("project is required")
 	}
+	if err := requireProjectAdmin(cache); err != nil {
+		return nil, nil, err
+	}
 	return cache, cache.Project, nil
 }
 

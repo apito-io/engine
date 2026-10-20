@@ -591,7 +591,7 @@ func (g *GraphCtrl) RESTApiDocGenerator(c echo.Context) error {
 		})
 	}
 
-	val, err := utility.OpenApiSpecGenerator(g.cfg.Environment, cache)
+	val, err := utility.OpenApiSpecGenerator(g.cfg.Environment, g.cfg.PublicAPIURL, cache)
 	if err != nil {
 		return c.JSON(http.StatusInternalServerError, &models.HttpResponse{
 			Message: captureInternalServerError(err).Error(),
@@ -848,13 +848,45 @@ func (g *GraphCtrl) SystemGraphQL(i echo.Context) error {
 			Code:    http.StatusBadRequest,
 		})
 	}
+	if strings.TrimSpace(req.Query) == "" {
+		return i.JSON(http.StatusBadRequest, &models.HttpResponse{
+			Message: "Query can not be empty!",
+			Code:    http.StatusBadRequest,
+		})
+	}
 
-	if err := services.RequireSystemGraphQLCapabilities(i, req.Query); err != nil {
+	if err := services.RequireSystemGraphQLCapabilities(i, req.Query, req.OperationName); err != nil {
 		code := http.StatusForbidden
 		return i.JSON(code, &models.HttpResponse{
 			Message: err.Error(),
 			Code:    uint32(code),
 		})
+	}
+	if err := services.EnforceBootstrapSystemAllowlist(i, req.Query); err != nil {
+		code := http.StatusForbidden
+		return i.JSON(code, &models.HttpResponse{
+			Message: err.Error(),
+			Code:    uint32(code),
+		})
+	}
+	// Capability bindings are an authorization-plane invariant for apt_
+	// principals. Console/admin and project-key callers are protected by their
+	// resolver/admin gates and bootstrap policy; dynamic plugin roots must not
+	// make those callers fail closed merely because they are not apt_ bindings.
+	if g.gqlServer != nil && services.PrincipalFromEcho(i) != nil {
+		roots := make([]string, 0, len(g.gqlServer.SystemQueries)+len(g.gqlServer.SystemMutations))
+		for name := range g.gqlServer.SystemQueries {
+			roots = append(roots, name)
+		}
+		for name := range g.gqlServer.SystemMutations {
+			roots = append(roots, name)
+		}
+		if err := services.ValidateSystemGraphQLCapabilityBindings(roots); err != nil {
+			return i.JSON(http.StatusInternalServerError, &models.HttpResponse{
+				Message: "system GraphQL capability registry is incomplete",
+				Code:    http.StatusInternalServerError,
+			})
+		}
 	}
 
 	ctx := i.Request().Context()

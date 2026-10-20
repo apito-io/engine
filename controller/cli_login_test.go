@@ -84,15 +84,16 @@ func TestCLILoginApproveRequiresSessionAndService(t *testing.T) {
 	require.Equal(t, http.StatusUnauthorized, rec.Code)
 }
 
-func TestCLILoginUsesExistingCLISyncPreset(t *testing.T) {
-	req := cliLoginMintRequest("ABCD", cliLoginScope{
+func TestCLILoginUsesLowHarmLoginPreset(t *testing.T) {
+	req, err := cliLoginMintRequest("ABCD", cliLoginScope{
 		ProjectGrantMode:  models.AccessTokenProjectGrantSelected,
 		ProjectIDs:        []string{"p1"},
 		TenantGrantMode:   models.AccessTokenTenantGrantSelected,
 		TenantIDs:         map[string][]string{"p1": {"tenant-1"}},
 		AcknowledgeDanger: true,
 	})
-	require.Equal(t, "cli_sync", req.Preset)
+	require.NoError(t, err)
+	require.Equal(t, "cli_login", req.Preset)
 	require.Empty(t, req.Capabilities)
 	require.Equal(t, []string{"p1"}, req.ProjectIDs)
 	require.Equal(t, []string{"tenant-1"}, req.TenantIDs["p1"])
@@ -177,28 +178,61 @@ func TestMCPLoginApproveRequiresSession(t *testing.T) {
 }
 
 func TestMCPLoginUsesReadOnlyAssistantPresetAndScopes(t *testing.T) {
-	selected := deviceLoginMintRequest(deviceAudienceMCP, "ABCD", cliLoginScope{
+	selected, err := deviceLoginMintRequest(deviceAudienceMCP, "ABCD", cliLoginScope{
 		ProjectGrantMode: models.AccessTokenProjectGrantSelected,
 		ProjectIDs:       []string{"p1", "p2"},
 		TenantGrantMode:  models.AccessTokenTenantGrantSelected,
 		TenantIDs:        map[string][]string{"p1": {"tenant-1"}},
+		Capabilities:     []string{"database.write"},
 	})
+	require.NoError(t, err)
 	require.Equal(t, "mcp_assistant", selected.Preset)
 	require.Equal(t, "MCP ABCD", selected.Name)
 	require.Empty(t, selected.Capabilities)
 	require.Equal(t, []string{"p1", "p2"}, selected.ProjectIDs)
 	require.Equal(t, []string{"tenant-1"}, selected.TenantIDs["p1"])
 
-	all := deviceLoginMintRequest(deviceAudienceMCP, "WXYZ", cliLoginScope{
+	all, err := deviceLoginMintRequest(deviceAudienceMCP, "WXYZ", cliLoginScope{
 		ProjectGrantMode: models.AccessTokenProjectGrantAllAdmin,
 		ProjectIDs:       []string{"should-drop"},
 		TenantGrantMode:  models.AccessTokenTenantGrantNone,
 		TenantIDs:        map[string][]string{"p1": {"tenant-1"}},
 	})
+	require.NoError(t, err)
 	require.Equal(t, "mcp_assistant", all.Preset)
 	require.Nil(t, all.ProjectIDs)
 	require.Nil(t, all.TenantIDs)
 	require.Equal(t, models.AccessTokenProjectGrantAllAdmin, all.ProjectGrantMode)
+}
+
+func TestDeviceLoginPresetChoices(t *testing.T) {
+	advanced, err := deviceLoginMintRequest(deviceAudienceMCP, "ABCD", cliLoginScope{
+		Preset:           "mcp_advanced",
+		Capabilities:     []string{"schema.publish"},
+		ProjectGrantMode: models.AccessTokenProjectGrantAllAdmin,
+	})
+	require.NoError(t, err)
+	require.Equal(t, "mcp_advanced", advanced.Preset)
+	require.Empty(t, advanced.Capabilities)
+
+	custom, err := deviceLoginMintRequest(deviceAudienceMCP, "ABCD", cliLoginScope{
+		Preset:       "custom",
+		Capabilities: []string{"projects.read"},
+	})
+	require.NoError(t, err)
+	require.Equal(t, "custom", custom.Preset)
+	require.Equal(t, []string{"projects.read"}, custom.Capabilities)
+
+	_, err = deviceLoginMintRequest(deviceAudienceMCP, "ABCD", cliLoginScope{Preset: "cli_sync"})
+	require.Error(t, err)
+
+	syncPreset, err := deviceLoginMintRequest(deviceAudienceCLI, "ABCD", cliLoginScope{Preset: "cli_sync"})
+	require.NoError(t, err)
+	require.Equal(t, "cli_sync", syncPreset.Preset)
+	require.Empty(t, syncPreset.Capabilities)
+
+	_, err = deviceLoginMintRequest(deviceAudienceCLI, "ABCD", cliLoginScope{Preset: "mcp_advanced"})
+	require.Error(t, err)
 }
 
 func TestMCPLoginPollDeliversGrantOnce(t *testing.T) {

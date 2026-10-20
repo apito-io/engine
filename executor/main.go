@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 
 	"github.com/apito-io/engine/database"
 	"github.com/apito-io/engine/interfaces"
@@ -87,6 +88,9 @@ func (s *GraphQLExecutor) SetProjectDriverCredential(ctx context.Context, driver
 }
 
 func (s *GraphQLExecutor) GetProjectDriver(ctx context.Context) (interfaces.ProjectDBInterface, error) {
+	if reason := models.TenantScopeDenied(ctx); reason != "" {
+		return nil, errors.New(reason)
+	}
 
 	projectID := ctx.Value("project_id")
 
@@ -97,14 +101,28 @@ func (s *GraphQLExecutor) GetProjectDriver(ctx context.Context) (interfaces.Proj
 
 	if skipRouting, _ := ctx.Value("skip_connection_routing").(bool); !skipRouting &&
 		s.connectionManager.GetConfig() != nil && s.connectionManager.GetConfig().ConnectionRoutingHook != nil {
-		scopeKey, useScope := s.connectionManager.GetConfig().ConnectionRoutingHook(ctx, pid)
-		if useScope && scopeKey != "" {
+		route := s.connectionManager.GetConfig().ConnectionRoutingHook(ctx, pid)
+		switch route.Decision {
+		case models.ConnectionRouteDenied:
+			if route.Err != nil {
+				return nil, route.Err
+			}
+			return nil, errors.New("connection routing denied")
+		case models.ConnectionRouteScoped:
+			scopeKey := strings.TrimSpace(route.ScopeKey)
+			if scopeKey == "" {
+				return nil, errors.New("scoped connection routing returned an empty scope")
+			}
 			conn, err := s.connectionManager.GetScopedConnection(ctx, pid, scopeKey)
 			if err != nil {
 				fmt.Println(err.Error())
 				return nil, err
 			}
 			return conn.DBConn, nil
+		case models.ConnectionRouteDefault:
+			// Use the base project connection.
+		default:
+			return nil, errors.New("connection routing returned an unknown decision")
 		}
 	}
 

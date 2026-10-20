@@ -14,6 +14,27 @@ const (
 // SkipConnectionRoutingContextKey forces GetProjectDriver onto the base project DB.
 const SkipConnectionRoutingContextKey = "skip_connection_routing"
 
+// TenantScopeDeniedContextKey carries a fail-closed SaaS tenant decision
+// from request authentication into project-driver routing. It is a string
+// error code rather than a bool so callers can distinguish mismatch,
+// ownership, and missing-context telemetry without trusting request headers.
+const TenantScopeDeniedContextKey = "apito.tenant_scope_denied"
+
+func WithTenantScopeDenied(ctx context.Context, reason string) context.Context {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	return context.WithValue(ctx, TenantScopeDeniedContextKey, reason)
+}
+
+func TenantScopeDenied(ctx context.Context) string {
+	if ctx == nil {
+		return ""
+	}
+	reason, _ := ctx.Value(TenantScopeDeniedContextKey).(string)
+	return reason
+}
+
 type schemaDDLTargetKey struct{}
 
 // WithSchemaDDLTenantTarget marks schema DDL as running against a tenant-scoped connection.

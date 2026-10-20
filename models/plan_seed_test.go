@@ -64,6 +64,18 @@ func TestEnsureProjectPlansSeedsDemotesLegacySystemPlans(t *testing.T) {
 	}
 }
 
+func TestNormalizePlanSlugKeepsPro(t *testing.T) {
+	if got := NormalizePlanSlug("pro"); got != "pro" {
+		t.Fatalf("pro must stay pro, got %q", got)
+	}
+	if got := NormalizePlanSlug("Pro"); got != "pro" {
+		t.Fatalf("Pro must stay pro, got %q", got)
+	}
+	if got := NormalizePlanSlug("paid+"); got != "paid_plus" {
+		t.Fatalf("paid+ spelling, got %q", got)
+	}
+}
+
 func TestDefaultSeededPlansOnlyFree(t *testing.T) {
 	seeds := DefaultSeededPlans()
 	if len(seeds) != 1 || seeds["free"] == nil {

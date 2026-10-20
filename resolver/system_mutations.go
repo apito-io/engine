@@ -17,11 +17,11 @@ import (
 	pluginService "github.com/apito-io/engine/services/plugin"
 	schemasvc "github.com/apito-io/engine/services/schema"
 	"github.com/apito-io/engine/utility"
+	projdriver "github.com/apito-io/open_driver/project"
 	"github.com/apito-io/types"
 	"github.com/apito-io/types/protobuff"
 	"github.com/labstack/echo/v4"
 	"github.com/tailor-platform/graphql"
-	projdriver "github.com/apito-io/open_driver/project"
 )
 
 func (s *GraphQLServer) GenerateProjectTokenResolverFn(p graphql.ResolveParams) (interface{}, error) {
@@ -293,6 +293,9 @@ func (s *GraphQLServer) CreateWebHookResolverFn(p graphql.ResolveParams) (interf
 	if err != nil {
 		return nil, err
 	}
+	if err := requireProjectAdmin(cache); err != nil {
+		return nil, err
+	}
 
 	param := s.NewParam(cache.Param)
 
@@ -403,6 +406,9 @@ func (s *GraphQLServer) DeleteWebHookResolverFn(p graphql.ResolveParams) (interf
 
 	cache, err := s.GetApplicationCache(router)
 	if err != nil {
+		return nil, err
+	}
+	if err := requireProjectAdmin(cache); err != nil {
 		return nil, err
 	}
 
@@ -533,6 +539,9 @@ func (s *GraphQLServer) UpdateProjectResolverFn(p graphql.ResolveParams) (interf
 
 	cache, err := s.GetApplicationCache(router)
 	if err != nil {
+		return nil, err
+	}
+	if err := requireProjectAdmin(cache); err != nil {
 		return nil, err
 	}
 
@@ -693,6 +702,18 @@ func (s *GraphQLServer) UpdateProjectResolverFn(p graphql.ResolveParams) (interf
 			project.Settings.AutoSoftDeleteIdleTenants = val
 		}
 
+		if raw, ok := settings["client_runtime"]; ok && raw != nil {
+			fields, ok := raw.(map[string]interface{})
+			if !ok {
+				return nil, errors.New("client_runtime must be an object")
+			}
+			runtime, err := models.ParseClientRuntime(fields)
+			if err != nil {
+				return nil, err
+			}
+			project.Settings.ClientRuntime = runtime
+		}
+
 	}
 
 	/* 	if plugins, ok := p.Args["plugins"].(map[string]interface{}); ok {
@@ -818,6 +839,9 @@ func (s *GraphQLServer) UpdateProjectResolverFn(p graphql.ResolveParams) (interf
 	if err != nil {
 		return nil, err
 	}
+	if _, err = s.refreshProjectAndReCache(cache.Ctx, project.ID); err != nil {
+		return nil, err
+	}
 
 	s.EmitProjectLifecycle(cache.Ctx, param.UserID, project.ID, project.Name, models.SystemEventProjectUpdated)
 
@@ -905,6 +929,9 @@ func (s *GraphQLServer) RemoveProjectSpecificPluginResolverFn(p graphql.ResolveP
 	if err != nil {
 		return nil, err
 	}
+	if err := requireProjectAdmin(cache); err != nil {
+		return nil, err
+	}
 
 	project := *cache.Project
 
@@ -942,6 +969,9 @@ func (s *GraphQLServer) UpsertPluginResolverFn(p graphql.ResolveParams) (interfa
 
 	cache, err := s.GetApplicationCache(router)
 	if err != nil {
+		return nil, err
+	}
+	if err := requireProjectAdmin(cache); err != nil {
 		return nil, err
 	}
 
@@ -1115,6 +1145,9 @@ func (s *GraphQLServer) AddModelToProjectResolverFn(p graphql.ResolveParams) (in
 	if err != nil {
 		return nil, err
 	}
+	if err := requireProjectAdmin(cache); err != nil {
+		return nil, err
+	}
 
 	project := cache.Project
 
@@ -1230,6 +1263,9 @@ func (s *GraphQLServer) RunModelMigrationsResolverFn(p graphql.ResolveParams) (i
 	if err != nil {
 		return nil, err
 	}
+	if err := requireProjectAdmin(cache); err != nil {
+		return nil, err
+	}
 
 	param := cache.Param
 	project := cache.Project
@@ -1299,6 +1335,9 @@ func (s *GraphQLServer) UpdateModelResolverFn(p graphql.ResolveParams) (interfac
 
 	cache, err := s.GetApplicationCache(router)
 	if err != nil {
+		return nil, err
+	}
+	if err := requireProjectAdmin(cache); err != nil {
 		return nil, err
 	}
 
@@ -2392,6 +2431,9 @@ func (s *GraphQLServer) UpsertFieldToModelResolverFn(p graphql.ResolveParams) (i
 	if err != nil {
 		return nil, err
 	}
+	if err := requireProjectAdmin(cache); err != nil {
+		return nil, err
+	}
 
 	project := cache.Project
 
@@ -2686,6 +2728,9 @@ func (s *GraphQLServer) RearrangeFieldOfModelResolverFn(p graphql.ResolveParams)
 	if err != nil {
 		return nil, err
 	}
+	if err := requireProjectAdmin(cache); err != nil {
+		return nil, err
+	}
 
 	var modelName string
 	if val, ok := p.Args["model_name"].(string); ok && val != "" {
@@ -2714,6 +2759,11 @@ func (s *GraphQLServer) RearrangeFieldOfModelResolverFn(p graphql.ResolveParams)
 	}
 
 	if modelType == nil {
+		if s.schemaVersioningActive(cache.Ctx) {
+			return s.tryStageSchemaMutation(cache, project, models.SchemaOpTypeRearrangeField, graphqlArgsMap(p), func() (interface{}, error) {
+				return nil, errors.New("model Not Found")
+			})
+		}
 		return nil, errors.New("model Not Found")
 	}
 
@@ -2848,6 +2898,9 @@ func (s *GraphQLServer) DeleteModelDataFn(p graphql.ResolveParams) (interface{},
 
 	cache, err := s.GetApplicationCache(router)
 	if err != nil {
+		return nil, err
+	}
+	if err := requireProjectAdmin(cache); err != nil {
 		return nil, err
 	}
 
@@ -2988,6 +3041,9 @@ func (s *GraphQLServer) ModelFieldOperationResolverFn(p graphql.ResolveParams) (
 	if err != nil {
 		return nil, err
 	}
+	if err := requireProjectAdmin(cache); err != nil {
+		return nil, err
+	}
 
 	project := cache.Project
 
@@ -3016,6 +3072,11 @@ func (s *GraphQLServer) ModelFieldOperationResolverFn(p graphql.ResolveParams) (
 	}
 
 	if modelType == nil {
+		if s.schemaVersioningActive(cache.Ctx) {
+			return s.tryStageSchemaMutation(cache, project, models.SchemaOpTypeModelFieldOp, graphqlArgsMap(p), func() (interface{}, error) {
+				return nil, errors.New(ae.MODEL_IS_REQUIRED)
+			})
+		}
 		return nil, errors.New(ae.MODEL_IS_REQUIRED)
 	}
 
@@ -3545,6 +3606,9 @@ func (s *GraphQLServer) DeleteConnectionFromModelResolverFn(p graphql.ResolvePar
 	if err != nil {
 		return nil, err
 	}
+	if err := requireProjectAdmin(cache); err != nil {
+		return nil, err
+	}
 
 	project := cache.Project
 	if project.Schema == nil {
@@ -3596,6 +3660,11 @@ func (s *GraphQLServer) DeleteConnectionFromModelResolverFn(p graphql.ResolvePar
 		}
 	}
 	if fromModelType == nil {
+		if s.schemaVersioningActive(cache.Ctx) {
+			return s.tryStageSchemaMutation(cache, project, models.SchemaOpTypeDeleteConnection, graphqlArgsMap(p), func() (interface{}, error) {
+				return nil, errors.New("model Not Found")
+			})
+		}
 		return nil, errors.New("model Not Found")
 	}
 
@@ -3664,6 +3733,9 @@ func (s *GraphQLServer) CreateConnectionTypeResolverFn(p graphql.ResolveParams) 
 
 	cache, err := s.GetApplicationCache(router)
 	if err != nil {
+		return nil, err
+	}
+	if err := requireProjectAdmin(cache); err != nil {
 		return nil, err
 	}
 
@@ -3879,6 +3951,9 @@ func (s *GraphQLServer) UpsertModelDataFnFn(p graphql.ResolveParams) (interface{
 	if err != nil {
 		return nil, err
 	}
+	if err := requireProjectAdmin(cache); err != nil {
+		return nil, err
+	}
 
 	param := s.NewParam(cache.Param)
 
@@ -3986,7 +4061,7 @@ func (s *GraphQLServer) UpsertModelDataFnFn(p graphql.ResolveParams) (interface{
 
 		if len(modelType.Connections) > 0 {
 			if disconnects, ok := p.Args["disconnect"].(map[string]interface{}); ok && len(disconnects) > 0 {
-				cdp, err := utility.ConnectDisconnectParamBuilder(cache.Project, param.DocumentID, disconnects, modelType)
+				cdp, err := utility.DisconnectDisconnectParamBuilderForRole(cache.Project, param.DocumentID, param.Role, disconnects, modelType)
 				if err != nil {
 					return nil, err
 				}
@@ -3998,7 +4073,7 @@ func (s *GraphQLServer) UpsertModelDataFnFn(p graphql.ResolveParams) (interface{
 			}
 
 			if connectionIds, ok := p.Args["connect"].(map[string]interface{}); ok && len(connectionIds) > 0 {
-				cdp, err := utility.ConnectDisconnectParamBuilder(cache.Project, param.DocumentID, connectionIds, modelType)
+				cdp, err := utility.ConnectDisconnectParamBuilderForRole(cache.Project, param.DocumentID, param.Role, connectionIds, modelType)
 				if err != nil {
 					return nil, err
 				}
@@ -4107,7 +4182,7 @@ func (s *GraphQLServer) UpsertModelDataFnFn(p graphql.ResolveParams) (interface{
 		// for new document also check for connect disconnect
 		if len(modelType.Connections) > 0 {
 			if connections, ok := p.Args["connect"].(map[string]interface{}); ok && len(connections) > 0 {
-				v, err := utility.ConnectDisconnectParamBuilder(cache.Project, uid, connections, modelType)
+				v, err := utility.ConnectDisconnectParamBuilderForRole(cache.Project, uid, param.Role, connections, modelType)
 				if err != nil {
 					// Drop the orphan, but keep the relation error. Assigning the
 					// delete result overwrote a successful cleanup with nil and
@@ -4147,6 +4222,9 @@ func (s *GraphQLServer) DuplicateModelDataFnFn(p graphql.ResolveParams) (interfa
 
 	cache, err := s.GetApplicationCache(router)
 	if err != nil {
+		return nil, err
+	}
+	if err := requireProjectAdmin(cache); err != nil {
 		return nil, err
 	}
 
@@ -4237,6 +4315,9 @@ func (s *GraphQLServer) DeleteModelDataFnFn(p graphql.ResolveParams) (interface{
 
 	cache, err := s.GetApplicationCache(router)
 	if err != nil {
+		return nil, err
+	}
+	if err := requireProjectAdmin(cache); err != nil {
 		return nil, err
 	}
 

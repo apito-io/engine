@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/apito-io/engine/interfaces"
 	"github.com/apito-io/engine/models"
 	"github.com/apito-io/engine/utility"
 	"github.com/apito-io/types"
@@ -29,20 +30,67 @@ func mutationPermissionForRole(role *models.Role, modelName string) (*models.API
 	return perm, nil
 }
 
-// ownDocOwnerID returns the ownership id for AuthorizeModelUpdate/Delete own checks.
-// For user documents the doc ID is the owner; otherwise only project-user creators are passed through
-// (matching historical deny-only own semantics).
+// ownDocOwnerID keeps the resolver's historical call signature while sharing
+// the same canonical ownership implementation used by non-SQL drivers.
 func ownDocOwnerID(doc *types.DefaultDocumentStructure) (ownerID string, isUserModel bool) {
-	if doc == nil {
-		return "", false
+	return utility.OwnDocumentOwnerID(doc)
+}
+
+// validateRelationTargetOwnership verifies own-scoped relation targets before
+// a public project-user mutation reaches a driver. The relation builder
+// records the target model; this check resolves its persisted canonical owner
+// instead of trusting a field name or caller-controlled metadata.
+func (s *GraphQLServer) validateRelationTargetOwnership(
+	ctx context.Context,
+	driver interfaces.ProjectDBInterface,
+	cache *models.ApplicationCache,
+	root *models.CommonSystemParams,
+	params []*models.ConnectDisconnectParam,
+) error {
+	if root == nil || root.Role == nil || !root.Role.IsProjectUser || roleBypassesMutationACL(root.Role) {
+		return nil
 	}
-	if doc.Type == "user" {
-		return doc.ID, true
+	if driver == nil || cache == nil || cache.Project == nil || cache.Project.Schema == nil {
+		return utility.ErrRelationTargetForbidden
 	}
-	if doc.Meta != nil && doc.Meta.CreatedBy != nil && doc.Meta.CreatedBy.IsProjectUser {
-		return doc.Meta.CreatedBy.ID, false
+	userID := strings.TrimSpace(root.UserID)
+	if userID == "" {
+		return utility.ErrRelationTargetForbidden
 	}
-	return "", false
+	for _, relation := range params {
+		if relation == nil {
+			return utility.ErrRelationTargetForbidden
+		}
+		if !relation.TargetRequiresOwnership {
+			continue
+		}
+		targetModel := resolveProjectModelFromSchema(cache.Project.Schema.Models, relation.TargetModelName)
+		if targetModel == nil {
+			return utility.ErrRelationTargetForbidden
+		}
+		for _, targetID := range relation.ActionIDs {
+			targetID = strings.TrimSpace(targetID)
+			if targetID == "" {
+				return utility.ErrRelationTargetForbidden
+			}
+			lookup := s.NewParam(root)
+			lookup.Model = targetModel
+			lookup.DocumentID = targetID
+			lookup.ProjectSchemaModels = cache.Project.Schema.Models
+			lookup.IsSystemRequest = true
+			raw, lookupErr := driver.GetSingleRawDocumentFromProject(ctx, lookup)
+			target, found, err := existingDocumentFromLookup(raw, lookupErr)
+			if err != nil || !found || target == nil {
+				return utility.ErrRelationTargetForbidden
+			}
+			ownerID, _ := ownDocOwnerID(target)
+			if strings.TrimSpace(ownerID) != userID {
+				return utility.ErrRelationTargetForbidden
+			}
+		}
+		relation.MarkTargetOwnershipVerified()
+	}
+	return nil
 }
 
 func (s *GraphQLServer) updateAndConnectDocument(ctx context.Context, cache *models.ApplicationCache, param *models.CommonSystemParams, hooks []*models.Webhook, userInputPayload map[string]interface{}, permission *models.APIPermission, connections, disconnects map[string]interface{}, deltaUpdate bool) (*types.DefaultDocumentStructure, error) {
@@ -68,6 +116,9 @@ func (s *GraphQLServer) updateAndConnectDocument(ctx context.Context, cache *mod
 	if err := utility.AuthorizeModelUpdate(param.Role, param.Model.Name, ownerID, isUserModel, param.UserID); err != nil {
 		return nil, err
 	}
+	if err := utility.ValidateProjectUserRelationEdges(param.Role, param.UserID, connections, disconnects); err != nil {
+		return nil, err
+	}
 
 	input := param.ResolveParams.Args
 
@@ -86,6 +137,10 @@ func (s *GraphQLServer) updateAndConnectDocument(ctx context.Context, cache *mod
 	if len(inputPayload) == 0 && !relationWork {
 		return nil, errors.New("user input payload is required")
 	}
+	beforeData := make(map[string]interface{}, len(doc.Data))
+	for key, value := range doc.Data {
+		beforeData[key] = value
+	}
 
 	// local support
 	local := "en"
@@ -94,11 +149,42 @@ func (s *GraphQLServer) updateAndConnectDocument(ctx context.Context, cache *mod
 	}
 
 	modelType := param.Model
+	var connectParams []*models.ConnectDisconnectParam
+	var disconnectParams []*models.ConnectDisconnectParam
+	if len(modelType.Connections) > 0 {
+		if len(disconnects) > 0 {
+			disconnectParams, err = utility.DisconnectDisconnectParamBuilderForRole(cache.Project, param.DocumentID, param.Role, disconnects, modelType)
+			if err != nil {
+				return nil, err
+			}
+			if err := s.validateRelationTargetOwnership(ctx, driver, cache, param, disconnectParams); err != nil {
+				return nil, err
+			}
+			if err := utility.ValidateProjectUserRelationParams(param.Role, param.UserID, disconnectParams, true); err != nil {
+				return nil, err
+			}
+		}
+		if len(connections) > 0 {
+			connectParams, err = utility.ConnectDisconnectParamBuilderForRole(cache.Project, param.DocumentID, param.Role, connections, modelType)
+			if err != nil {
+				return nil, err
+			}
+			if err := s.validateRelationTargetOwnership(ctx, driver, cache, param, connectParams); err != nil {
+				return nil, err
+			}
+			if err := utility.ValidateProjectUserRelationParams(param.Role, param.UserID, connectParams, false); err != nil {
+				return nil, err
+			}
+		}
+	}
 
 	//#todo need image param validation
 	if len(inputPayload) > 0 {
 		updatedPayload, err := s.GraphQLExecutor.HandlePayloadFormatting(ctx, param, local, modelType.Fields, inputPayload, doc.Data, deltaUpdate)
 		if err != nil {
+			return nil, err
+		}
+		if err := utility.ValidateOwnerFieldMutation(param.Role, param.UserID, beforeData, updatedPayload); err != nil {
 			return nil, err
 		}
 		doc.Data = updatedPayload
@@ -126,24 +212,16 @@ func (s *GraphQLServer) updateAndConnectDocument(ctx context.Context, cache *mod
 	}
 
 	if len(modelType.Connections) > 0 {
-		if len(disconnects) > 0 {
-			v, err := utility.ConnectDisconnectParamBuilder(cache.Project, param.DocumentID, disconnects, modelType)
-			if err != nil {
-				return nil, err
-			}
-			param.ConDisParam = v
+		if len(disconnectParams) > 0 {
+			param.ConDisParam = disconnectParams
 			err = projectDriver.DisconnectBuilder(dbCtx, param)
 			if err != nil {
 				return nil, err
 			}
 		}
 
-		if len(connections) > 0 {
-			v, err := utility.ConnectDisconnectParamBuilder(cache.Project, param.DocumentID, connections, modelType)
-			if err != nil {
-				return nil, err
-			}
-			param.ConDisParam = v
+		if len(connectParams) > 0 {
+			param.ConDisParam = connectParams
 			err = projectDriver.ConnectBuilder(dbCtx, param)
 			if err != nil {
 				return nil, err
@@ -186,6 +264,9 @@ func (s *GraphQLServer) createAndConnectDocument(ctx context.Context, cache *mod
 	if len(payload) == 0 {
 		return nil, errors.New("payload is required")
 	}
+	if err := utility.ValidateProjectUserRelationEdges(param.Role, param.UserID, connections, nil); err != nil {
+		return nil, err
+	}
 
 	dbCtx := models.ProjectDBContext(publicProjectDBContext(cache, ctx), param)
 
@@ -216,9 +297,16 @@ func (s *GraphQLServer) createAndConnectDocument(ctx context.Context, cache *mod
 		local = val
 	}
 
+	if err := utility.ValidateOwnerFieldOnCreate(param.Role, param.UserID, payload); err != nil {
+		return nil, err
+	}
+
 	//#todo need image param validation
 	newPayload, err := s.GraphQLExecutor.HandlePayloadFormatting(ctx, param, local, param.Model.Fields, payload, make(map[string]interface{}), false)
 	if err != nil {
+		return nil, err
+	}
+	if err := utility.ValidateOwnerFieldOnCreate(param.Role, param.UserID, newPayload); err != nil {
 		return nil, err
 	}
 	doc.Data = newPayload
@@ -228,6 +316,19 @@ func (s *GraphQLServer) createAndConnectDocument(ctx context.Context, cache *mod
 	if err != nil {
 		return nil, err
 	}
+	var connectParams []*models.ConnectDisconnectParam
+	if len(param.Model.Connections) > 0 && len(connections) > 0 {
+		connectParams, err = utility.ConnectDisconnectParamBuilderForRole(cache.Project, _id, param.Role, connections, param.Model)
+		if err != nil {
+			return nil, err
+		}
+		if err := s.validateRelationTargetOwnership(ctx, projectDriver, cache, param, connectParams); err != nil {
+			return nil, err
+		}
+		if err := utility.ValidateProjectUserRelationParams(param.Role, param.UserID, connectParams, false); err != nil {
+			return nil, err
+		}
+	}
 	newDoc, err := projectDriver.AddDocumentToProject(dbCtx, param, doc)
 	if err != nil {
 		return nil, err
@@ -235,17 +336,10 @@ func (s *GraphQLServer) createAndConnectDocument(ctx context.Context, cache *mod
 
 	_doc := newDoc.(*types.DefaultDocumentStructure)
 
-	// check connection first before creating
-	if len(param.Model.Connections) > 0 && len(connections) > 0 {
+	if len(connectParams) > 0 {
 		_param := s.NewParam(param)
-		v, err := utility.ConnectDisconnectParamBuilder(cache.Project, _doc.ID, connections, _param.Model)
-		if err != nil {
-			// Match system upsertModelData: drop the orphan if relation wiring fails.
-			_param.DocumentID = _doc.ID
-			_ = projectDriver.DeleteDocumentFromProject(dbCtx, _param)
-			return nil, err
-		}
-		_param.ConDisParam = v
+		_param.DocumentID = _doc.ID
+		_param.ConDisParam = connectParams
 		err = projectDriver.ConnectBuilder(dbCtx, _param)
 		if err != nil {
 			_param.DocumentID = _doc.ID

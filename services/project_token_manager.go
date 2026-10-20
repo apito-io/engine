@@ -24,28 +24,51 @@ import (
 )
 
 var (
-	ErrInvalidKey     = errors.New("invalid key format")
-	ErrExpiredKey     = errors.New("key has expired")
-	ErrInvalidPayload = errors.New("invalid payload")
-	ErrRoleTooLong    = errors.New("role name exceeds maximum length of 64 characters")
+	ErrInvalidKey                       = errors.New("invalid key format")
+	ErrExpiredKey                       = errors.New("key has expired")
+	ErrInvalidPayload                   = errors.New("invalid payload")
+	ErrRoleTooLong                      = errors.New("role name exceeds maximum length of 64 characters")
+	ErrProjectUserRevocationUnavailable = errors.New("project-user session revocation store unavailable")
 )
 
 const (
-	projectTokenPayloadV2Magic byte = 0x02
-	projectTokenMaxRoleLen          = 64
-	projectTokenPrefixDisplayLen    = 12
+	projectTokenPayloadV2Magic   byte = 0x02
+	projectTokenMaxRoleLen            = 64
+	projectTokenPrefixDisplayLen      = 12
 )
+
+const projectUserRevocationKeyPrefix = "project-user-session:"
+
+// ProjectUserSessionRevocationTokenID returns the stable non-secret storage
+// key used by system-driver revocation stores.
+func ProjectUserSessionRevocationTokenID(projectID, userID string) string {
+	sum := sha256.Sum256([]byte(strings.TrimSpace(projectID) + "\x00" + strings.TrimSpace(userID)))
+	return projectUserRevocationKeyPrefix + hex.EncodeToString(sum[:])
+}
 
 // TokenBlacklistChecker is the subset of system DB used when validating ak_ tokens.
 type TokenBlacklistChecker interface {
 	CheckTokenBlacklisted(ctx context.Context, tokenId string) error
 }
 
+// ProjectUserSessionRevocationStore persists the per-user cutoff used by
+// logout-all/password reset. Implementations must be shared by every engine
+// process; an in-memory map is intentionally not an implementation.
+type ProjectUserSessionRevocationStore interface {
+	GetProjectUserSessionRevokedAfter(ctx context.Context, projectID, userID string) (int64, error)
+	SetProjectUserSessionRevokedAfter(ctx context.Context, projectID, userID string, revokedAfter int64) error
+}
+
 // ProjectKeyManager handles API key operations with optimized performance
 type ProjectKeyManager struct {
-	cipher cipher.Block
-	gcm    cipher.AEAD
-	driver TokenBlacklistChecker
+	cipher          cipher.Block
+	gcm             cipher.AEAD
+	driver          TokenBlacklistChecker
+	revocationStore ProjectUserSessionRevocationStore
+	// allowNoDBRevocation is set only by NewProjectKeyManagerNoDB, which is
+	// explicitly a test/encoding helper and cannot be used by the production
+	// constructor.
+	allowNoDBRevocation bool
 }
 
 func NewProjectKeyManager(cfg *models.Config, driver interfaces.ApitoSystemDB) (*ProjectKeyManager, error) {
@@ -64,11 +87,17 @@ func NewProjectKeyManager(cfg *models.Config, driver interfaces.ApitoSystemDB) (
 		return nil, err
 	}
 
-	return &ProjectKeyManager{
+	manager := &ProjectKeyManager{
 		cipher: block,
 		gcm:    gcm,
 		driver: driver,
-	}, nil
+	}
+	if store, ok := driver.(ProjectUserSessionRevocationStore); ok {
+		manager.revocationStore = store
+	} else {
+		return nil, fmt.Errorf("%w: production token manager requires a durable system-driver implementation", ErrProjectUserRevocationUnavailable)
+	}
+	return manager, nil
 }
 
 func NewProjectKeyManagerNoDB(cfg *models.Config) (*ProjectKeyManager, error) {
@@ -88,8 +117,9 @@ func NewProjectKeyManagerNoDB(cfg *models.Config) (*ProjectKeyManager, error) {
 	}
 
 	return &ProjectKeyManager{
-		cipher: block,
-		gcm:    gcm,
+		cipher:              block,
+		gcm:                 gcm,
+		allowNoDBRevocation: true,
 	}, nil
 }
 
@@ -328,6 +358,16 @@ func (m *ProjectKeyManager) Validate(ctx context.Context, key string, skipDBChec
 	}
 	payload.Scopes = scopes
 
+	if payload.TokenType == "user" || payload.TokenType == "tenant" {
+		revoked, err := m.projectUserSessionRevoked(ctx, payload.ProjectID, payload.UserID, payload.Scopes)
+		if err != nil {
+			return nil, err
+		}
+		if revoked {
+			return nil, ErrExpiredKey
+		}
+	}
+
 	// Check expiration
 	if time.Now().Unix() > payload.ExpireAt {
 		return nil, ErrExpiredKey
@@ -371,6 +411,52 @@ func (m *ProjectKeyManager) ValidateAndSetContext(c echo.Context, token string) 
 	}
 
 	return tokenObj, nil
+}
+
+// RevokeProjectUserSessions invalidates project-user tokens for this user that
+// were issued before now, including tokens that have no issued-at scope.
+// The cutoff is persisted in the shared system database.
+func (m *ProjectKeyManager) RevokeProjectUserSessions(projectID, userID string) error {
+	return m.RevokeProjectUserSessionsWithContext(context.Background(), projectID, userID)
+}
+
+func (m *ProjectKeyManager) RevokeProjectUserSessionsWithContext(ctx context.Context, projectID, userID string) error {
+	if m == nil {
+		return errors.New("project token manager unavailable")
+	}
+	projectID = strings.TrimSpace(projectID)
+	userID = strings.TrimSpace(userID)
+	if projectID == "" || userID == "" {
+		return errors.New("project and user are required for session revocation")
+	}
+	if m.revocationStore == nil {
+		return errors.New("durable project-user session revocation store unavailable")
+	}
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	return m.revocationStore.SetProjectUserSessionRevokedAfter(ctx, projectID, userID, time.Now().Unix())
+}
+
+func (m *ProjectKeyManager) projectUserSessionRevoked(ctx context.Context, projectID, userID string, scopes []string) (bool, error) {
+	if m == nil || m.revocationStore == nil {
+		if m != nil && m.allowNoDBRevocation {
+			return false, nil
+		}
+		return false, ErrProjectUserRevocationUnavailable
+	}
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	revokedAfter, err := m.revocationStore.GetProjectUserSessionRevokedAfter(
+		ctx,
+		strings.TrimSpace(projectID),
+		strings.TrimSpace(userID),
+	)
+	if err != nil {
+		return true, err
+	}
+	return utility.ProjectUserSessionRevoked(scopes, revokedAfter), nil
 }
 
 func stringToFixedBytes(s string, size int) []byte {

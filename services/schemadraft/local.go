@@ -55,16 +55,18 @@ func (l *Local) Preview(_ context.Context, project *models.Project, source strin
 		return "{}", nil
 	}
 	schema := project.Schema
-	if source == "draft" {
+	if source == "draft" || source == "effective" {
 		draft, err := l.file(project)
 		if err != nil {
 			return "", err
 		}
-		replayed, err := Replay(schema, draft.Ops)
-		if err != nil {
-			return "", err
+		if source == "draft" || len(draft.Ops) > 0 {
+			replayed, err := Replay(schema, draft.Ops)
+			if err != nil {
+				return "", err
+			}
+			schema = replayed
 		}
-		schema = replayed
 	}
 	if schema == nil {
 		schema = &models.ProjectSchema{}

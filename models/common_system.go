@@ -182,6 +182,21 @@ type ConnectDisconnectParam struct {
 	ActionIDs       []string
 	CurrentActionID string // used in single delete relation
 	ActionIDType    string // direct, indirect
+	// RequestedRelationField is the original public input key (for example
+	// owner_id or user_ids). Drivers use it to repeat the project-user
+	// ownership check at the authoritative connect/disconnect boundary.
+	RequestedRelationField string
+	// TargetModelName is the schema model reached by the requested relation.
+	// TargetIsUserModel makes self-only user relations independent of the
+	// relation field's spelling (for example, account_ref or assignee_id).
+	TargetModelName   string
+	TargetIsUserModel bool
+	// TargetRequiresOwnership is set when the caller's target-model permission
+	// is own-scoped. The public resolver must verify the target document before
+	// marking the instruction as verified; drivers reject an unverified
+	// instruction.
+	TargetRequiresOwnership bool
+	targetOwnershipVerified bool
 
 	ConnectionType      string
 	ForwardConnectionID string
@@ -195,6 +210,21 @@ type ConnectDisconnectParam struct {
 	KnownAs string
 
 	InjectableHasOneConnects []*InjectableHasOneConnection
+}
+
+// MarkTargetOwnershipVerified records that the public resolver completed its
+// persisted-target ownership lookup. The verification bit is intentionally
+// unexported so callers cannot forge it by assigning a public field.
+func (p *ConnectDisconnectParam) MarkTargetOwnershipVerified() {
+	if p != nil {
+		p.targetOwnershipVerified = true
+	}
+}
+
+// TargetOwnershipIsVerified reports whether the resolver completed the
+// persisted-target ownership lookup required for an own-scoped relation.
+func (p *ConnectDisconnectParam) TargetOwnershipIsVerified() bool {
+	return p != nil && p.targetOwnershipVerified
 }
 
 type EdgeRelation struct {

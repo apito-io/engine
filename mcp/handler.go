@@ -269,6 +269,11 @@ func (h *Handler) authorize(c echo.Context) error {
 
 type approvalBody struct {
 	RequestID         string              `json:"request_id"`
+	Name              string              `json:"name"`
+	Description       string              `json:"description"`
+	Duration          string              `json:"duration"`
+	Preset            string              `json:"preset"`
+	Capabilities      []string            `json:"capabilities"`
 	ProjectGrantMode  string              `json:"project_grant_mode"`
 	ProjectIDs        []string            `json:"project_ids"`
 	TenantGrantMode   string              `json:"tenant_grant_mode"`
@@ -296,13 +301,22 @@ func (h *Handler) approve(c echo.Context) error {
 	if len(label) > 8 {
 		label = label[:8]
 	}
-	raw, err := h.opt.Mint(c.Request().Context(), userID, ApprovalMintRequest(label, GrantScope{
+	req, err := ApprovalMintRequest(label, GrantScope{
+		Name:              body.Name,
+		Description:       body.Description,
+		Duration:          body.Duration,
+		Preset:            body.Preset,
+		Capabilities:      body.Capabilities,
 		ProjectGrantMode:  body.ProjectGrantMode,
 		ProjectIDs:        body.ProjectIDs,
 		TenantGrantMode:   body.TenantGrantMode,
 		TenantIDs:         body.TenantIDs,
 		AcknowledgeDanger: body.AcknowledgeDanger,
-	}))
+	})
+	if err != nil {
+		return c.JSON(http.StatusBadRequest, map[string]string{"message": err.Error()})
+	}
+	raw, err := h.opt.Mint(c.Request().Context(), userID, req)
 	if err != nil {
 		return c.JSON(http.StatusBadRequest, map[string]string{"message": err.Error()})
 	}
@@ -545,6 +559,14 @@ func (h *Handler) call(c echo.Context, req jsonRPC, access AccessRecord) jsonRPC
 		return toolError(req.ID, err)
 	}
 	audit.ScopeOK = true
+	if text, handled, err := h.transportTool(c.Request().Context(), params.Name, args, projectID, tenantID, access.InternalToken); handled {
+		audit.Error = errString(err)
+		h.audit(c.Request().Context(), audit)
+		if err != nil {
+			return toolError(req.ID, err)
+		}
+		return toolText(req.ID, text)
+	}
 	if params.Name == "inspect_access_token" && h.opt.System != nil {
 		_, raw, err := h.opt.System.REST(c.Request().Context(), access.InternalToken, http.MethodGet, "/system/access-tokens/me", nil)
 		audit.Error = errString(err)
@@ -577,6 +599,9 @@ func (h *Handler) call(c echo.Context, req jsonRPC, access AccessRecord) jsonRPC
 }
 
 func (h *Handler) localTool(name string, args map[string]any) (string, bool, error) {
+	if name == "publish_schema" {
+		return "", true, fmt.Errorf("MCP does not publish schema. Review the draft in the Console and publish there")
+	}
 	if text, ok := guides()[name]; ok && name != "inspect_access_token" {
 		return text, true, nil
 	}
@@ -612,6 +637,100 @@ func (h *Handler) localTool(name string, args map[string]any) (string, bool, err
 	default:
 		return "", false, nil
 	}
+}
+
+func (h *Handler) transportTool(ctx context.Context, name string, args map[string]any, projectID, tenantID, token string) (string, bool, error) {
+	switch name {
+	case "list_media", "delete_media", "upload_media_from_url", "execute_function":
+	default:
+		return "", false, nil
+	}
+	if h.opt.System == nil {
+		return "", true, fmt.Errorf("system graphql is not configured")
+	}
+	switch name {
+	case "upload_media_from_url":
+		return "", true, fmt.Errorf("upload from URL is not registered on the system schema; upload the file in the Console")
+	case "list_media":
+		path := "/secured/files/list"
+		if limit, ok := args["limit"]; ok {
+			path += "?limit=" + fmt.Sprint(limit)
+		}
+		return h.projectREST(ctx, token, http.MethodGet, path, projectID, tenantID, nil)
+	case "delete_media":
+		body, _ := json.Marshal(map[string]any{"ids": args["ids"]})
+		return h.projectREST(ctx, token, http.MethodPost, "/secured/files/delete", projectID, tenantID, body)
+	case "execute_function":
+		text, err := h.executeFunction(ctx, token, projectID, tenantID, args)
+		return text, true, err
+	default:
+		return "", false, nil
+	}
+}
+
+func (h *Handler) projectREST(ctx context.Context, token, method, path, projectID, tenantID string, body []byte) (string, bool, error) {
+	ctx = WithRESTMeta(ctx, projectID, tenantID, nil)
+	status, raw, err := h.opt.System.REST(ctx, token, method, path, body)
+	if err != nil {
+		return "", true, err
+	}
+	if status >= 400 {
+		return "", true, fmt.Errorf("code=%d, message=%s", status, raw)
+	}
+	return string(raw), true, nil
+}
+
+func (h *Handler) executeFunction(ctx context.Context, token, projectID, tenantID string, args map[string]any) (string, error) {
+	name, _ := args["name"].(string)
+	if strings.TrimSpace(name) == "" {
+		return "", fmt.Errorf("execute_function: name is required")
+	}
+	if strings.TrimSpace(projectID) == "" {
+		return "", fmt.Errorf("execute_function: project_id is required")
+	}
+	raw, err := h.opt.System.GraphQL(ctx, token, projectID, tenantID, `query { projectFunctionsInfo { name rest_api_secret_url_key active_revision_id } }`, nil)
+	if err != nil {
+		return "", err
+	}
+	var parsed struct {
+		Data struct {
+			Functions []struct {
+				Name       string `json:"name"`
+				Secret     string `json:"rest_api_secret_url_key"`
+				RevisionID string `json:"active_revision_id"`
+			} `json:"projectFunctionsInfo"`
+		} `json:"data"`
+	}
+	if err := json.Unmarshal(raw, &parsed); err != nil {
+		return "", err
+	}
+	var secret, revision string
+	for _, fn := range parsed.Data.Functions {
+		if fn.Name == name {
+			secret = fn.Secret
+			revision = fn.RevisionID
+			break
+		}
+	}
+	if revision == "" {
+		return "", fmt.Errorf("execute_function: function %q has no active revision; deploy it first", name)
+	}
+	if secret == "" {
+		return "", fmt.Errorf("execute_function: function %q has no REST secret", name)
+	}
+	payload, _ := json.Marshal(args["payload"])
+	if len(payload) == 0 || string(payload) == "null" {
+		payload = []byte("{}")
+	}
+	ctx = WithRESTMeta(ctx, projectID, tenantID, map[string]string{"X-Fn-Hash": secret})
+	status, body, err := h.opt.System.REST(ctx, token, http.MethodPost, "/function/"+url.PathEscape(projectID)+"/"+url.PathEscape(name), payload)
+	if err != nil {
+		return "", err
+	}
+	if status >= 400 {
+		return "", fmt.Errorf("code=%d, message=%s", status, body)
+	}
+	return string(body), nil
 }
 
 func (h *Handler) enforce(tool Tool, args map[string]any) error {

@@ -37,13 +37,15 @@ func (s *GraphQLServer) mintProjectUserToken(cache *models.ApplicationCache, rol
 	if s.ProjectKeyManager == nil {
 		return "", errors.New("project key manager not initialized")
 	}
-	exp := time.Now().UTC().AddDate(1, 0, 0)
-	exp = time.Date(exp.Year(), exp.Month(), exp.Day(), 23, 59, 59, 0, time.UTC)
+	now := time.Now().UTC()
+	exp := now.Add(utility.ProjectUserTokenLifetime)
+	issuedAt := now.Unix()
 	tokenType := "user"
 	scopes := []string{"project:" + cache.Project.ID}
 	if s.Cfg != nil && s.Cfg.ProjectUserAPITokenHook != nil {
 		tokenType, scopes = s.Cfg.ProjectUserAPITokenHook(cache, userID, role)
 	}
+	scopes = utility.AppendIssuedAtScope(scopes, issuedAt)
 	return s.ProjectKeyManager.GenerateKey(&models.TokenClaims{
 		Role:          role,
 		UserID:        userID,
@@ -602,6 +604,12 @@ func (s *GraphQLServer) DeleteUserResolverFn(p graphql.ResolveParams) (interface
 	if uid == "" {
 		return nil, errors.New("user_id is required")
 	}
+	if s.ProjectKeyManager == nil {
+		return nil, errors.New("project key manager not initialized; refusing to delete without session revocation")
+	}
+	if err := s.ProjectKeyManager.RevokeProjectUserSessionsWithContext(cache.Ctx, cache.Project.ID, uid); err != nil {
+		return nil, err
+	}
 	if err := svc.DeleteUserRecord(uid); err != nil {
 		return nil, err
 	}
@@ -655,6 +663,12 @@ func (s *GraphQLServer) ResetUserPasswordResolverFn(p graphql.ResolveParams) (in
 	}
 	if user == nil {
 		return nil, errors.New("user not found")
+	}
+	if s.ProjectKeyManager == nil {
+		return nil, errors.New("project key manager not initialized; refusing to reset without session revocation")
+	}
+	if err := s.ProjectKeyManager.RevokeProjectUserSessionsWithContext(cache.Ctx, cache.Project.ID, uid); err != nil {
+		return nil, err
 	}
 	user.Secret = string(hash)
 	if err := svc.UpdateUserRecord(user, ""); err != nil {

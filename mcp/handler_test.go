@@ -172,6 +172,50 @@ func TestOpenEditionHidesProTools(t *testing.T) {
 	_ = e
 }
 
+func TestPlanToolsUsePlanMutations(t *testing.T) {
+	for _, name := range []string{"list_plans", "upsert_plan", "delete_plan"} {
+		query, ok := operationQuery(name)
+		if !ok {
+			t.Fatalf("%s has no operation mapping", name)
+		}
+		if strings.Contains(query, "getModelData") {
+			t.Fatalf("%s must not call getModelData", name)
+		}
+	}
+	list, _ := operationQuery("list_plans")
+	if !strings.Contains(list, "getProjectPlans") {
+		t.Fatalf("list_plans = %s", list)
+	}
+	upsert, _ := operationQuery("upsert_plan")
+	if !strings.Contains(upsert, "upsertPlanToProject") {
+		t.Fatalf("upsert_plan = %s", upsert)
+	}
+	del, _ := operationQuery("delete_plan")
+	if !strings.Contains(del, "deletePlanFromProject") {
+		t.Fatalf("delete_plan = %s", del)
+	}
+}
+
+func TestGetClientRuntimeUsesNamedQuery(t *testing.T) {
+	query, ok := operationQuery("get_client_runtime")
+	if !ok {
+		t.Fatal("get_client_runtime has no operation mapping")
+	}
+	if !strings.Contains(query, "clientRuntime(platform: $platform)") {
+		t.Fatalf("query = %s", query)
+	}
+	if strings.Contains(query, "getModelData") {
+		t.Fatal("get_client_runtime must not call getModelData")
+	}
+	write, ok := operationQuery("update_client_runtime")
+	if !ok || !strings.Contains(write, "settings: { client_runtime: $client_runtime }") {
+		t.Fatal("update_client_runtime must write project settings")
+	}
+	if strings.Contains(write, "getModelData") || strings.Contains(write, "approveSchemaChanges") {
+		t.Fatal("update_client_runtime must stay on updateProject")
+	}
+}
+
 func TestCatalogCoversTypeScriptSurface(t *testing.T) {
 	if got := len(Catalog()); got < 100 {
 		t.Fatalf("catalog = %d", got)

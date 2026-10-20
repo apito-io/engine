@@ -178,6 +178,13 @@ func (s *GraphQLServer) ListAllProjectsResolverFn(p graphql.ResolveParams) (inte
 		v      = p.Context.Value
 		router = v("router").(echo.Context)
 	)
+	cache, err := s.GetApplicationCache(router)
+	if err != nil {
+		return nil, err
+	}
+	if err := requireProjectAdmin(cache); err != nil {
+		return nil, err
+	}
 
 	param, err := s.buildCommonSystemParam(router)
 	if err != nil {
@@ -205,6 +212,9 @@ func (s *GraphQLServer) ListRoleScopesResolverFn(p graphql.ResolveParams) (inter
 
 	cache, err := s.GetApplicationCache(router)
 	if err != nil {
+		return nil, err
+	}
+	if err := requireProjectAdmin(cache); err != nil {
 		return nil, err
 	}
 
@@ -258,6 +268,10 @@ func (s *GraphQLServer) GetCurrentProjectResolverFn(p graphql.ResolveParams) (in
 	project := new(models.Project)
 
 	*project = *cache.Project
+	if err := requireProjectAdmin(cache); err == nil {
+		s.importClientRuntimeIfEmpty(cache)
+		project.Settings = cache.Project.Settings
+	}
 	project.Schema = nil
 
 	if err := requireProjectAdmin(cache); err != nil {
@@ -350,6 +364,9 @@ func (s *GraphQLServer) ModelDocumentCountsResolverFn(p graphql.ResolveParams) (
 	if err != nil {
 		return nil, err
 	}
+	if err := requireRawSystemData(router, cache); err != nil {
+		return nil, err
+	}
 
 	if cache.Project.Schema == nil {
 		return []map[string]interface{}{}, nil
@@ -406,20 +423,22 @@ func (s *GraphQLServer) ModelDocumentCountsResolverFn(p graphql.ResolveParams) (
 
 func (s *GraphQLServer) GetProjectResolverFn(p graphql.ResolveParams) (interface{}, error) {
 	var projectID string
+	router, ok := p.Context.Value("router").(echo.Context)
+	if !ok {
+		return nil, errors.New("router context missing")
+	}
+	cache, err := s.GetApplicationCache(router)
+	if err != nil {
+		return nil, err
+	}
+	if err := requireProjectAdmin(cache); err != nil {
+		return nil, err
+	}
 	if val, ok := p.Args["_id"].(string); ok {
 		projectID = strings.TrimSpace(val)
 	}
 	// Empty _id means "current project" (matches GraphQL field description).
 	if projectID == "" {
-		v := p.Context.Value
-		router, ok := v("router").(echo.Context)
-		if !ok {
-			return nil, errors.New("router context missing")
-		}
-		cache, err := s.GetApplicationCache(router)
-		if err != nil {
-			return nil, err
-		}
 		if cache.Project == nil || strings.TrimSpace(cache.Project.ID) == "" {
 			return nil, errors.New(ae.MODEL_NAME_REQUIRED)
 		}
@@ -472,6 +491,13 @@ func (s *GraphQLServer) ListAuditLogsFn(p graphql.ResolveParams) (interface{}, e
 	if err != nil {
 		return nil, err
 	}
+	cache, err := s.GetApplicationCache(router)
+	if err != nil {
+		return nil, err
+	}
+	if err := requireProjectAdmin(cache); err != nil {
+		return nil, err
+	}
 
 	// if _id available then change the project in param
 	if val, ok := p.Args["_id"].(string); ok && val != "" {
@@ -502,6 +528,13 @@ func (s *GraphQLServer) ListWebHooksResolverFn(p graphql.ResolveParams) (interfa
 	if err != nil {
 		return nil, err
 	}
+	cache, err := s.GetApplicationCache(router)
+	if err != nil {
+		return nil, err
+	}
+	if err := requireProjectAdmin(cache); err != nil {
+		return nil, err
+	}
 
 	param.ResolveParams = &p
 	param.SystemCollectionName = "webhooks"
@@ -529,6 +562,9 @@ func (s *GraphQLServer) ListModelsInfoResolverFn(p graphql.ResolveParams) (inter
 
 	cache, err := s.GetApplicationCache(router)
 	if err != nil {
+		return nil, err
+	}
+	if err := requireProjectAdmin(cache); err != nil {
 		return nil, err
 	}
 
@@ -612,6 +648,9 @@ func (s *GraphQLServer) ProjectSchemaRelationGraphResolverFn(p graphql.ResolvePa
 
 	cache, err := s.GetApplicationCache(router)
 	if err != nil {
+		return nil, err
+	}
+	if err := requireProjectAdmin(cache); err != nil {
 		return nil, err
 	}
 	project := cache.Project
@@ -853,6 +892,9 @@ func (s *GraphQLServer) ProjectModelInfoResolverFn(p graphql.ResolveParams) (int
 	if err != nil {
 		return nil, err
 	}
+	if err := requireProjectAdmin(cache); err != nil {
+		return nil, err
+	}
 
 	doc := cache.Project
 
@@ -900,6 +942,17 @@ func (s *GraphQLServer) SystemPlugins(p graphql.ResolveParams) (interface{}, err
 
 	s.Lock()
 	defer s.Unlock()
+	router, ok := p.Context.Value("router").(echo.Context)
+	if !ok {
+		return nil, errors.New("router context missing")
+	}
+	cache, err := s.GetApplicationCache(router)
+	if err != nil {
+		return nil, err
+	}
+	if err := requireProjectAdmin(cache); err != nil {
+		return nil, err
+	}
 
 	// Load HashiCorp plugins from registry
 	_hashiCorpPlugins, err := pluginService.LoadHashiCorpPluginRegistry(s.Cfg)
@@ -934,6 +987,9 @@ func (s *GraphQLServer) ProjectSpecificInstalledPlugins(p graphql.ResolveParams)
 
 	cache, err := s.GetApplicationCache(router)
 	if err != nil {
+		return nil, err
+	}
+	if err := requireProjectAdmin(cache); err != nil {
 		return nil, err
 	}
 
@@ -1004,6 +1060,9 @@ func (s *GraphQLServer) ListDetailedModelsDataInfoResolverFn(p graphql.ResolvePa
 	if err != nil {
 		return nil, err
 	}
+	if err := requireRawSystemData(router, cache); err != nil {
+		return nil, err
+	}
 
 	// forward the proxy
 	p.Args = p.Source.(graphql.ResolveParams).Args
@@ -1049,6 +1108,9 @@ func (s *GraphQLServer) ListDetailedModelsDataCountResolverFn(p graphql.ResolveP
 	if err != nil {
 		return nil, err
 	}
+	if err := requireRawSystemData(router, cache); err != nil {
+		return nil, err
+	}
 
 	// forward the proxy
 	p.Args = p.Source.(graphql.ResolveParams).Args
@@ -1089,6 +1151,13 @@ func (s *GraphQLServer) ListProjectTeams(p graphql.ResolveParams) (interface{}, 
 		v      = p.Context.Value
 		router = v("router").(echo.Context)
 	)
+	cache, err := s.GetApplicationCache(router)
+	if err != nil {
+		return nil, err
+	}
+	if err := requireProjectAdmin(cache); err != nil {
+		return nil, err
+	}
 
 	param, err := s.buildCommonSystemParam(router)
 	if err != nil {
@@ -1106,6 +1175,13 @@ func (s *GraphQLServer) GetTeamsResolverFn(p graphql.ResolveParams) (interface{}
 		v      = p.Context.Value
 		router = v("router").(echo.Context)
 	)
+	cache, err := s.GetApplicationCache(router)
+	if err != nil {
+		return nil, err
+	}
+	if err := requireProjectAdmin(cache); err != nil {
+		return nil, err
+	}
 
 	param, err := s.buildCommonSystemParam(router)
 	if err != nil {
@@ -1123,6 +1199,13 @@ func (s *GraphQLServer) GetOrganizationsResolverFn(p graphql.ResolveParams) (int
 		v      = p.Context.Value
 		router = v("router").(echo.Context)
 	)
+	cache, err := s.GetApplicationCache(router)
+	if err != nil {
+		return nil, err
+	}
+	if err := requireProjectAdmin(cache); err != nil {
+		return nil, err
+	}
 
 	param, err := s.buildCommonSystemParam(router)
 	if err != nil {
@@ -1137,6 +1220,13 @@ func (s *GraphQLServer) SearchSystemUsersResolverFn(p graphql.ResolveParams) (in
 		v      = p.Context.Value
 		router = v("router").(echo.Context)
 	)
+	cache, err := s.GetApplicationCache(router)
+	if err != nil {
+		return nil, err
+	}
+	if err := requireProjectAdmin(cache); err != nil {
+		return nil, err
+	}
 
 	param, err := s.buildCommonSystemParam(router)
 	if err != nil {
@@ -1239,6 +1329,9 @@ func (s *GraphQLServer) CountPhotosInfoResolverFn(p graphql.ResolveParams) (inte
 	if err != nil {
 		return nil, err
 	}
+	if err := requireProjectAdmin(_param); err != nil {
+		return nil, err
+	}
 
 	project := _param.Project
 
@@ -1320,6 +1413,9 @@ func (s *GraphQLServer) ListSingleModelDataInfoResolverFn(p graphql.ResolveParam
 
 	cache, err := s.GetApplicationCache(router)
 	if err != nil {
+		return nil, err
+	}
+	if err := requireRawSystemData(router, cache); err != nil {
 		return nil, err
 	}
 
@@ -1427,6 +1523,9 @@ func (s *GraphQLServer) ListDocumentRevisionInfoResolverFn(p graphql.ResolvePara
 	if err != nil {
 		return nil, err
 	}
+	if err := requireRawSystemData(router, cache); err != nil {
+		return nil, err
+	}
 
 	param := s.NewParam(cache.Param)
 
@@ -1480,6 +1579,12 @@ func (s *GraphQLServer) ListSingleModelHasManyResolverFn(p graphql.ResolveParams
 
 	cache, err := s.GetApplicationCache(router)
 	if err != nil {
+		return nil, err
+	}
+	if err := requireAccessCapability(router, CapDataRead); err != nil {
+		return nil, err
+	}
+	if err := requireRawSystemData(router, cache); err != nil {
 		return nil, err
 	}
 
@@ -1594,6 +1699,12 @@ func (s *GraphQLServer) ListExecutableFunctionsResolverFn(p graphql.ResolveParam
 	if err != nil {
 		return nil, err
 	}
+	if err := requireFunctionManage(cache); err != nil {
+		return nil, err
+	}
+	if err := requireAccessCapability(router, CapFunctionsRead); err != nil {
+		return nil, err
+	}
 
 	var modelArg string
 	if val, ok := p.Args["model_name"].(string); ok && val != "" {
@@ -1630,6 +1741,21 @@ func (s *GraphQLServer) ListExecutableFunctionsResolverFn(p graphql.ResolveParam
 
 func (s *GraphQLServer) LoadedFunctionProviderResolverFn(p graphql.ResolveParams) (interface{}, error) {
 
+	router, ok := p.Context.Value("router").(echo.Context)
+	if !ok {
+		return nil, errors.New("router context missing")
+	}
+	cache, err := s.GetApplicationCache(router)
+	if err != nil {
+		return nil, err
+	}
+	if err := requireFunctionManage(cache); err != nil {
+		return nil, err
+	}
+	if err := requireAccessCapability(router, CapFunctionsRead); err != nil {
+		return nil, err
+	}
+
 	var _list []string
 
 	// Only add HashiCorp plugins (local plugins removed)
@@ -1646,6 +1772,21 @@ func (s *GraphQLServer) LoadedFunctionProviderResolverFn(p graphql.ResolveParams
 }
 
 func (s *GraphQLServer) ListAvailableFunctionsResolverFn(p graphql.ResolveParams) (interface{}, error) {
+	router, ok := p.Context.Value("router").(echo.Context)
+	if !ok {
+		return nil, errors.New("router context missing")
+	}
+	cache, err := s.GetApplicationCache(router)
+	if err != nil {
+		return nil, err
+	}
+	if err := requireFunctionManage(cache); err != nil {
+		return nil, err
+	}
+	if err := requireAccessCapability(router, CapFunctionsRead); err != nil {
+		return nil, err
+	}
+
 	// Local plugin cache removed - function provider lookup disabled
 	// Use HashiCorp plugins instead
 	fmt.Println("Function provider lookup disabled for local plugins")

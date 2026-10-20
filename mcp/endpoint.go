@@ -12,7 +12,7 @@ const (
 	KindLocal  = "local"
 	KindCustom = "custom"
 
-	CloudMCPURL = "https://mcp.apito.io/mcp"
+	CloudMCPURL = "https://api.apito.io/mcp"
 	LocalMCPURL = "http://localhost:4055/mcp"
 
 	ScopeMCP = "mcp"
@@ -57,7 +57,7 @@ func InferKind(raw string) (string, error) {
 	parsed, _ := url.Parse(resource)
 	host := strings.ToLower(parsed.Hostname())
 	switch host {
-	case "mcp.apito.io":
+	case "mcp.apito.io", "api.apito.io":
 		return KindCloud, nil
 	case "localhost", "127.0.0.1", "::1":
 		return KindLocal, nil

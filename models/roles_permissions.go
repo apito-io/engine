@@ -197,7 +197,8 @@ func ClearPlanSeedOmission(project *Project, slug string) {
 	project.PlanSeedOmissions = out
 }
 
-// NormalizePlanSlug lowercases and normalizes common aliases (paid+ → paid_plus).
+// NormalizePlanSlug lowercases a plan id and maps the paid+ spelling to paid_plus.
+// The stored catalog id is kept. "pro" stays "pro".
 func NormalizePlanSlug(raw string) string {
 	trimmed := strings.ToLower(strings.TrimSpace(raw))
 	trimmed = strings.ReplaceAll(trimmed, "-", "_")
@@ -205,8 +206,6 @@ func NormalizePlanSlug(raw string) string {
 	switch trimmed {
 	case "paid+", "paidplus":
 		return "paid_plus"
-	case "pro", "business": // legacy display slugs → canonical paid
-		return "paid"
 	case "":
 		return "free"
 	default:

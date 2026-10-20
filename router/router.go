@@ -168,6 +168,10 @@ func InitRouter(cfg *models.Config) (*echo.Echo, error) {
 	adminAPI := router.Group("/admin")
 	adminAPI.POST("/reset-password", authCtrl.AdminResetPasswordV2)
 
+	// BFF identity verification is a dedicated app-user endpoint. It does not
+	// trust x-apito-user-id, x-apito-tenant-id, role, or business headers.
+	router.GET("/secured/auth/identity", authCtrl.GetProjectUserIdentity)
+
 	router.POST("/system/cli/v1/login/start", authCtrl.CLILoginStart)
 	router.POST("/system/cli/v1/login/poll", authCtrl.CLILoginPoll)
 	router.GET("/system/cli/v1/login/verify", authCtrl.CLILoginVerify)

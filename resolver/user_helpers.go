@@ -24,11 +24,21 @@ func RequireProjectAdmin(cache *models.ApplicationCache) error {
 	return requireProjectAdmin(cache)
 }
 
+func requireRawSystemData(router echo.Context, cache *models.ApplicationCache) error {
+	return RequireProjectAdmin(cache)
+}
+
 func requireProjectAdmin(cache *models.ApplicationCache) error {
 	if cache == nil || cache.Param == nil || cache.Param.Role == nil {
 		return errors.New("admin role required")
 	}
-	if cache.Param.Role.IsAdmin || strings.EqualFold(strings.TrimSpace(cache.Param.Role.ID), "admin") {
+	role := cache.Param.Role
+	// A project-user role is an end-user credential, even if a forged or
+	// misconfigured role record reuses the reserved "admin" id or IsAdmin bit.
+	if role.IsProjectUser {
+		return errors.New("admin role required")
+	}
+	if role.IsAdmin || strings.EqualFold(strings.TrimSpace(role.ID), "admin") {
 		return nil
 	}
 	return errors.New("admin role required")
@@ -64,6 +74,9 @@ func requireFunctionManage(cache *models.ApplicationCache) error {
 		return errors.New("function management requires project admin")
 	}
 	role := cache.Param.Role
+	if role.IsProjectUser {
+		return errors.New("function management requires project admin")
+	}
 	id := strings.ToLower(strings.TrimSpace(role.ID))
 	if role.IsAdmin || id == "admin" || id == "owner" || id == "project_admin" {
 		return nil

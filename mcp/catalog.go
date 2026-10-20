@@ -47,13 +47,15 @@ func Catalog() []Tool {
 		"add_relation", "preview_relation_transition", "migrate_relation", "delete_relation",
 		"upsert_unique_key", "delete_unique_key",
 		"upsert_data", "get_data", "delete_data", "duplicate_data",
-		"list_tenants", "search_tenants", "create_tenant", "update_tenant", "delete_tenant",
+		"list_tenants", "search_tenants", "create_tenant", "update_tenant", "delete_tenant", "restore_tenant",
 		"generate_tenant_token", "search_tenant_by_domain",
 		"search_app_users", "create_app_user", "update_app_user", "delete_app_user",
 		"reset_app_user_password", "login_app_user", "google_oauth_state", "login_app_user_google",
 		"get_schema_diff", "list_schema_versions", "list_schema_change_events", "discard_schema_draft",
+		"publish_schema",
 		"list_roles", "get_permissions_catalog", "upsert_role", "duplicate_role", "delete_role",
-		"list_plans", "upsert_plan", "get_project_settings", "update_project_settings",
+		"list_plans", "upsert_plan", "delete_plan", "get_project_settings", "update_project_settings",
+		"get_client_runtime", "update_client_runtime",
 		"list_api_keys", "create_api_key", "delete_api_key",
 		"get_auth_settings", "update_auth_settings", "get_storage_settings", "update_storage_settings",
 		"list_team_members", "update_team_members",
@@ -93,7 +95,9 @@ func classify(name string) string {
 		return accessDestructive
 	}
 	if strings.HasPrefix(name, "get_") || strings.HasPrefix(name, "list_") || strings.HasPrefix(name, "search_") ||
-		name == "preview_relation_transition" || name == "probe_public_document" {
+		name == "preview_relation_transition" || name == "probe_public_document" ||
+		name == "google_oauth_state" || name == "login_app_user" || name == "login_app_user_google" ||
+		name == "summarize_schema_draft_for_review" || name == "summarize_system_logs" {
 		return accessRead
 	}
 	return accessWrite
@@ -101,7 +105,7 @@ func classify(name string) string {
 
 func proOnly(name string) bool {
 	switch name {
-	case "list_tenants", "search_tenants", "create_tenant", "update_tenant", "delete_tenant",
+	case "list_tenants", "search_tenants", "create_tenant", "update_tenant", "delete_tenant", "restore_tenant",
 		"generate_tenant_token", "search_tenant_by_domain",
 		"get_schema_diff", "list_schema_versions", "list_schema_change_events", "discard_schema_draft",
 		"search_system_logs", "get_system_log", "get_system_trace", "summarize_system_logs", "get_log_store_health":

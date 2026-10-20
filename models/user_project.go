@@ -99,6 +99,11 @@ type ProjectSettings struct {
 	IdleTenantRetentionDays int `bun:"idle_tenant_retention_days,notnull,default:90" json:"idle_tenant_retention_days,omitempty" firestore:"idle_tenant_retention_days,omitempty" bson:"idle_tenant_retention_days,omitempty"`
 	// AutoSoftDeleteIdleTenants enables daily soft-delete of free-tier idle tenants (never hard-delete).
 	AutoSoftDeleteIdleTenants bool `bun:"auto_soft_delete_idle_tenants,notnull,default:false" json:"auto_soft_delete_idle_tenants,omitempty" firestore:"auto_soft_delete_idle_tenants,omitempty" bson:"auto_soft_delete_idle_tenants,omitempty"`
+
+	// ClientRuntime is the project-wide pre-login release and maintenance config.
+	// It is system data, not a content model. exclude keeps it off struct-to-GraphQL
+	// reflection; the settings object adds a typed field with JSON extras.
+	ClientRuntime *ClientRuntime `bun:"client_runtime,type:json,nullzero" json:"client_runtime,omitempty" firestore:"client_runtime,omitempty" bson:"client_runtime,omitempty" exclude:"true"`
 }
 
 // MinIdleTenantRetentionDays is the lowest allowed idle_tenant_retention_days value.

@@ -218,10 +218,10 @@ func (a *AuthController) GetAccessTokenMe(c echo.Context) error {
 	}
 
 	out := map[string]interface{}{
-		"code":   http.StatusOK,
-		"token":  pub,
-		"plane":  "access_token",
-		"hint":   "Secret is never returned. Use when debugging CAPABILITY_DENIED or project/tenant grant failures.",
+		"code":  http.StatusOK,
+		"token": pub,
+		"plane": "access_token",
+		"hint":  "Secret is never returned. Use when debugging CAPABILITY_DENIED or project/tenant grant failures.",
 	}
 
 	operation := strings.TrimSpace(c.QueryParam("operation"))
@@ -243,11 +243,11 @@ func (a *AuthController) GetAccessTokenMe(c echo.Context) error {
 			}
 		} else {
 			out["operation_hint"] = map[string]interface{}{
-				"operation":  operation,
-				"surface":    surface,
-				"required":   required,
-				"present":    authz.HasCapability(principal.Capabilities, required),
-				"known":      true,
+				"operation": operation,
+				"surface":   surface,
+				"required":  required,
+				"present":   authz.HasCapability(principal.Capabilities, required),
+				"known":     true,
 			}
 		}
 	}
@@ -280,6 +280,44 @@ func (a *AuthController) GetAccessTokenMe(c echo.Context) error {
 	}
 
 	return c.JSON(http.StatusOK, out)
+}
+
+// GetProjectUserIdentity verifies an app-user bearer and returns only the
+// server-derived identity needed by a trusted BFF. Bootstrap project keys and
+// apt_ operator credentials are rejected by ValidateAppUserFunctionBearer.
+// Client-supplied identity headers are intentionally ignored.
+func (a *AuthController) GetProjectUserIdentity(c echo.Context) error {
+	if a == nil || a.graphQLServer == nil || a.graphQLServer.ApitoTokenService == nil {
+		return c.JSON(http.StatusInternalServerError, map[string]string{
+			"error": "BFF_TOKEN_VERIFICATION_FAILED",
+		})
+	}
+	claims, err := a.graphQLServer.ApitoTokenService.ValidateAppUserFunctionBearer(c)
+	if err != nil {
+		return c.JSON(http.StatusUnauthorized, map[string]string{
+			"error": "BFF_TOKEN_VERIFICATION_FAILED",
+		})
+	}
+	tenantID := ""
+	for _, scope := range claims.Scopes {
+		if strings.HasPrefix(scope, "tenant:") {
+			tenantID = strings.TrimSpace(strings.TrimPrefix(scope, "tenant:"))
+			break
+		}
+	}
+	if tenantID == "" {
+		return c.JSON(http.StatusForbidden, map[string]string{
+			"error": "TENANT_SCOPE_REQUIRED",
+		})
+	}
+	return c.JSON(http.StatusOK, map[string]interface{}{
+		"user_id":    claims.UserID,
+		"tenant_id":  tenantID,
+		"project_id": claims.ProjectID,
+		"role":       claims.Role,
+		"scopes":     claims.Scopes,
+		"expires_at": claims.ExpireAt,
+	})
 }
 
 // ListAdministrableProjects returns projects the issuer can currently administer (for "all projects" preview).

@@ -17,6 +17,9 @@ type Config struct {
 
 	// MCPPublicURL is the browser-facing MCP resource. Empty uses the forwarded host.
 	MCPPublicURL string `env:"MCP_PUBLIC_URL" env-default:""`
+	// PublicAPIURL is the origin written into generated REST docs.
+	// Empty uses http://localhost:5050 when ENVIRONMENT=local, otherwise https://api.apito.io.
+	PublicAPIURL string `env:"PUBLIC_API_URL" env-default:""`
 	// MCPOAuthStore is the durable OAuth transaction file. Empty uses the data directory.
 	MCPOAuthStore string `env:"MCP_OAUTH_STORE" env-default:""`
 
@@ -161,9 +164,9 @@ type Config struct {
 
 	// --- Optional host hooks (registered at startup when a host binary is present) ---
 
-	// ConnectionRoutingHook returns a scope key for sub-project connection isolation.
-	// If it returns (key, true) with a non-empty key, the executor uses a scoped connection.
-	ConnectionRoutingHook func(ctx context.Context, projectID string) (scopeKey string, ok bool) `env:"-"`
+	// ConnectionRoutingHook returns an explicit connection-routing decision.
+	// A denied decision must never fall back to the base project connection.
+	ConnectionRoutingHook func(ctx context.Context, projectID string) ConnectionRoutingResult `env:"-"`
 
 	// QueryFilterHook returns additional filters to apply before every query (e.g. row-level isolation).
 	QueryFilterHook func(ctx context.Context, params *CommonSystemParams) []*QueryFilter `env:"-"`
@@ -400,6 +403,26 @@ type Config struct {
 
 	// OTELExporterOTLPEndpoint optional OTLP HTTP endpoint for traces. Empty disables OTLP trace export for builds that wire a TracerProvider.
 	OTELExporterOTLPEndpoint string `env:"OTEL_EXPORTER_OTLP_ENDPOINT" env-default:""`
+}
+
+// ConnectionRoutingDecision tells the executor whether a request should use
+// the base project connection, a tenant-scoped connection, or no connection.
+// The explicit denied state prevents a host hook from accidentally failing
+// open when scoped credentials or catalog data are unavailable.
+type ConnectionRoutingDecision uint8
+
+const (
+	ConnectionRouteDefault ConnectionRoutingDecision = iota
+	ConnectionRouteScoped
+	ConnectionRouteDenied
+)
+
+// ConnectionRoutingResult is the typed contract between a host's tenant
+// router and the open-core connection boundary.
+type ConnectionRoutingResult struct {
+	Decision ConnectionRoutingDecision
+	ScopeKey string
+	Err      error
 }
 
 // FunctionTenantScopeMode selects draft-test vs live callable tenant policy.

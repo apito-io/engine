@@ -4,6 +4,18 @@ Notable changes to **open-core** only. Release tags use `v1.x` (for example `v1.
 
 ## [Unreleased]
 
+## [1.9.0] - 2026-10-20
+
+### Added
+
+- Public `clientRuntime(platform)` reads only that project's client runtime settings. It is a named query on the bootstrap allowlist and is bound to `settings.read` for operator tokens.
+- Token sessions can be revoked across system drivers.
+
+### Changed
+
+- A project API key cannot call privileged system data, tenant, schema, or role operations. `getModelData` stays off the bootstrap allowlist.
+- `cli_login` stays limited to `projects.read` and `schema.read`.
+
 ## [1.8.20] - 2026-09-02
 
 ### Added

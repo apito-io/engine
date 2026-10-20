@@ -56,11 +56,23 @@ func (s echoSystem) REST(ctx context.Context, token, method, path string, body [
 }
 
 func (s echoSystem) do(ctx context.Context, token, method, path, projectID, tenantID string, body []byte) (int, json.RawMessage, error) {
+	meta, hasMeta := mcp.RESTMetaFrom(ctx)
+	if projectID == "" && hasMeta {
+		projectID = meta.ProjectID
+	}
+	if tenantID == "" && hasMeta {
+		tenantID = meta.TenantID
+	}
 	req := httptest.NewRequest(method, path, bytes.NewReader(body)).WithContext(ctx)
 	req.Header.Set("Authorization", "Bearer "+token)
 	req.Header.Set("Content-Type", "application/json")
 	// Headless apt_ calls must not fall through to the console cookie path.
 	req.Header.Set("X-Use-Cookies", "false")
+	if hasMeta {
+		for key, value := range meta.Headers {
+			req.Header.Set(key, value)
+		}
+	}
 	if projectID != "" {
 		req.Header.Set(models.ApitoProjectIDHeader, projectID)
 	}

@@ -34,6 +34,13 @@ func TestKindFollowsHost(t *testing.T) {
 	if custom.Kind != KindCustom {
 		t.Fatalf("custom kind = %s", custom.Kind)
 	}
+	live, err := Resolve("https://api.apito.io/mcp", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if live.Kind != KindCloud || live.Resource != CloudMCPURL {
+		t.Fatalf("live cloud = %+v", live)
+	}
 }
 
 func TestDefaultURLsStayClean(t *testing.T) {

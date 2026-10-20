@@ -87,6 +87,12 @@ func RequireDataGraphQLCapabilities(ctx echo.Context, query string) error {
 		return fmt.Errorf("exactly one GraphQL operation is required")
 	}
 	op := doc.Operations[0]
+	if op.Operation != ast.Mutation && introspectionOnly(op) {
+		if hasSchemaOrDataRead(ctx) {
+			return nil
+		}
+		return RequireCapability(ctx, authz.CapSchemaRead)
+	}
 	if op.Operation != ast.Mutation {
 		return RequireCapability(ctx, authz.CapDataRead)
 	}
@@ -109,76 +115,405 @@ func RequireDataGraphQLCapabilities(ctx echo.Context, query string) error {
 	return RequireCapability(ctx, required)
 }
 
-// systemGraphQLFieldAliases maps GraphQL root field names that differ from
-// DefaultOperationBindings Operation values (or need CapRolesRead fallbacks).
-var systemGraphQLFieldAliases = map[string]string{
-	"upsertRoleToProject":      authz.CapRolesWrite,
-	"deleteRoleFromProject":    authz.CapRolesWrite,
-	"duplicateRoleInProject":   authz.CapRolesWrite,
-	"deleteRole":               authz.CapRolesWrite,
-	"getProjectPlans":          authz.CapPlansRead,
-	"upsertPlanToProject":      authz.CapPlansWrite,
-	"duplicatePlanInProject":   authz.CapPlansWrite,
-	"deletePlanFromProject":    authz.CapPlansWrite,
-	"generateProjectToken":     authz.CapProjectsWrite,
-	"deleteProjectToken":       authz.CapProjectsWrite,
-	"currentProject":           authz.CapProjectsRead,
-	"getProjectRoles":          authz.CapRolesRead,
-	"listPermissionsAndScopes": authz.CapRolesRead,
+// introspectionOnly is a published-schema read. cli_login has schema.read and
+// must not receive data.read just to generate types.
+func introspectionOnly(op *ast.OperationDefinition) bool {
+	if op == nil || len(op.SelectionSet) == 0 {
+		return false
+	}
+	for _, selection := range op.SelectionSet {
+		field, ok := selection.(*ast.Field)
+		if !ok {
+			return false
+		}
+		if field.Name != "__schema" && field.Name != "__type" {
+			return false
+		}
+	}
+	return true
 }
 
-func systemGraphQLCapabilityForField(fieldName string) string {
+func hasSchemaOrDataRead(ctx echo.Context) bool {
+	principal := PrincipalFromEcho(ctx)
+	if principal == nil {
+		return true
+	}
+	return authz.HasCapability(principal.Capabilities, authz.CapSchemaRead) ||
+		authz.HasCapability(principal.Capabilities, authz.CapDataRead)
+}
+
+// systemGraphQLFieldAliases contains explicit bindings for system roots that
+// predate the capability registry or use a resolver-specific name. Keeping
+// this map exhaustive prevents a capability-bearing apt_ token from being
+// treated as an anonymous "known" operation while preserving the existing
+// operator surface.
+var systemGraphQLFieldAliases = map[string]string{
+	"previewSchemaRelationTransition":     authz.CapSchemaRead,
+	"auditLogs":                           authz.CapAuditRead,
+	"searchSchemaOperations":              authz.CapSchemaRead,
+	"modelDocumentCounts":                 authz.CapDatabaseRead,
+	"modelPhysicalHealth":                 authz.CapDatabaseRead,
+	"projectPhysicalHealth":               authz.CapDatabaseRead,
+	"getUser":                             authz.CapMembersRead,
+	"getProject":                          authz.CapProjectsRead,
+	"listWebHooks":                        authz.CapSettingsRead,
+	"projectModelsInfo":                   authz.CapSchemaRead,
+	"projectSchemaRelationGraph":          authz.CapSchemaRead,
+	"listPluginIds":                       authz.CapPluginsRead,
+	"getSystemPlugins":                    authz.CapPluginsRead,
+	"getProjectPlugins":                   authz.CapPluginsRead,
+	"getSingleData":                       authz.CapDatabaseRead,
+	"getModelData":                        authz.CapDatabaseRead,
+	"searchSystemUsers":                   authz.CapMembersRead,
+	"teamMembers":                         authz.CapMembersRead,
+	"listSingleModelRevisionData":         authz.CapDatabaseRead,
+	"projectFunctionsInfo":                authz.CapFunctionsRead,
+	"listFunctionRevisions":               authz.CapFunctionsRead,
+	"listFunctionDeployments":             authz.CapFunctionsRead,
+	"listExecutableFunctions":             authz.CapFunctionsRead,
+	"thirdPartyFunctionQuery":             authz.CapFunctionsRead,
+	"listAvailableFunctions":              authz.CapFunctionsRead,
+	"send":                                authz.CapSettingsWrite,
+	"upsertPlugin":                        authz.CapPluginsWrite,
+	"removeProjectSpecificPlugin":         authz.CapPluginsWrite,
+	"createWebHook":                       authz.CapSettingsWrite,
+	"deleteWebHook":                       authz.CapSettingsWrite,
+	"updateProjectAuthenticationSettings": authz.CapSettingsWrite,
+	"updateProjectStorageSettings":        authz.CapSettingsWrite,
+	"updateProfile":                       authz.CapMembersWrite,
+	"addModelToProject":                   authz.CapSchemaWrite,
+	"runModelMigrations":                  authz.CapSchemaWrite,
+	"updateModel":                         authz.CapSchemaWrite,
+	"upsertFunctionToProject":             authz.CapFunctionsWrite,
+	"deleteFunctionFromProject":           authz.CapFunctionsDelete,
+	"deployFunctionToProject":             authz.CapFunctionsDeploy,
+	"rollbackFunctionDeployment":          authz.CapFunctionsDeploy,
+	"testFunctionDraft":                   authz.CapFunctionsTest,
+	"upsertFieldToModel":                  authz.CapSchemaWrite,
+	"modelFieldOperation":                 authz.CapSchemaWrite,
+	"rearrangeSerialOfField":              authz.CapSchemaWrite,
+	"upsertConnectionToModel":             authz.CapSchemaWrite,
+	"stageRelationTransition":             authz.CapSchemaWrite,
+	"upsertUniqueKey":                     authz.CapSchemaWrite,
+	"deleteUniqueKey":                     authz.CapSchemaWrite,
+	"deleteConnectionFromModel":           authz.CapSchemaWrite,
+	"upsertModelData":                     authz.CapDatabaseWrite,
+	"deleteModelData":                     authz.CapDatabaseWrite,
+	"duplicateModelData":                  authz.CapDatabaseWrite,
+	"retrySchemaOperation":                authz.CapSchemaWrite,
+	"reconcileCommonModels":               authz.CapSchemaWrite,
+	"searchUsers":                         authz.CapMembersRead,
+	"createUser":                          authz.CapMembersWrite,
+	"updateUser":                          authz.CapMembersWrite,
+	"deleteUser":                          authz.CapMembersWrite,
+	"resetUserPassword":                   authz.CapMembersWrite,
+	"oauthState":                          authz.CapAuthLogin,
+	"googleOAuthState":                    authz.CapAuthLogin,
+	"schemaVersioningStatus":              authz.CapSchemaRead,
+	"schemaDiff":                          authz.CapSchemaRead,
+	"schemaPreview":                       authz.CapSchemaRead,
+	"schemaChangeEvents":                  authz.CapSchemaRead,
+	"schemaChangeExecutionRecords":        authz.CapSchemaRead,
+	"approveSchemaChanges":                authz.CapSchemaPublish,
+	"discardSchemaDraft":                  authz.CapSchemaWrite,
+	"upsertRoleToProject":                 authz.CapRolesWrite,
+	"deleteRoleFromProject":               authz.CapRolesWrite,
+	"duplicateRoleInProject":              authz.CapRolesWrite,
+	"deleteRole":                          authz.CapRolesWrite,
+	"getProjectPlans":                     authz.CapPlansRead,
+	"upsertPlanToProject":                 authz.CapPlansWrite,
+	"duplicatePlanInProject":              authz.CapPlansWrite,
+	"deletePlanFromProject":               authz.CapPlansWrite,
+	"generateProjectToken":                authz.CapProjectsWrite,
+	"deleteProjectToken":                  authz.CapProjectsWrite,
+	"currentProject":                      authz.CapProjectsRead,
+	"getProjectRoles":                     authz.CapRolesRead,
+	"listPermissionsAndScopes":            authz.CapRolesRead,
+	"generateTenantToken":                 authz.CapTenantsWrite,
+	"bulkHardDeleteTenants":               authz.CapTenantsDelete,
+	"bulkSoftDeleteTenants":               authz.CapTenantsDelete,
+	"bulkRestoreTenants":                  authz.CapTenantsWrite,
+	"suspendTenant":                       authz.CapTenantsWrite,
+	"unsuspendTenant":                     authz.CapTenantsWrite,
+	"tenantHardDeleteImpact":              authz.CapTenantsDelete,
+	"listTenantSubscribers":               authz.CapTenantsRead,
+	"listTenantInvoices":                  authz.CapTenantsRead,
+	"getProjectPaymentProviders":          authz.CapPlansRead,
+	"updateProjectPaymentProviders":       authz.CapPlansWrite,
+	"createTenantSubscription":            authz.CapTenantsWrite,
+	"updateTenantSubscription":            authz.CapTenantsWrite,
+	"cancelTenantSubscription":            authz.CapTenantsWrite,
+	"deleteTenantSubscription":            authz.CapTenantsWrite,
+	"createTenantInvoice":                 authz.CapTenantsWrite,
+	"markInvoicePaid":                     authz.CapTenantsWrite,
+	"searchPlatformAccounts":              authz.CapMembersRead,
+	"previewSchemaVersionRevert":          authz.CapSchemaRead,
+	"schemaVersions":                      authz.CapSchemaRead,
+	"submitSchemaChanges":                 authz.CapSchemaWrite,
+	"rejectSchemaChanges":                 authz.CapSchemaWrite,
+	"stageSchemaVersionRevert":            authz.CapSchemaWrite,
+	"rollbackSchemaVersion":               authz.CapSchemaPublish,
+	"retrySchemaChangeExecutionRecord":    authz.CapSchemaWrite,
+	"flushSchemaSync":                     authz.CapSchemaWrite,
+	"publishSchemaChangeExecutionRecord":  authz.CapSchemaPublish,
+	"rejectSchemaChangeExecutionRecord":   authz.CapSchemaWrite,
+	"backupProviders":                     authz.CapSettingsRead,
+	"backupTargets":                       authz.CapSettingsRead,
+	"backupSnapshots":                     authz.CapSettingsRead,
+	"previewRestore":                      authz.CapSettingsRead,
+	"backupArtifactURL":                   authz.CapSettingsRead,
+	"backupRuns":                          authz.CapSettingsRead,
+	"updateBackupTargets":                 authz.CapSettingsWrite,
+	"updateBackupSettings":                authz.CapSettingsWrite,
+	"testBackupSettings":                  authz.CapSettingsWrite,
+	"runBackupNow":                        authz.CapSettingsWrite,
+	"runFullDump":                         authz.CapSettingsWrite,
+	"restoreBackup":                       authz.CapSettingsWrite,
+	"listPartnerProjectRates":             authz.CapTenantsRead,
+	"upsertPartnerProjectRate":            authz.CapTenantsWrite,
+	"getInvoiceProfile":                   authz.CapPlansRead,
+	"updateInvoiceProfile":                authz.CapPlansWrite,
+	"slowQueryLogs":                       authz.CapAuditRead,
+	"searchSystemLogs":                    authz.CapAuditRead,
+	"systemLog":                           authz.CapAuditRead,
+	"systemLogTrace":                      authz.CapAuditRead,
+	"systemLogStats":                      authz.CapAuditRead,
+	"systemLogFacets":                     authz.CapAuditRead,
+	"systemLogHealth":                     authz.CapAuditRead,
+	"accountWorkspaces":                   authz.CapProjectsRead,
+	"createAccountWorkspace":              authz.CapProjectsWrite,
+	"moveProjectToWorkspace":              authz.CapProjectsWrite,
+	"transferWorkspaceOwnership":          authz.CapProjectsWrite,
+	"myFreelanceClients":                  authz.CapTenantsRead,
+	"myFreelanceEngagements":              authz.CapTenantsRead,
+	"requestFreelanceClientBilling":       authz.CapTenantsWrite,
+	"markFreelanceReady":                  authz.CapTenantsWrite,
+	"acceptFreelanceDelivery":             authz.CapTenantsWrite,
+}
+
+func systemGraphQLCapabilityForField(fieldName string) (string, bool) {
 	fieldName = strings.TrimSpace(fieldName)
 	if fieldName == "" {
-		return ""
+		return "", false
 	}
 	for _, b := range authz.DefaultOperationBindings() {
 		if b.Surface != "system_graphql" {
 			continue
 		}
 		if b.Operation == fieldName {
-			return b.Capability
+			return b.Capability, true
 		}
 	}
 	if cap, ok := systemGraphQLFieldAliases[fieldName]; ok {
-		// Prefer CapRolesRead when bound for role-list fields; alias already uses CapRolesRead.
-		// If CapRolesRead were unavailable as a concept, fall back to CapProjectsRead.
-		if fieldName == "getProjectRoles" || fieldName == "listPermissionsAndScopes" {
-			if _, ok := authz.Get(authz.CapRolesRead); ok {
-				return authz.CapRolesRead
-			}
-			return authz.CapProjectsRead
-		}
-		return cap
+		return cap, true
 	}
-	return ""
+	return "", false
 }
 
-// RequireSystemGraphQLCapabilities enforces apt_ capabilities for system GraphQL root fields.
-func RequireSystemGraphQLCapabilities(ctx echo.Context, query string) error {
-	if PrincipalFromEcho(ctx) == nil || strings.TrimSpace(query) == "" {
+// RequireSystemGraphQLCapabilities enforces apt_ capabilities for system GraphQL
+// root fields. When operationName is supplied, only that selected operation is
+// checked; this matches GraphQL execution for documents containing multiple
+// named operations.
+func RequireSystemGraphQLCapabilities(ctx echo.Context, query string, operationName ...string) error {
+	if PrincipalFromEcho(ctx) == nil {
 		return nil
+	}
+	if strings.TrimSpace(query) == "" {
+		return fmt.Errorf("GraphQL query is required")
 	}
 	doc, err := parser.ParseQuery(&ast.Source{Input: query})
 	if err != nil {
 		return err
 	}
-	if len(doc.Operations) == 0 {
+	operations := doc.Operations
+	if len(operationName) > 0 && strings.TrimSpace(operationName[0]) != "" {
+		op := doc.Operations.ForName(operationName[0])
+		if op == nil {
+			return fmt.Errorf("unknown GraphQL operation %q", operationName[0])
+		}
+		operations = ast.OperationList{op}
+	}
+	if len(operations) == 0 {
 		return fmt.Errorf("at least one GraphQL operation is required")
 	}
-	for _, op := range doc.Operations {
-		for _, selection := range op.SelectionSet {
-			field, ok := selection.(*ast.Field)
-			if !ok {
-				continue
+	visiting := make(map[string]bool)
+	var walk func(ast.SelectionSet) error
+	walk = func(selectionSet ast.SelectionSet) error {
+		for _, selection := range selectionSet {
+			switch node := selection.(type) {
+			case *ast.Field:
+				cap, known := systemGraphQLCapabilityForField(node.Name)
+				if !known {
+					return fmt.Errorf("unknown system GraphQL operation %q", node.Name)
+				}
+				if err := RequireCapability(ctx, cap); err != nil {
+					return err
+				}
+			case *ast.FragmentSpread:
+				fragment := doc.Fragments.ForName(node.Name)
+				if fragment == nil {
+					return fmt.Errorf("unknown fragment %s", node.Name)
+				}
+				if visiting[node.Name] {
+					return fmt.Errorf("cyclic fragment %s", node.Name)
+				}
+				visiting[node.Name] = true
+				if err := walk(fragment.SelectionSet); err != nil {
+					return err
+				}
+				delete(visiting, node.Name)
+			case *ast.InlineFragment:
+				if err := walk(node.SelectionSet); err != nil {
+					return err
+				}
+			default:
+				return fmt.Errorf("unsupported system GraphQL selection")
 			}
-			cap := systemGraphQLCapabilityForField(field.Name)
-			if cap == "" {
-				continue
+		}
+		return nil
+	}
+	for _, op := range operations {
+		if err := walk(op.SelectionSet); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// bootstrapSystemOperations are the only system GraphQL root fields a non-admin
+// project API key may call. Everything else fails closed.
+var bootstrapSystemOperations = map[string]struct{}{
+	"loginUser":             {},
+	"registerUser":          {},
+	"googleOAuthState":      {},
+	"oauthState":            {},
+	"searchTenantsByDomain": {},
+	"clientRuntime":         {},
+}
+
+var bootstrapSystemOperationKinds = map[string]ast.Operation{
+	"loginUser":             ast.Query,
+	"registerUser":          ast.Mutation,
+	"googleOAuthState":      ast.Query,
+	"oauthState":            ast.Query,
+	"searchTenantsByDomain": ast.Query,
+	"clientRuntime":         ast.Query,
+}
+
+// ErrSystemOperationForbiddenForClientKey is returned when a non-admin ak_ key
+// calls a system GraphQL field outside the authentication allowlist.
+var ErrSystemOperationForbiddenForClientKey = fmt.Errorf("SYSTEM_OPERATION_FORBIDDEN_FOR_CLIENT_KEY")
+
+// EnforceBootstrapSystemAllowlist default-denies system GraphQL for non-admin
+// project API keys. apt_ capabilities and console admin sessions are unchanged.
+func EnforceBootstrapSystemAllowlist(ctx echo.Context, query string) error {
+	if ctx == nil {
+		return nil
+	}
+	plane, _ := ctx.Get("auth_plane").(string)
+	if plane != "project_api_key" {
+		return nil
+	}
+	role, _ := ctx.Get("role").(string)
+	isProjectUser, _ := ctx.Get("is_project_user").(bool)
+	if !isProjectUser {
+		switch strings.ToLower(strings.TrimSpace(role)) {
+		case "admin", "owner":
+			return nil
+		}
+	}
+	if strings.TrimSpace(query) == "" {
+		return ErrSystemOperationForbiddenForClientKey
+	}
+	doc, err := parser.ParseQuery(&ast.Source{Input: query})
+	if err != nil {
+		return err
+	}
+	// Bootstrap project keys use a deliberately small, auditable grammar.
+	// Reject fragment definitions and spreads instead of expanding them: this
+	// keeps aliases, nesting, and fragment cycles out of the allowlist parser.
+	if len(doc.Fragments) > 0 {
+		return ErrSystemOperationForbiddenForClientKey
+	}
+	if len(doc.Operations) != 1 {
+		return fmt.Errorf("exactly one system GraphQL operation is required")
+	}
+	names, err := systemRootFieldNames(doc)
+	if err != nil {
+		return err
+	}
+	if len(names) == 0 {
+		return ErrSystemOperationForbiddenForClientKey
+	}
+	for _, name := range names {
+		if _, ok := bootstrapSystemOperations[name]; !ok {
+			return ErrSystemOperationForbiddenForClientKey
+		}
+		if kind := bootstrapSystemOperationKinds[name]; kind != doc.Operations[0].Operation {
+			return ErrSystemOperationForbiddenForClientKey
+		}
+	}
+	return nil
+}
+
+func systemRootFieldNames(doc *ast.QueryDocument) ([]string, error) {
+	var names []string
+	var walk func(ast.SelectionSet, bool) error
+	walk = func(set ast.SelectionSet, root bool) error {
+		for _, selection := range set {
+			switch node := selection.(type) {
+			case *ast.Field:
+				if len(node.Directives) > 0 {
+					return ErrSystemOperationForbiddenForClientKey
+				}
+				// gqlparser populates Alias with the field name even when no
+				// alias was written. Only a differing Alias is user syntax.
+				if node.Alias != "" && node.Alias != node.Name {
+					return ErrSystemOperationForbiddenForClientKey
+				}
+				if strings.HasPrefix(node.Name, "__") {
+					return ErrSystemOperationForbiddenForClientKey
+				}
+				if root {
+					names = append(names, node.Name)
+				}
+				if err := walk(node.SelectionSet, false); err != nil {
+					return err
+				}
+			case *ast.FragmentSpread:
+				_ = node
+				return ErrSystemOperationForbiddenForClientKey
+			case *ast.InlineFragment:
+				_ = node
+				return ErrSystemOperationForbiddenForClientKey
+			default:
+				return ErrSystemOperationForbiddenForClientKey
 			}
-			if err := RequireCapability(ctx, cap); err != nil {
-				return err
-			}
+		}
+		return nil
+	}
+	if len(doc.Operations) == 0 {
+		return nil, fmt.Errorf("at least one GraphQL operation is required")
+	}
+	for _, operation := range doc.Operations {
+		if len(operation.Directives) > 0 {
+			return nil, ErrSystemOperationForbiddenForClientKey
+		}
+		if err := walk(operation.SelectionSet, true); err != nil {
+			return nil, err
+		}
+	}
+	return names, nil
+}
+
+// ValidateSystemGraphQLCapabilityBindings verifies that every registered
+// system root has an explicit capability binding or alias. It is intentionally
+// called against the assembled schema maps, rather than a copied list, so a
+// newly added resolver cannot silently become an unclassified apt_ operation.
+func ValidateSystemGraphQLCapabilityBindings(fieldNames []string) error {
+	for _, fieldName := range fieldNames {
+		if _, ok := systemGraphQLCapabilityForField(fieldName); !ok {
+			return fmt.Errorf("system GraphQL root %q has no capability binding", fieldName)
 		}
 	}
 	return nil

@@ -5,6 +5,7 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"io"
 	"net/http"
 	"net/url"
@@ -142,7 +143,11 @@ func (a *AuthController) deviceLoginApprove(c echo.Context, audience string) err
 	if svc == nil {
 		return c.JSON(http.StatusInternalServerError, map[string]string{"message": "access token service unavailable"})
 	}
-	raw, _, err := svc.Mint(c.Request().Context(), userID, deviceLoginMintRequest(audience, rec.UserCode, scope))
+	mintReq, err := deviceLoginMintRequest(audience, rec.UserCode, scope)
+	if err != nil {
+		return c.JSON(http.StatusBadRequest, map[string]string{"message": err.Error()})
+	}
+	raw, _, err := svc.Mint(c.Request().Context(), userID, mintReq)
 	if err != nil {
 		return c.JSON(http.StatusBadRequest, map[string]string{"message": err.Error()})
 	}
@@ -204,6 +209,11 @@ func (a *AuthController) deviceLoginVerify(c echo.Context, audience string) erro
 }
 
 type cliLoginScope struct {
+	Name              string
+	Description       string
+	Duration          string
+	Preset            string
+	Capabilities      []string
 	ProjectGrantMode  string
 	ProjectIDs        []string
 	TenantGrantMode   string
@@ -225,6 +235,11 @@ func cliLoginApprovalFromRequest(c echo.Context) (string, cliLoginScope, error) 
 	if strings.Contains(contentType, echo.MIMEApplicationJSON) || (len(bytes.TrimSpace(raw)) > 0 && raw[0] == '{') {
 		var body struct {
 			DeviceCode        string              `json:"device_code"`
+			Name              string              `json:"name"`
+			Description       string              `json:"description"`
+			Duration          string              `json:"duration"`
+			Preset            string              `json:"preset"`
+			Capabilities      []string            `json:"capabilities"`
 			ProjectGrantMode  string              `json:"project_grant_mode"`
 			ProjectIDs        []string            `json:"project_ids"`
 			TenantGrantMode   string              `json:"tenant_grant_mode"`
@@ -240,6 +255,11 @@ func cliLoginApprovalFromRequest(c echo.Context) (string, cliLoginScope, error) 
 		if body.TenantGrantMode != "" {
 			scope.TenantGrantMode = body.TenantGrantMode
 		}
+		scope.Name = body.Name
+		scope.Description = body.Description
+		scope.Duration = body.Duration
+		scope.Preset = body.Preset
+		scope.Capabilities = body.Capabilities
 		scope.ProjectIDs = body.ProjectIDs
 		if body.TenantIDs != nil {
 			scope.TenantIDs = body.TenantIDs
@@ -281,19 +301,22 @@ func cliLoginApprovalFromRequest(c echo.Context) (string, cliLoginScope, error) 
 	return strings.TrimSpace(values.Get("device_code")), scope, nil
 }
 
-// cliLoginMintRequest uses the engine CLI sync preset and the scope chosen on
-// the approval page. Capabilities stay on the preset. Mint is the same call
-// the console uses to create an access token.
-func cliLoginMintRequest(userCode string, scope cliLoginScope) *models.CreateAccessTokenRequest {
+// cliLoginMintRequest uses the low-harm CLI login preset and the scope chosen
+// on the approval page. Capabilities stay on the preset. Mint is the same call
+// the console uses to create an access token. Sync and function deploy stay on
+// an explicit cli_sync token.
+func cliLoginMintRequest(userCode string, scope cliLoginScope) (*models.CreateAccessTokenRequest, error) {
 	return deviceLoginMintRequest(deviceAudienceCLI, userCode, scope)
 }
 
-func deviceLoginMintRequest(audience, userCode string, scope cliLoginScope) *models.CreateAccessTokenRequest {
-	presetID := "cli_sync"
-	fallback := "CLI sync"
-	name := "CLI " + strings.TrimSpace(userCode)
+func deviceLoginMintRequest(audience, userCode string, scope cliLoginScope) (*models.CreateAccessTokenRequest, error) {
 	if audience == deviceAudienceMCP {
 		return mcp.ApprovalMintRequest(userCode, mcp.GrantScope{
+			Name:              scope.Name,
+			Description:       scope.Description,
+			Duration:          scope.Duration,
+			Preset:            scope.Preset,
+			Capabilities:      scope.Capabilities,
 			ProjectGrantMode:  scope.ProjectGrantMode,
 			ProjectIDs:        scope.ProjectIDs,
 			TenantGrantMode:   scope.TenantGrantMode,
@@ -301,7 +324,25 @@ func deviceLoginMintRequest(audience, userCode string, scope cliLoginScope) *mod
 			AcknowledgeDanger: scope.AcknowledgeDanger,
 		})
 	}
-	preset := deviceLoginPreset(presetID, fallback)
+	presetID, caps, err := normalizeCLIPreset(scope.Preset, scope.Capabilities)
+	if err != nil {
+		return nil, err
+	}
+	name := strings.TrimSpace(scope.Name)
+	if name == "" {
+		name = "CLI " + strings.TrimSpace(userCode)
+	}
+	if strings.TrimSpace(name) == "" || name == "CLI" {
+		name = "CLI login"
+	}
+	if len(name) > 120 {
+		name = name[:120]
+	}
+	description := strings.TrimSpace(scope.Description)
+	if len(description) > 500 {
+		description = description[:500]
+	}
+	preset := deviceLoginPreset(presetID, "CLI login")
 	if scope.ProjectGrantMode == "" {
 		scope.ProjectGrantMode = models.AccessTokenProjectGrantSelected
 	}
@@ -318,12 +359,31 @@ func deviceLoginMintRequest(audience, userCode string, scope cliLoginScope) *mod
 	}
 	return &models.CreateAccessTokenRequest{
 		Name:              name,
+		Description:       description,
+		Duration:          strings.TrimSpace(scope.Duration),
 		Preset:            preset.ID,
+		Capabilities:      caps,
 		ProjectGrantMode:  scope.ProjectGrantMode,
 		ProjectIDs:        projectIDs,
 		TenantGrantMode:   scope.TenantGrantMode,
 		TenantIDs:         tenantIDs,
 		AcknowledgeDanger: scope.AcknowledgeDanger,
+	}, nil
+}
+
+func normalizeCLIPreset(raw string, caps []string) (string, []string, error) {
+	switch strings.ToLower(strings.TrimSpace(raw)) {
+	case "", "cli_login":
+		return "cli_login", nil, nil
+	case "cli_sync":
+		return "cli_sync", nil, nil
+	case "custom":
+		if len(caps) == 0 {
+			return "", nil, errors.New("custom preset requires capabilities")
+		}
+		return "custom", append([]string(nil), caps...), nil
+	default:
+		return "", nil, errors.New("choose CLI login, CLI sync, or Custom")
 	}
 }
 

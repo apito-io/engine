@@ -8,7 +8,46 @@ import (
 	"github.com/apito-io/engine/models"
 )
 
+// ConnectDisconnectParamBuilder parses relation input for trusted/internal
+// callers. Public project-user mutations should call
+// ConnectDisconnectParamBuilderForRole so the ownership policy is checked
+// before any driver instructions are produced.
 func ConnectDisconnectParamBuilder(project *models.Project, uid string, connectionIds map[string]interface{}, modelType *models.ModelType) ([]*models.ConnectDisconnectParam, error) {
+	return buildConnectDisconnectParams(project, uid, nil, connectionIds, modelType)
+}
+
+// ConnectDisconnectParamBuilderForRole is the policy-aware entry point for
+// user-facing connect/disconnect mutations.
+func ConnectDisconnectParamBuilderForRole(
+	project *models.Project,
+	uid string,
+	role *models.Role,
+	connectionIds map[string]interface{},
+	modelType *models.ModelType,
+) ([]*models.ConnectDisconnectParam, error) {
+	if err := ValidateProjectUserRelationEdges(role, uid, connectionIds, nil); err != nil {
+		return nil, err
+	}
+	return buildConnectDisconnectParams(project, uid, role, connectionIds, modelType)
+}
+
+// DisconnectDisconnectParamBuilderForRole is the policy-aware entry point for
+// user-facing disconnect mutations. Owner relations are intentionally not
+// removable through ordinary project-user CRUD.
+func DisconnectDisconnectParamBuilderForRole(
+	project *models.Project,
+	uid string,
+	role *models.Role,
+	connectionIds map[string]interface{},
+	modelType *models.ModelType,
+) ([]*models.ConnectDisconnectParam, error) {
+	if err := ValidateProjectUserRelationEdges(role, uid, nil, connectionIds); err != nil {
+		return nil, err
+	}
+	return buildConnectDisconnectParams(project, uid, role, connectionIds, modelType)
+}
+
+func buildConnectDisconnectParams(project *models.Project, uid string, role *models.Role, connectionIds map[string]interface{}, modelType *models.ModelType) ([]*models.ConnectDisconnectParam, error) {
 
 	projectID := project.ID
 
@@ -20,6 +59,7 @@ func ConnectDisconnectParamBuilder(project *models.Project, uid string, connecti
 		connParam := models.ConnectDisconnectParam{}
 		connParam.DocCollectionName = collectionName
 		connParam.DocRelationName = fmt.Sprintf(`p_%s_relation`, projectID)
+		connParam.RequestedRelationField = strings.TrimSpace(k)
 
 		var ids []string
 		var relationTo string
@@ -85,6 +125,15 @@ func ConnectDisconnectParamBuilder(project *models.Project, uid string, connecti
 			}
 		} else {
 			return nil, errors.New(fmt.Sprintf("Invalid Relation %s", k))
+		}
+		connParam.TargetModelName = relationTo
+		connParam.TargetIsUserModel = isUserModelName(relationTo)
+		if role != nil && role.IsProjectUser && !RoleBypassesDataACL(role) {
+			targetPermission := EffectivePermission(role, relationTo)
+			connParam.TargetRequiresOwnership =
+				targetPermission.Read == "own" ||
+					targetPermission.Update == "own" ||
+					targetPermission.Delete == "own"
 		}
 
 		// validate the relation to

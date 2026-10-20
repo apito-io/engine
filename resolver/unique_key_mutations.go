@@ -36,6 +36,9 @@ func (s *GraphQLServer) uniqueKeyMutation(p graphql.ResolveParams, deleteKey boo
 	if err != nil {
 		return nil, err
 	}
+	if err := requireProjectAdmin(cache); err != nil {
+		return nil, err
+	}
 	project := cache.Project
 	modelName, err := canonicalModelArg(p.Args, "model_name")
 	if err != nil {

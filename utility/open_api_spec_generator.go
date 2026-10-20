@@ -54,9 +54,9 @@ func ModelSchemaBuilder(modelType *models.ModelType, update bool) *oas.Schema {
 					FieldType:   "text",
 					Validation:  &models.Validation{Required: true, Unique: true},
 					//Serial:                  0,
-					Label:                   "ID",
-					SystemGenerated:         true,
-					ParentField: f.Identifier,
+					Label:           "ID",
+					SystemGenerated: true,
+					ParentField:     f.Identifier,
 				})
 			}
 			fakeModel := &models.ModelType{Fields: fields}
@@ -88,7 +88,19 @@ func ModelSchemaBuilder(modelType *models.ModelType, update bool) *oas.Schema {
 	return oas.ObjectOf(schema, required...)
 }
 
-func OpenApiSpecGenerator(env string, loader *models.ApplicationCache) (interface{}, error) {
+func restDocServerURL(env, publicAPIBase, projectID string) string {
+	base := strings.TrimRight(strings.TrimSpace(publicAPIBase), "/")
+	if base == "" {
+		if env == "local" {
+			base = "http://localhost:5050"
+		} else {
+			base = "https://api.apito.io"
+		}
+	}
+	return base + "/secured/rest/" + projectID
+}
+
+func OpenApiSpecGenerator(env, publicAPIBase string, loader *models.ApplicationCache) (interface{}, error) {
 
 	project := loader.Project
 
@@ -102,14 +114,9 @@ func OpenApiSpecGenerator(env string, loader *models.ApplicationCache) (interfac
 		},
 	}*/
 
-	switch env {
-	case "local":
-		openapi.AddServer(oas.NewServer("http://localhost:5050/secured/rest/" + project.ID))
-	default:
-		openapi.AddServer(oas.NewServer("https://api.apito.io/secured/rest/" + project.ID))
-	}
+	openapi.AddServer(oas.NewServer(restDocServerURL(env, publicAPIBase, project.ID)))
 
-	openapi.AddSecurityScheme("api_key", oas.NewAPIKeySecurityScheme("Authorization", "Go to <strong>Settings > API Secrets</strong> and Generate an api key to be used in Authorize. Value should be `Bearer <token>`", "header"))
+	openapi.AddSecurityScheme("bearerAuth", oas.NewAPIKeySecurityScheme("Authorization", "Paste a project API key from <strong>Settings > API Secrets</strong>. Value should be `Bearer ak_…`. Do not use the console session.", "header"))
 
 	if project.Schema == nil {
 		return openapi, nil
@@ -136,7 +143,7 @@ func OpenApiSpecGenerator(env string, loader *models.ApplicationCache) (interfac
 			op.Summary = fmt.Sprintf(`List all %s`, pluralName)
 			op.Tags = []string{pluralName}
 			op.AddSecurityRequirement(&oas.SecurityRequirement{
-				"api_key": []string{},
+				"bearerAuth": []string{},
 			})
 
 			queryField := oas.QueryParameter("query", oas.String(), false).
@@ -184,7 +191,7 @@ func OpenApiSpecGenerator(env string, loader *models.ApplicationCache) (interfac
 			op.Summary = fmt.Sprintf(`Get Single %s`, singularName)
 			op.Tags = []string{pluralName}
 			op.AddSecurityRequirement(&oas.SecurityRequirement{
-				"api_key": []string{},
+				"bearerAuth": []string{},
 			})
 
 			idPath := oas.PathParameter("id", oas.String()).
@@ -216,7 +223,7 @@ func OpenApiSpecGenerator(env string, loader *models.ApplicationCache) (interfac
 			op.Summary = fmt.Sprintf(`Creates a %s`, singularName)
 			op.Tags = []string{pluralName}
 			op.AddSecurityRequirement(&oas.SecurityRequirement{
-				"api_key": []string{},
+				"bearerAuth": []string{},
 			})
 
 			bodyField := oas.NewRequestBody(fmt.Sprintf(`The JSON of %s that you want to create`, singularName), true)
@@ -244,7 +251,7 @@ func OpenApiSpecGenerator(env string, loader *models.ApplicationCache) (interfac
 			op.Summary = fmt.Sprintf(`Updates a %s`, singularName)
 			op.Tags = []string{pluralName}
 			op.AddSecurityRequirement(&oas.SecurityRequirement{
-				"api_key": []string{},
+				"bearerAuth": []string{},
 			})
 
 			// special build
@@ -278,7 +285,7 @@ func OpenApiSpecGenerator(env string, loader *models.ApplicationCache) (interfac
 			op.Summary = fmt.Sprintf(`Deletes a %s`, singularName)
 			op.Tags = []string{pluralName}
 			op.AddSecurityRequirement(&oas.SecurityRequirement{
-				"api_key": []string{},
+				"bearerAuth": []string{},
 			})
 
 			queryField := oas.QueryParameter("_id", oas.String(), false).
@@ -335,7 +342,7 @@ func OpenApiSpecGenerator(env string, loader *models.ApplicationCache) (interfac
 					op.Summary = fmt.Sprintf(`List all %s`, connectedModel)
 					op.Tags = []string{pluralName}
 					op.AddSecurityRequirement(&oas.SecurityRequirement{
-						"api_key": []string{},
+						"bearerAuth": []string{},
 					})
 
 					idPath := oas.PathParameter("id", oas.String()).
@@ -401,7 +408,7 @@ func OpenApiSpecGenerator(env string, loader *models.ApplicationCache) (interfac
 			op.Summary = fmt.Sprintf(`%s`, function.Description)
 			op.Tags = []string{"Functions"}
 			op.AddSecurityRequirement(&oas.SecurityRequirement{
-				"api_key": []string{},
+				"bearerAuth": []string{},
 			})
 
 			if request == "JSON" {
@@ -464,7 +471,7 @@ func OpenApiSpecGenerator(env string, loader *models.ApplicationCache) (interfac
 				op.Summary = fmt.Sprintf(`Login API for a Apito Project User`)
 				op.Tags = []string{"Authentication"}
 				op.AddSecurityRequirement(&oas.SecurityRequirement{
-					"api_key": []string{},
+					"bearerAuth": []string{},
 				})
 
 				bodyField := oas.NewRequestBody(fmt.Sprintf(`The JSON of the login Details`), true)
@@ -492,7 +499,7 @@ func OpenApiSpecGenerator(env string, loader *models.ApplicationCache) (interfac
 				op.Summary = fmt.Sprintf(`Register API for a Apito Project User`)
 				op.Tags = []string{"Authentication"}
 				op.AddSecurityRequirement(&oas.SecurityRequirement{
-					"api_key": []string{},
+					"bearerAuth": []string{},
 				})
 
 				bodyField := oas.NewRequestBody(fmt.Sprintf(`The JSON of the User Details`), true)
@@ -531,7 +538,7 @@ func OpenApiSpecGenerator(env string, loader *models.ApplicationCache) (interfac
 		op.Summary = fmt.Sprintf(`Uploads a File to your current project`)
 		op.Tags = []string{"System Media Upload"}
 		op.AddSecurityRequirement(&oas.SecurityRequirement{
-			"api_key": []string{},
+			"bearerAuth": []string{},
 		})
 
 		bodyField := oas.NewRequestBody(fmt.Sprintf("The FILE that you want to upload. Required field is file. `model`, `id`, `field_name` those 3 parameter is optional but if you use them, then all 3 has to be used together"), true)

@@ -232,6 +232,9 @@ func (s *GraphQLServer) ModelPhysicalHealthResolverFn(p graphql.ResolveParams) (
 	if err != nil {
 		return nil, err
 	}
+	if err := requireProjectAdmin(cache); err != nil {
+		return nil, err
+	}
 	rawName, _ := p.Args["model_name"].(string)
 	model, err := s.findProjectModel(cache.Project, rawName)
 	if err != nil {
@@ -255,6 +258,9 @@ func (s *GraphQLServer) ProjectPhysicalHealthResolverFn(p graphql.ResolveParams)
 	}
 	cache, err := s.GetApplicationCache(router)
 	if err != nil {
+		return nil, err
+	}
+	if err := requireProjectAdmin(cache); err != nil {
 		return nil, err
 	}
 	if cache.Project == nil || cache.Project.Schema == nil {

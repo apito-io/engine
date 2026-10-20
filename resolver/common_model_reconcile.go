@@ -108,6 +108,9 @@ func (s *GraphQLServer) ReconcileCommonModelsResolverFn(p graphql.ResolveParams)
 	if err != nil {
 		return nil, err
 	}
+	if err := requireProjectAdmin(cache); err != nil {
+		return nil, err
+	}
 	modelName, _ := p.Args["model_name"].(string)
 	result, err := s.reconcileCommonModels(cache.Ctx, cache.Project, cache.Param, strings.TrimSpace(modelName))
 	if err != nil {

@@ -44,6 +44,45 @@ func TestResolvePreset_SdkBootstrap(t *testing.T) {
 	require.False(t, HasCapability(caps, CapSyncWrite))
 }
 
+func TestResolvePreset_MCPAssistant(t *testing.T) {
+	caps, err := ResolvePreset("mcp_assistant", nil)
+	require.NoError(t, err)
+	require.True(t, HasCapability(caps, CapSchemaRead))
+	require.True(t, HasCapability(caps, CapDataRead))
+	require.False(t, HasCapability(caps, CapSchemaWrite))
+	require.False(t, HasCapability(caps, CapSchemaPublish))
+	require.False(t, HasCapability(caps, CapDatabaseRead))
+	require.False(t, HasCapability(caps, CapDatabaseWrite))
+}
+
+func TestResolvePreset_MCPAdvanced(t *testing.T) {
+	caps, err := ResolvePreset("mcp_advanced", nil)
+	require.NoError(t, err)
+	require.True(t, HasCapability(caps, CapSchemaWrite))
+	require.True(t, HasCapability(caps, CapDatabaseRead))
+	require.True(t, HasCapability(caps, CapDatabaseWrite))
+	require.True(t, HasCapability(caps, CapTenantsWrite))
+	require.False(t, HasCapability(caps, CapSchemaPublish))
+	for _, preset := range Presets() {
+		if preset.ID == "mcp_advanced" {
+			require.True(t, preset.Danger)
+			require.Equal(t, 30, preset.DefaultDays)
+		}
+	}
+}
+
+func TestResolvePreset_CLILogin(t *testing.T) {
+	caps, err := ResolvePreset("cli_login", nil)
+	require.NoError(t, err)
+	require.True(t, HasCapability(caps, CapProjectsRead))
+	require.True(t, HasCapability(caps, CapSchemaRead))
+	require.False(t, HasCapability(caps, CapDataRead))
+	require.False(t, HasCapability(caps, CapSchemaWrite))
+	require.False(t, HasCapability(caps, CapSyncWrite))
+	require.False(t, HasCapability(caps, CapFunctionsDeploy))
+	require.False(t, HasCapability(caps, CapSettingsRead))
+}
+
 func TestValidateCapabilities_AuthCaps(t *testing.T) {
 	caps, err := ValidateCapabilities([]string{CapAuthLogin, CapAuthRegister})
 	require.NoError(t, err)

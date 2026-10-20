@@ -242,6 +242,9 @@ func (s *GraphQLServer) loadActiveProjectForSettings(p graphql.ResolveParams) (*
 	if cache.Project == nil {
 		return nil, nil, errors.New("no project loaded in cache")
 	}
+	if err := requireProjectAdmin(cache); err != nil {
+		return nil, nil, err
+	}
 	ctx := cache.Ctx
 	if ctx == nil {
 		ctx = p.Context
@@ -357,6 +360,12 @@ func (s *GraphQLServer) registerProjectSettingsGraphQLFields(objs *objects.Objec
 			}
 		},
 	})
+	if objs.SettingsObject != nil {
+		objs.SettingsObject.AddFieldConfig("client_runtime", &graphql.Field{
+			Type:    projectClientRuntimeObject,
+			Resolve: clientRuntimeSettingsResolve,
+		})
+	}
 	objs.ProjectDetailsObject.AddFieldConfig("storage_settings", &graphql.Field{
 		Type: projectStorageSettingsObject,
 		Resolve: func(p graphql.ResolveParams) (interface{}, error) {

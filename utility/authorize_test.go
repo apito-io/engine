@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"github.com/apito-io/engine/models"
+	"github.com/apito-io/engine/utility/securitytest"
 )
 
 func TestAuthorizeModelReadTable(t *testing.T) {
@@ -62,6 +63,74 @@ func TestAuthorizeModelReadTable(t *testing.T) {
 				t.Fatalf("unexpected error: %v", err)
 			}
 		})
+	}
+}
+
+func TestAuthorizeModelUpdateOwnFailsClosed(t *testing.T) {
+	role := &models.Role{
+		ID:            "passenger",
+		IsProjectUser: true,
+		APIPermissions: map[string]*models.APIPermission{
+			"post": {Update: "own", Delete: "own"},
+		},
+	}
+	if err := AuthorizeModelUpdate(role, "post", securitytest.FixtureUserA, false, securitytest.FixtureUserA); err != nil {
+		t.Fatal(err)
+	}
+	if err := AuthorizeModelUpdate(role, "post", "", false, securitytest.FixtureUserA); err == nil {
+		t.Fatal("empty owner must deny")
+	}
+	if err := AuthorizeModelUpdate(role, "post", securitytest.FixtureUserA, false, ""); err == nil {
+		t.Fatal("empty caller must deny")
+	}
+	if err := AuthorizeModelDelete(role, "post", securitytest.FixtureUserB, false, securitytest.FixtureUserA); err == nil {
+		t.Fatal("other owner must deny")
+	}
+	if err := AuthorizeModelUpdate(role, "post", securitytest.FixtureUserB, true, ""); err == nil {
+		t.Fatal("user model without caller must deny")
+	}
+}
+
+func TestAuthorizeModelOwnRequiresProjectUserRole(t *testing.T) {
+	permission := map[string]*models.APIPermission{
+		"post": {Update: "own", Delete: "own"},
+	}
+	tests := []struct {
+		name string
+		role *models.Role
+	}{
+		{name: "nil role"},
+		{name: "non project user", role: &models.Role{ID: "staff", APIPermissions: permission}},
+		{name: "role without project-user identity", role: &models.Role{IsProjectUser: false, APIPermissions: permission}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if err := AuthorizeModelUpdate(tt.role, "post", securitytest.FixtureUserA, false, securitytest.FixtureUserA); err == nil {
+				t.Fatal("own update must require an authenticated project-user role")
+			}
+			if err := AuthorizeModelDelete(tt.role, "post", securitytest.FixtureUserA, false, securitytest.FixtureUserA); err == nil {
+				t.Fatal("own delete must require an authenticated project-user role")
+			}
+		})
+	}
+}
+
+func TestAuthorizeModelOwnAllowsCanonicalOwnerOnly(t *testing.T) {
+	role := &models.Role{
+		ID:            "passenger",
+		IsProjectUser: true,
+		APIPermissions: map[string]*models.APIPermission{
+			"post": {Update: "own", Delete: "own"},
+		},
+	}
+	if err := AuthorizeModelUpdate(role, "post", securitytest.FixtureUserA, false, securitytest.FixtureUserA); err != nil {
+		t.Fatal("creator/canonical owner should pass:", err)
+	}
+	if err := AuthorizeModelDelete(role, "post", securitytest.FixtureUserA, false, securitytest.FixtureUserB); err == nil {
+		t.Fatal("different canonical owner must deny")
+	}
+	if err := AuthorizeModelUpdate(role, "post", "", false, securitytest.FixtureUserA); err == nil {
+		t.Fatal("missing canonical owner must deny")
 	}
 }
 
