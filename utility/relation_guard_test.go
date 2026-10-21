@@ -144,3 +144,69 @@ func TestOwnerFieldCreateIsSelfOnlyAndFailClosed(t *testing.T) {
 		t.Fatalf("payload without owner fields should pass: %v", err)
 	}
 }
+
+func TestConnectBuilderAllowsSelfOwnerOnNewDocument(t *testing.T) {
+	role := &models.Role{ID: "passenger", IsProjectUser: true}
+	profile := &models.ModelType{
+		Name: "user_profile",
+		Connections: []*models.ConnectionType{{
+			Model:    "users",
+			Relation: "has_one",
+			Type:     "forward",
+			KnownAs:  "owner",
+		}},
+	}
+	users := &models.ModelType{
+		Name: "users",
+		Connections: []*models.ConnectionType{{
+			Model:    "user_profile",
+			Relation: "has_one",
+			Type:     "backward",
+			KnownAs:  "owner",
+		}},
+	}
+	project := &models.Project{Schema: &models.ProjectSchema{Models: []*models.ModelType{profile, users}}}
+
+	params, err := ConnectDisconnectParamBuilderForRole(
+		project,
+		"doc-new",
+		securitytest.FixtureUserA,
+		role,
+		map[string]interface{}{"owner_id": securitytest.FixtureUserA},
+		profile,
+	)
+	if err != nil {
+		t.Fatalf("self owner on a new profile must succeed: %v", err)
+	}
+	if len(params) != 1 {
+		t.Fatalf("params: %#v", params)
+	}
+	if params[0].ForwardConnectionID != "doc-new" {
+		t.Fatalf("relation row id: %q", params[0].ForwardConnectionID)
+	}
+	if len(params[0].ActionIDs) != 1 || params[0].ActionIDs[0] != securitytest.FixtureUserA {
+		t.Fatalf("owner target: %#v", params[0].ActionIDs)
+	}
+
+	if _, err := ConnectDisconnectParamBuilderForRole(
+		project,
+		"doc-new",
+		securitytest.FixtureUserA,
+		role,
+		map[string]interface{}{"owner_id": securitytest.FixtureUserB},
+		profile,
+	); err != ErrRelationTargetForbidden {
+		t.Fatalf("cross-user owner connect: %v", err)
+	}
+
+	if _, err := DisconnectDisconnectParamBuilderForRole(
+		project,
+		"doc-new",
+		securitytest.FixtureUserA,
+		role,
+		map[string]interface{}{"owner_id": securitytest.FixtureUserA},
+		profile,
+	); err != ErrRelationTargetForbidden {
+		t.Fatalf("owner disconnect: %v", err)
+	}
+}

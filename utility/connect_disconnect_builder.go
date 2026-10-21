@@ -17,15 +17,18 @@ func ConnectDisconnectParamBuilder(project *models.Project, uid string, connecti
 }
 
 // ConnectDisconnectParamBuilderForRole is the policy-aware entry point for
-// user-facing connect/disconnect mutations.
+// user-facing connect mutations. uid is the document the relation is written
+// on. actorUserID is the logged-in project user and is the only id the owner
+// edge may target.
 func ConnectDisconnectParamBuilderForRole(
 	project *models.Project,
 	uid string,
+	actorUserID string,
 	role *models.Role,
 	connectionIds map[string]interface{},
 	modelType *models.ModelType,
 ) ([]*models.ConnectDisconnectParam, error) {
-	if err := ValidateProjectUserRelationEdges(role, uid, connectionIds, nil); err != nil {
+	if err := ValidateProjectUserRelationEdges(role, actorUserID, connectionIds, nil); err != nil {
 		return nil, err
 	}
 	return buildConnectDisconnectParams(project, uid, role, connectionIds, modelType)
@@ -33,15 +36,17 @@ func ConnectDisconnectParamBuilderForRole(
 
 // DisconnectDisconnectParamBuilderForRole is the policy-aware entry point for
 // user-facing disconnect mutations. Owner relations are intentionally not
-// removable through ordinary project-user CRUD.
+// removable through ordinary project-user CRUD. uid is the document id;
+// actorUserID is the logged-in project user.
 func DisconnectDisconnectParamBuilderForRole(
 	project *models.Project,
 	uid string,
+	actorUserID string,
 	role *models.Role,
 	connectionIds map[string]interface{},
 	modelType *models.ModelType,
 ) ([]*models.ConnectDisconnectParam, error) {
-	if err := ValidateProjectUserRelationEdges(role, uid, nil, connectionIds); err != nil {
+	if err := ValidateProjectUserRelationEdges(role, actorUserID, nil, connectionIds); err != nil {
 		return nil, err
 	}
 	return buildConnectDisconnectParams(project, uid, role, connectionIds, modelType)

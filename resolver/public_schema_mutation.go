@@ -153,7 +153,7 @@ func (s *GraphQLServer) updateAndConnectDocument(ctx context.Context, cache *mod
 	var disconnectParams []*models.ConnectDisconnectParam
 	if len(modelType.Connections) > 0 {
 		if len(disconnects) > 0 {
-			disconnectParams, err = utility.DisconnectDisconnectParamBuilderForRole(cache.Project, param.DocumentID, param.Role, disconnects, modelType)
+			disconnectParams, err = utility.DisconnectDisconnectParamBuilderForRole(cache.Project, param.DocumentID, param.UserID, param.Role, disconnects, modelType)
 			if err != nil {
 				return nil, err
 			}
@@ -165,7 +165,7 @@ func (s *GraphQLServer) updateAndConnectDocument(ctx context.Context, cache *mod
 			}
 		}
 		if len(connections) > 0 {
-			connectParams, err = utility.ConnectDisconnectParamBuilderForRole(cache.Project, param.DocumentID, param.Role, connections, modelType)
+			connectParams, err = utility.ConnectDisconnectParamBuilderForRole(cache.Project, param.DocumentID, param.UserID, param.Role, connections, modelType)
 			if err != nil {
 				return nil, err
 			}
@@ -318,7 +318,7 @@ func (s *GraphQLServer) createAndConnectDocument(ctx context.Context, cache *mod
 	}
 	var connectParams []*models.ConnectDisconnectParam
 	if len(param.Model.Connections) > 0 && len(connections) > 0 {
-		connectParams, err = utility.ConnectDisconnectParamBuilderForRole(cache.Project, _id, param.Role, connections, param.Model)
+		connectParams, err = utility.ConnectDisconnectParamBuilderForRole(cache.Project, _id, param.UserID, param.Role, connections, param.Model)
 		if err != nil {
 			return nil, err
 		}

@@ -4061,7 +4061,7 @@ func (s *GraphQLServer) UpsertModelDataFnFn(p graphql.ResolveParams) (interface{
 
 		if len(modelType.Connections) > 0 {
 			if disconnects, ok := p.Args["disconnect"].(map[string]interface{}); ok && len(disconnects) > 0 {
-				cdp, err := utility.DisconnectDisconnectParamBuilderForRole(cache.Project, param.DocumentID, param.Role, disconnects, modelType)
+				cdp, err := utility.DisconnectDisconnectParamBuilderForRole(cache.Project, param.DocumentID, param.UserID, param.Role, disconnects, modelType)
 				if err != nil {
 					return nil, err
 				}
@@ -4073,7 +4073,7 @@ func (s *GraphQLServer) UpsertModelDataFnFn(p graphql.ResolveParams) (interface{
 			}
 
 			if connectionIds, ok := p.Args["connect"].(map[string]interface{}); ok && len(connectionIds) > 0 {
-				cdp, err := utility.ConnectDisconnectParamBuilderForRole(cache.Project, param.DocumentID, param.Role, connectionIds, modelType)
+				cdp, err := utility.ConnectDisconnectParamBuilderForRole(cache.Project, param.DocumentID, param.UserID, param.Role, connectionIds, modelType)
 				if err != nil {
 					return nil, err
 				}
@@ -4182,7 +4182,7 @@ func (s *GraphQLServer) UpsertModelDataFnFn(p graphql.ResolveParams) (interface{
 		// for new document also check for connect disconnect
 		if len(modelType.Connections) > 0 {
 			if connections, ok := p.Args["connect"].(map[string]interface{}); ok && len(connections) > 0 {
-				v, err := utility.ConnectDisconnectParamBuilderForRole(cache.Project, uid, param.Role, connections, modelType)
+				v, err := utility.ConnectDisconnectParamBuilderForRole(cache.Project, uid, param.UserID, param.Role, connections, modelType)
 				if err != nil {
 					// Drop the orphan, but keep the relation error. Assigning the
 					// delete result overwrote a successful cleanup with nil and
