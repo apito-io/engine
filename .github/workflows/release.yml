@@ -26,7 +26,10 @@ jobs:
       - uses: actions/checkout@v4
         with:
           repository: apito-io/open_driver
-          ref: ec2e5f7fe1aeebf9303778f0af4bea9634cba501
+          # open-core v1.9.x reads project_settings.client_runtime.
+          # v1.0.29 is the first public driver release that migrates that
+          # SQLite column before system bootstrap.
+          ref: v1.0.29
           path: .ci/open_driver
 
       - uses: actions/setup-go@v5
