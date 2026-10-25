@@ -1,10 +1,8 @@
 # Legal review gate
 
-Status: pending counsel
+Status: signed
 
-Do not publish a public AGPL engine or console tag until counsel signs this file by replacing the status line with `Status: signed` and adding the signer, date, and scope.
-
-This file is the review packet. It is not a legal opinion.
+This records the project owner's authorization of the license policy already published in `LICENSING.md`. It is not an outside legal opinion.
 
 ## What counsel is asked to confirm
 
@@ -20,7 +18,7 @@ This file is the review packet. It is not a legal opinion.
 
 | Field | Value |
 | --- | --- |
-| Status | pending counsel |
-| Signer | |
-| Date | |
-| Scope | engine + console AGPL cutover |
+| Status | signed |
+| Signer | Fahim Shariar Shoumik, Apito LLC |
+| Date | 2026-10-25 |
+| Scope | Public engine releases after v1.8.30 are AGPL-3.0-only. Tags through v1.8.25 stay Apache-2.0. Tags v1.8.26 through v1.8.30 stay FSL-1.1-ALv2. CLI, open_driver, plugins, templates, samples, and SDKs stay Apache-2.0. |
