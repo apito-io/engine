@@ -156,8 +156,41 @@ func HandleLocalSchemaDraft(c echo.Context, server interface{}) error {
 	}
 }
 
-func (s *GraphQLServer) publishSchemaDraftOps(ctx context.Context, project *models.Project, ops []schemadraft.Op) error {
+func stampLocalSchemaReplay(ctx context.Context) context.Context {
 	ctx = context.WithValue(ctx, localSchemaReplayKey{}, true)
+	router, _ := ctx.Value("router").(echo.Context)
+	if router == nil || router.Request() == nil {
+		return ctx
+	}
+	req := router.Request().WithContext(context.WithValue(router.Request().Context(), localSchemaReplayKey{}, true))
+	router.SetRequest(req)
+	return ctx
+}
+
+func schemaDraftRestaged(before, after *localSchemaDraft) bool {
+	if after == nil {
+		return false
+	}
+	if before == nil {
+		return len(after.Ops) > 0
+	}
+	seen := make(map[string]struct{}, len(before.Ops))
+	for _, op := range before.Ops {
+		seen[op.ID] = struct{}{}
+	}
+	if len(after.Ops) > len(before.Ops) {
+		return true
+	}
+	for _, op := range after.Ops {
+		if _, ok := seen[op.ID]; !ok {
+			return true
+		}
+	}
+	return false
+}
+
+func (s *GraphQLServer) publishSchemaDraftOps(ctx context.Context, project *models.Project, ops []schemadraft.Op) error {
+	ctx = stampLocalSchemaReplay(ctx)
 	for _, op := range ops {
 		if err := s.replayLocalSchemaOp(ctx, localSchemaOp{ID: op.ID, Type: op.Type, Args: op.Args, CreatedAt: op.CreatedAt}); err != nil {
 			return err
@@ -182,6 +215,16 @@ func (s *GraphQLServer) publishLocalSchemaDraft(c echo.Context, projectID string
 	}
 	if err := s.publishSchemaDraftOps(ctx, &models.Project{ID: projectID}, ops); err != nil {
 		return c.JSON(http.StatusBadRequest, &models.HttpResponse{Message: err.Error(), Code: http.StatusBadRequest})
+	}
+	after, err := readLocalSchemaDraft(projectID)
+	if err != nil {
+		return c.JSON(http.StatusInternalServerError, &models.HttpResponse{Message: err.Error(), Code: http.StatusInternalServerError})
+	}
+	if schemaDraftRestaged(draft, after) {
+		return c.JSON(http.StatusBadRequest, &models.HttpResponse{
+			Message: "schema publish re-staged operations; the draft was not applied",
+			Code:    http.StatusBadRequest,
+		})
 	}
 	if err := schemadraft.Remove(projectID); err != nil {
 		return c.JSON(http.StatusInternalServerError, &models.HttpResponse{Message: err.Error(), Code: http.StatusInternalServerError})

@@ -357,12 +357,16 @@ func deviceLoginMintRequest(audience, userCode string, scope cliLoginScope) (*mo
 	if scope.TenantGrantMode != models.AccessTokenTenantGrantSelected {
 		tenantIDs = nil
 	}
+	outCaps := caps
+	if audience == deviceAudienceCLI && scope.ProjectGrantMode == models.AccessTokenProjectGrantAllAdmin {
+		outCaps = append(append([]string{}, caps...), authz.CapProjectsWrite)
+	}
 	return &models.CreateAccessTokenRequest{
 		Name:              name,
 		Description:       description,
 		Duration:          strings.TrimSpace(scope.Duration),
 		Preset:            preset.ID,
-		Capabilities:      caps,
+		Capabilities:      outCaps,
 		ProjectGrantMode:  scope.ProjectGrantMode,
 		ProjectIDs:        projectIDs,
 		TenantGrantMode:   scope.TenantGrantMode,

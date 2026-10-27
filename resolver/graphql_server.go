@@ -811,6 +811,9 @@ func (s *GraphQLServer) GetApplicationCache(router echo.Context) (*models.Applic
 	}
 
 	ctx := router.Request().Context()
+	if on, _ := ctx.Value(localSchemaReplayKey{}).(bool); on {
+		ctx = context.WithValue(ctx, localSchemaReplayKey{}, true)
+	}
 
 	//s.wg.Add(1)
 	//defer s.wg.Done()

@@ -4,6 +4,16 @@ Notable changes to **open-core** only. Release tags use `v1.x` (for example `v1.
 
 ## [Unreleased]
 
+## [1.9.3] - 2026-10-28
+
+### Fixed
+
+- Schema publish keeps the replay flag, applies the staged model, and refuses to delete a draft that was staged again.
+- A role `ak_` key is minted as a content token and can call `/secured/graphql` with that role. A login `ak_` still returns `BOOTSTRAP_KEY_ON_SECURED`.
+- `generateProjectToken` accepts an empty duration and stores a never-expire date.
+- An all-admin CLI login includes `projects.write`. `cli_login` does not gain database or data caps.
+- `GET /health` and `GET /healthz` return 200.
+
 ## [1.9.0] - 2026-10-20
 
 ### Added

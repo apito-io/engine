@@ -857,7 +857,7 @@ func (s *GraphQLServer) BuildServerQueriesAndMutations() {
 					Type: graphql.NewNonNull(graphql.String),
 				},
 				"duration": &graphql.ArgumentConfig{
-					Type: graphql.NewNonNull(graphql.String),
+					Type: graphql.String,
 				},
 			},
 			Resolve: s.GenerateProjectTokenResolverFn,

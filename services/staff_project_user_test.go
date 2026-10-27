@@ -22,6 +22,12 @@ func TestIsStaffProjectUserKey(t *testing.T) {
 	if !IsStaffProjectUserKey(&models.TokenClaims{Role: "website", TokenType: "tenant"}) {
 		t.Fatal("website tenant token must pass")
 	}
+	if !IsStaffProjectUserKey(&models.TokenClaims{Role: "smokerw", TokenType: "user"}) {
+		t.Fatal("role api key must pass secured graphql")
+	}
+	if IsStaffProjectUserKey(&models.TokenClaims{Role: "login", TokenType: "user"}) {
+		t.Fatal("login key stays off secured graphql")
+	}
 	if IsStaffProjectUserKey(&models.TokenClaims{Role: "public", UserID: "admin"}) {
 		t.Fatal("non-project-user public key must fail")
 	}

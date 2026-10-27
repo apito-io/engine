@@ -58,7 +58,7 @@ func (s *GraphQLServer) uniqueKeyMutation(p graphql.ResolveParams, deleteKey boo
 	if !deleteKey {
 		args["columns"] = stringListArg(p.Args, "columns")
 	}
-	return s.tryStageSchemaMutation(cache, project, opType, args, func() (interface{}, error) {
+	return s.tryStageSchemaMutation(cache, p.Context, project, opType, args, func() (interface{}, error) {
 		if project == nil || project.Schema == nil {
 			return nil, fmt.Errorf("project schema is empty")
 		}

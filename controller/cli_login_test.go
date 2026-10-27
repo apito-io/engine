@@ -9,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/apito-io/engine/authz"
 	"github.com/apito-io/engine/models"
 	"github.com/labstack/echo/v4"
 	"github.com/stretchr/testify/require"
@@ -203,6 +204,27 @@ func TestMCPLoginUsesReadOnlyAssistantPresetAndScopes(t *testing.T) {
 	require.Nil(t, all.ProjectIDs)
 	require.Nil(t, all.TenantIDs)
 	require.Equal(t, models.AccessTokenProjectGrantAllAdmin, all.ProjectGrantMode)
+}
+
+func TestCLILoginAllAdminAddsProjectsWrite(t *testing.T) {
+	all, err := deviceLoginMintRequest(deviceAudienceCLI, "CODE", cliLoginScope{
+		Preset:           "cli_login",
+		ProjectGrantMode: models.AccessTokenProjectGrantAllAdmin,
+	})
+	require.NoError(t, err)
+	require.Equal(t, "cli_login", all.Preset)
+	require.Equal(t, []string{authz.CapProjectsWrite}, all.Capabilities)
+	require.NotContains(t, all.Capabilities, authz.CapDataRead)
+	require.NotContains(t, all.Capabilities, authz.CapDatabaseRead)
+	require.NotContains(t, all.Capabilities, authz.CapDatabaseWrite)
+
+	selected, err := deviceLoginMintRequest(deviceAudienceCLI, "CODE", cliLoginScope{
+		Preset:           "cli_login",
+		ProjectGrantMode: models.AccessTokenProjectGrantSelected,
+		ProjectIDs:       []string{"p1"},
+	})
+	require.NoError(t, err)
+	require.Empty(t, selected.Capabilities)
 }
 
 func TestDeviceLoginPresetChoices(t *testing.T) {

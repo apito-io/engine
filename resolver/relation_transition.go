@@ -227,7 +227,7 @@ func (s *GraphQLServer) StageRelationTransitionResolverFn(p graphql.ResolveParam
 		"plan_hash": preview.PlanHash, "conflict_policy": relationmigrate.ConflictPolicyAbort,
 		"databases": preview.Databases, "safety": preview.SafetyClass, "reversibility": preview.Reversibility,
 	}
-	_, err = s.tryStageSchemaMutation(cache, project, models.SchemaOpTypeUpdateConnection, args, func() (interface{}, error) {
+	_, err = s.tryStageSchemaMutation(cache, p.Context, project, models.SchemaOpTypeUpdateConnection, args, func() (interface{}, error) {
 		fromModel, toModel := findSchemaModel(project, req.FromModel), findSchemaModel(project, req.ToModel)
 		driver, skip, err := s.getSchemaBaseProjectDriverIfNeeded(cache.Ctx, project, fromModel)
 		if err != nil {

@@ -57,6 +57,12 @@ func InitRouter(cfg *models.Config) (*echo.Echo, error) {
 		})
 	})
 
+	healthOK := func(c echo.Context) error {
+		return c.JSON(http.StatusOK, map[string]string{"status": "ok"})
+	}
+	router.GET("/health", healthOK)
+	router.GET("/healthz", healthOK)
+
 	// for google cloud run ssl
 	router.GET("/.well-known/acme-challenge/:token", func(c echo.Context) error {
 		return c.String(http.StatusOK, c.Param("token"))

@@ -27,13 +27,25 @@ func (s *GraphQLServer) schemaVersioningActive(ctx context.Context) bool {
 	return s.Cfg.SchemaVersioningEnabled && !s.Cfg.SchemaVersioningBypass
 }
 
+func schemaReplay(ctx context.Context) bool {
+	if ctx == nil {
+		return false
+	}
+	on, _ := ctx.Value(localSchemaReplayKey{}).(bool)
+	return on
+}
+
 func (s *GraphQLServer) tryStageSchemaMutation(
 	cache *models.ApplicationCache,
+	src context.Context,
 	project *models.Project,
 	operationType string,
 	args map[string]interface{},
 	defaultFn func() (interface{}, error),
 ) (interface{}, error) {
+	if schemaReplay(src) || (cache != nil && schemaReplay(cache.Ctx)) {
+		return defaultFn()
+	}
 	ctx := context.Background()
 	if cache != nil && cache.Ctx != nil {
 		ctx = cache.Ctx

@@ -77,6 +77,13 @@ func TestBootstrapAllowlistRequiresCorrectOperationKind(t *testing.T) {
 	require.Error(t, EnforceBootstrapSystemAllowlist(ctx, `mutation { googleOAuthState { state } }`))
 }
 
+func TestBootstrapAllowlistDeniesProjectUserData(t *testing.T) {
+	ctx := bootstrapContext("smokerw")
+	ctx.Set("is_project_user", true)
+	require.Error(t, EnforceBootstrapSystemAllowlist(ctx, `query { getModelData(model: "note") { id } }`))
+	require.NoError(t, EnforceBootstrapSystemAllowlist(ctx, `query { loginUser(phone: "1", secret: "x") { token } }`))
+}
+
 func TestBootstrapAllowlistSkipsAdminAndOperatorPlanes(t *testing.T) {
 	admin := bootstrapContext("admin")
 	require.NoError(t, EnforceBootstrapSystemAllowlist(admin, `mutation { deleteTenant(tenant_id: "t") }`))

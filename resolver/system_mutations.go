@@ -24,6 +24,19 @@ import (
 	"github.com/tailor-platform/graphql"
 )
 
+func projectTokenExpiry(duration string) (int64, string, error) {
+	duration = strings.TrimSpace(duration)
+	if duration == "" {
+		return time.Date(2099, 12, 31, 23, 59, 59, 0, time.UTC).Unix(), "", nil
+	}
+	parsed, err := time.Parse("2006-01-02", duration)
+	if err != nil {
+		return 0, "", fmt.Errorf("invalid duration format: %v", err)
+	}
+	parsed = time.Date(parsed.Year(), parsed.Month(), parsed.Day(), 23, 59, 59, 0, time.UTC)
+	return parsed.Unix(), duration, nil
+}
+
 func (s *GraphQLServer) GenerateProjectTokenResolverFn(p graphql.ResolveParams) (interface{}, error) {
 
 	var (
@@ -60,11 +73,9 @@ func (s *GraphQLServer) GenerateProjectTokenResolverFn(p graphql.ResolveParams) 
 		return nil, errors.New("role is Required")
 	}
 
-	var duration string
+	duration := ""
 	if val, ok := p.Args["duration"].(string); ok {
-		duration = val
-	} else {
-		return nil, errors.New("duration is Required")
+		duration = strings.TrimSpace(val)
 	}
 
 	if cache.Project == nil {
@@ -95,20 +106,20 @@ func (s *GraphQLServer) GenerateProjectTokenResolverFn(p graphql.ResolveParams) 
 	}
 	role = roleKey
 
-	// Parse the date string and set it to end of day
-	parseDuration, err := time.Parse("2006-01-02", duration)
+	expireAt, storedExpire, err := projectTokenExpiry(duration)
 	if err != nil {
-		return nil, fmt.Errorf("invalid duration format: %v", err)
+		return nil, err
 	}
-	// Set to end of day (23:59:59) in UTC
-	parseDuration = time.Date(parseDuration.Year(), parseDuration.Month(), parseDuration.Day(), 23, 59, 59, 0, time.UTC)
 
 	// generate the token
 	tokenClaims := &models.TokenClaims{
 		Role:      role,
 		UserID:    param.UserID,
 		ProjectID: project.ID,
-		ExpireAt:  parseDuration.Unix(),
+		ExpireAt:  expireAt,
+	}
+	if !services.IsBootstrapLoginRole(role) {
+		tokenClaims.TokenType = "user"
 	}
 	if s.Cfg != nil && s.Cfg.ProjectAPITokenClaimsHook != nil {
 		s.Cfg.ProjectAPITokenClaimsHook(router, project, tokenClaims)
@@ -126,7 +137,7 @@ func (s *GraphQLServer) GenerateProjectTokenResolverFn(p graphql.ResolveParams) 
 		TokenPrefix:      services.TokenPrefix(apiKey),
 		TokenFingerprint: services.TokenFingerprint(apiKey),
 		Role:             role,
-		Expire:           duration,
+		Expire:           storedExpire,
 		CreatedAt:        time.Now().UTC().Format(time.RFC3339),
 	})
 
@@ -1182,7 +1193,7 @@ func (s *GraphQLServer) AddModelToProjectResolverFn(p graphql.ResolveParams) (in
 		s.Cfg.PreCreateModelHook(model, p.Args)
 	}
 
-	return s.tryStageSchemaMutation(cache, project, models.SchemaOpTypeCreateModel, graphqlArgsMap(p), func() (interface{}, error) {
+	return s.tryStageSchemaMutation(cache, p.Context, project, models.SchemaOpTypeCreateModel, graphqlArgsMap(p), func() (interface{}, error) {
 		param := s.NewParam(cache.Param)
 		param.Model = model
 		if cache.Project.Driver != nil {
@@ -1384,7 +1395,7 @@ func (s *GraphQLServer) UpdateModelResolverFn(p graphql.ResolveParams) (interfac
 			}
 		}
 	}
-	return s.tryStageSchemaMutation(cache, project, opType, graphqlArgsMap(p), func() (interface{}, error) {
+	return s.tryStageSchemaMutation(cache, p.Context, project, opType, graphqlArgsMap(p), func() (interface{}, error) {
 		var resp interface{}
 		switch _type {
 		case "update":
@@ -2485,7 +2496,7 @@ func (s *GraphQLServer) UpsertFieldToModelResolverFn(p graphql.ResolveParams) (i
 			args["model_name"] = modelName
 			args["field"] = identifier
 			args["field_label"] = label
-			return s.tryStageSchemaMutation(cache, project, models.SchemaOpTypeAddField, args, func() (interface{}, error) {
+			return s.tryStageSchemaMutation(cache, p.Context, project, models.SchemaOpTypeAddField, args, func() (interface{}, error) {
 				return nil, errors.New(ae.MODEL_NAME_REQUIRED)
 			})
 		}
@@ -2665,7 +2676,7 @@ func (s *GraphQLServer) UpsertFieldToModelResolverFn(p graphql.ResolveParams) (i
 		return nil, err
 	}
 
-	return s.tryStageSchemaMutation(cache, project, models.SchemaOpTypeAddField, graphqlArgsMap(p), func() (interface{}, error) {
+	return s.tryStageSchemaMutation(cache, p.Context, project, models.SchemaOpTypeAddField, graphqlArgsMap(p), func() (interface{}, error) {
 		err = s.runSchemaChange(cache.Ctx, schemasvc.RunInput{
 			Ctx:           cache.Ctx,
 			Project:       project,
@@ -2760,7 +2771,7 @@ func (s *GraphQLServer) RearrangeFieldOfModelResolverFn(p graphql.ResolveParams)
 
 	if modelType == nil {
 		if s.schemaVersioningActive(cache.Ctx) {
-			return s.tryStageSchemaMutation(cache, project, models.SchemaOpTypeRearrangeField, graphqlArgsMap(p), func() (interface{}, error) {
+			return s.tryStageSchemaMutation(cache, p.Context, project, models.SchemaOpTypeRearrangeField, graphqlArgsMap(p), func() (interface{}, error) {
 				return nil, errors.New("model Not Found")
 			})
 		}
@@ -2832,7 +2843,7 @@ func (s *GraphQLServer) RearrangeFieldOfModelResolverFn(p graphql.ResolveParams)
 		return nil, errors.New("dragged field not found")
 	}
 
-	return s.tryStageSchemaMutation(cache, project, models.SchemaOpTypeRearrangeField, graphqlArgsMap(p), func() (interface{}, error) {
+	return s.tryStageSchemaMutation(cache, p.Context, project, models.SchemaOpTypeRearrangeField, graphqlArgsMap(p), func() (interface{}, error) {
 		switch moveType {
 		case "reorder":
 			if currentPosition == newPosition {
@@ -3073,7 +3084,7 @@ func (s *GraphQLServer) ModelFieldOperationResolverFn(p graphql.ResolveParams) (
 
 	if modelType == nil {
 		if s.schemaVersioningActive(cache.Ctx) {
-			return s.tryStageSchemaMutation(cache, project, models.SchemaOpTypeModelFieldOp, graphqlArgsMap(p), func() (interface{}, error) {
+			return s.tryStageSchemaMutation(cache, p.Context, project, models.SchemaOpTypeModelFieldOp, graphqlArgsMap(p), func() (interface{}, error) {
 				return nil, errors.New(ae.MODEL_IS_REQUIRED)
 			})
 		}
@@ -3310,7 +3321,7 @@ func (s *GraphQLServer) ModelFieldOperationResolverFn(p graphql.ResolveParams) (
 		applyDDL = func(ctx context.Context, d interfaces.ProjectDBInterface) error { return nil }
 	}
 
-	return s.tryStageSchemaMutation(cache, project, models.SchemaOpTypeModelFieldOp, graphqlArgsMap(p), func() (interface{}, error) {
+	return s.tryStageSchemaMutation(cache, p.Context, project, models.SchemaOpTypeModelFieldOp, graphqlArgsMap(p), func() (interface{}, error) {
 		err = s.runSchemaChange(cache.Ctx, schemasvc.RunInput{
 			Ctx:           cache.Ctx,
 			Project:       project,
@@ -3661,7 +3672,7 @@ func (s *GraphQLServer) DeleteConnectionFromModelResolverFn(p graphql.ResolvePar
 	}
 	if fromModelType == nil {
 		if s.schemaVersioningActive(cache.Ctx) {
-			return s.tryStageSchemaMutation(cache, project, models.SchemaOpTypeDeleteConnection, graphqlArgsMap(p), func() (interface{}, error) {
+			return s.tryStageSchemaMutation(cache, p.Context, project, models.SchemaOpTypeDeleteConnection, graphqlArgsMap(p), func() (interface{}, error) {
 				return nil, errors.New("model Not Found")
 			})
 		}
@@ -3676,7 +3687,7 @@ func (s *GraphQLServer) DeleteConnectionFromModelResolverFn(p graphql.ResolvePar
 		}
 	}
 
-	return s.tryStageSchemaMutation(cache, project, models.SchemaOpTypeDeleteConnection, graphqlArgsMap(p), func() (interface{}, error) {
+	return s.tryStageSchemaMutation(cache, p.Context, project, models.SchemaOpTypeDeleteConnection, graphqlArgsMap(p), func() (interface{}, error) {
 		driver, err := s.GraphQLExecutor.GetProjectDriver(models.ProjectDBContext(cache.Ctx, &models.CommonSystemParams{Model: fromModelType}))
 		if err != nil {
 			return nil, err
@@ -3783,7 +3794,7 @@ func (s *GraphQLServer) CreateConnectionTypeResolverFn(p graphql.ResolveParams) 
 		return nil, err
 	}
 
-	return s.tryStageSchemaMutation(cache, project, models.SchemaOpTypeCreateConnection, graphqlArgsMap(p), func() (interface{}, error) {
+	return s.tryStageSchemaMutation(cache, p.Context, project, models.SchemaOpTypeCreateConnection, graphqlArgsMap(p), func() (interface{}, error) {
 		var connections []*models.ConnectionType
 		if project.Schema == nil {
 			return nil, ae.SchemaIsNil
