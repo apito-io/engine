@@ -214,7 +214,7 @@ func OpenApiSpecGenerator(env, publicAPIBase string, loader *models.ApplicationC
 				op.SetDefaultResponse(resp)
 			}
 
-			openapi.AddOperation(oas.GET, fmt.Sprintf(`/%s/{id}`, model.Name), op)
+			openapi.AddOperation(oas.GET, fmt.Sprintf(`/%s/{id}`, SingularResourceName(model.Name)), op)
 		}
 
 		// create
@@ -242,7 +242,7 @@ func OpenApiSpecGenerator(env, publicAPIBase string, loader *models.ApplicationC
 				resp.AddContent("application/json", oas.NewMediaTypeWithSchema(openapi.RefSchema("Error")))
 				op.SetDefaultResponse(resp)
 			}
-			openapi.AddOperation(oas.PUT, fmt.Sprintf("/%s", MultipleResourceName(model.Name)), op)
+			openapi.AddOperation(oas.POST, fmt.Sprintf("/%s", MultipleResourceName(model.Name)), op)
 		}
 
 		// update
@@ -257,11 +257,11 @@ func OpenApiSpecGenerator(env, publicAPIBase string, loader *models.ApplicationC
 			// special build
 			openapi.AddSchema(singularName+"Update", ModelSchemaBuilder(model, true))
 
-			idField := oas.QueryParameter("_id", oas.String(), true).
-				WithDesc(`The ID of the Document that you want to Update`)
-			bodyField := oas.NewRequestBody(fmt.Sprintf(`The JSON of %s that you want to create`, singularName), true)
+			idPath := oas.PathParameter("id", oas.String()).
+				WithDesc(`The ID of the document that you want to update`)
+			bodyField := oas.NewRequestBody(fmt.Sprintf(`The JSON of %s that you want to update`, singularName), true)
 			bodyField.AddContent("application/json", oas.NewMediaTypeWithSchema(openapi.RefSchema(singularName+"Update")))
-			op.AddParameter(idField)
+			op.AddParameter(idPath)
 			op.SetRequestBody(bodyField)
 
 			// 200
@@ -276,7 +276,7 @@ func OpenApiSpecGenerator(env, publicAPIBase string, loader *models.ApplicationC
 				resp.AddContent("application/json", oas.NewMediaTypeWithSchema(openapi.RefSchema("Error")))
 				op.SetDefaultResponse(resp)
 			}
-			openapi.AddOperation(oas.POST, fmt.Sprintf("/%s", MultipleResourceName(model.Name)), op)
+			openapi.AddOperation(oas.PUT, fmt.Sprintf("/%s/{id}", SingularResourceName(model.Name)), op)
 		}
 
 		// delete

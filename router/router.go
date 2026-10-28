@@ -335,12 +335,9 @@ func InitRouter(cfg *models.Config) (*echo.Echo, error) {
 		}
 
 		// rest api
-		publicProtectedEndpoint.GET("/rest/:pid/:model/:id/:relation", graphCtrl.RestToGraphQL)
-		publicProtectedEndpoint.GET("/rest/:pid/:model/:id", graphCtrl.RestToGraphQL)
-		publicProtectedEndpoint.GET("/rest/:pid/:model", graphCtrl.RestToGraphQL)
-		publicProtectedEndpoint.POST("/rest/:pid/*model", graphCtrl.RestToGraphQL)
-		publicProtectedEndpoint.PUT("/rest/:pid/:model", graphCtrl.RestToGraphQL)
-		publicProtectedEndpoint.DELETE("/rest/:pid/:model", graphCtrl.RestToGraphQL)
+		// POST creates a record. PUT /:id updates that record. A PUT or POST
+		// with an explicit _id query remains an update for older clients.
+		RegisterSecuredRESTRoutes(publicProtectedEndpoint, graphCtrl.RestToGraphQL)
 
 		// graphql
 		publicProtectedEndpoint.POST("/graphql", graphCtrl.PublicGraphQL)
@@ -420,6 +417,20 @@ func PrintAllEchoRoutes(e *echo.Echo) {
 
 	fmt.Printf("%s\n", strings.Repeat("=", 80))
 	fmt.Printf("🌐 [ECHO-ROUTES] End of complete route listing\n\n")
+}
+
+// RegisterSecuredRESTRoutes mounts model CRUD under a /secured group.
+// POST creates. PUT /:id updates. An explicit _id query is also an update.
+func RegisterSecuredRESTRoutes(g *echo.Group, handler echo.HandlerFunc) {
+	g.GET("/rest/:pid/:model/:id/:relation", handler)
+	g.GET("/rest/:pid/:model/:id", handler)
+	g.GET("/rest/:pid/:model", handler)
+	g.POST("/rest/:pid/:model/:id", handler)
+	g.POST("/rest/:pid/:model", handler)
+	g.PUT("/rest/:pid/:model/:id", handler)
+	g.PUT("/rest/:pid/:model", handler)
+	g.DELETE("/rest/:pid/:model/:id", handler)
+	g.DELETE("/rest/:pid/:model", handler)
 }
 
 // printRouteCategory prints routes for a specific category

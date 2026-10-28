@@ -81,6 +81,42 @@ func PhysicalSQLTableName(name string) string {
 	return strings.ToLower(strcase.ToSnake(name))
 }
 
+// RESTModelCandidates lists path segments that can name one stored model.
+// It accepts the stored id, GraphQL camel names, the {name}List form, and an
+// English plural such as notes.
+func RESTModelCandidates(raw string) []string {
+	raw = strings.Trim(strings.TrimSpace(raw), "/")
+	if raw == "" {
+		return nil
+	}
+	var out []string
+	seen := map[string]bool{}
+	add := func(value string) {
+		value = strings.TrimSpace(value)
+		if value == "" || seen[value] {
+			return
+		}
+		seen[value] = true
+		out = append(out, value)
+	}
+	add(raw)
+	base := raw
+	if strings.HasSuffix(base, "List") {
+		base = strings.TrimSuffix(base, "List")
+		add(base)
+	}
+	add(SingularResourceName(raw))
+	add(SingularResourceName(base))
+	add(inflection.Singular(base))
+	add(inflection.Singular(SingularResourceName(base)))
+	for _, candidate := range []string{base, inflection.Singular(base), SingularResourceName(base)} {
+		if canonical, err := CanonicalizeModelName(candidate); err == nil {
+			add(canonical)
+		}
+	}
+	return out
+}
+
 // ResolveStoredModelID maps a GraphQL singular base name (e.g. foodCategory from foodCategoryList, or
 // food_category) to the project schema's stored model id (e.g. food_category). knownIDs keys are
 // Model.Name values. Matches exact id or the same CamelFromAny identity.

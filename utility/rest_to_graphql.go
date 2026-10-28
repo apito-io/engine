@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"net/http"
 	"net/url"
 	"reflect"
 	"regexp"
@@ -12,7 +13,6 @@ import (
 
 	ae "github.com/apito-io/engine/err"
 	"github.com/apito-io/engine/models"
-	"github.com/iancoleman/strcase"
 	"github.com/labstack/echo/v4"
 )
 
@@ -29,6 +29,7 @@ type RESTtoGraphResponse struct {
 	Query         string `json:"query"`
 	QueryName     string `json:"query_name"`
 	OperationName string `json:"operation_name"`
+	HTTPStatus    int    `json:"-"`
 }
 
 func getFieldsInfo(fields map[string]interface{}, _fields []*models.FieldInfo) map[string]interface{} {
@@ -120,16 +121,34 @@ func validFieldBuilder(fields map[string]interface{}, subFilter []string) []stri
 	return validatedFields
 }
 
-func RESTtoGraphQL(c echo.Context, schema *models.ProjectSchema, rootModel string, rest url.Values, skipQueryDef bool) (*RESTtoGraphResponse, error) {
-
-	var modelType *models.ModelType
-	for _, _model := range schema.Models {
-		if _model.Name == rootModel {
-			modelType = _model
-			break
+func schemaModelByRESTPath(schema *models.ProjectSchema, raw string) *models.ModelType {
+	if schema == nil {
+		return nil
+	}
+	known := make(map[string]bool, len(schema.Models))
+	byName := make(map[string]*models.ModelType, len(schema.Models))
+	for _, model := range schema.Models {
+		if model == nil || model.Name == "" {
+			continue
+		}
+		known[model.Name] = true
+		byName[model.Name] = model
+	}
+	for _, candidate := range RESTModelCandidates(raw) {
+		if id := ResolveStoredModelID(known, candidate); id != "" {
+			return byName[id]
 		}
 	}
+	return nil
+}
 
+func publicMutationField(action, modelName string) string {
+	return action + PascalFromAnyModelID(modelName)
+}
+
+func RESTtoGraphQL(c echo.Context, schema *models.ProjectSchema, rootModel string, rest url.Values, skipQueryDef bool) (*RESTtoGraphResponse, error) {
+
+	modelType := schemaModelByRESTPath(schema, rootModel)
 	if modelType == nil {
 		return nil, errors.New(ae.MODEL_IS_REQUIRED)
 	}
@@ -208,7 +227,7 @@ func RESTtoGraphQL(c echo.Context, schema *models.ProjectSchema, rootModel strin
 		var whereStrings []string
 		if _id, ok := rest["_id"]; ok {
 			id := _id[0]
-			queryModelName = modelType.Name
+			queryModelName = SingularResourceName(modelType.Name)
 			if strings.Contains(id, "-") {
 				filters = append(filters, fmt.Sprintf(`_id: "%s"`, id))
 			}
@@ -301,12 +320,16 @@ func RESTtoGraphQL(c echo.Context, schema *models.ProjectSchema, rootModel strin
 		break
 	case "PUT", "POST":
 		var req map[string]interface{}
-		if c.Request().Method == "PUT" {
-			queryModelName = strcase.ToLowerCamel("create " + modelType.Name)
-			operationName = fmt.Sprintf(`Create%s`, strings.Title(modelType.Name))
-		} else if c.Request().Method == "POST" {
-			queryModelName = strcase.ToLowerCamel("update " + modelType.Name)
-			operationName = fmt.Sprintf(`Update%s`, strings.Title(modelType.Name))
+		_, hasID := rest["_id"]
+		creating := c.Request().Method == http.MethodPost && !hasID
+		if creating {
+			queryModelName = publicMutationField("create", modelType.Name)
+			operationName = fmt.Sprintf(`Create%s`, PascalFromAnyModelID(modelType.Name))
+		} else if hasID {
+			queryModelName = publicMutationField("update", modelType.Name)
+			operationName = fmt.Sprintf(`Update%s`, PascalFromAnyModelID(modelType.Name))
+		} else {
+			return nil, errors.New("id is required for an update")
 		}
 		if err := c.Bind(&req); err != nil {
 			return nil, err
@@ -316,6 +339,9 @@ func RESTtoGraphQL(c echo.Context, schema *models.ProjectSchema, rootModel strin
 		}
 		// #todo validate req with validFields
 		payload, connect := validPayloadBuilder(req, validFields, validConnections)
+		if payload == "" && connect == "" {
+			return nil, errors.New("request body has no known fields")
+		}
 		if payload != "" {
 			filters = append(filters, fmt.Sprintf(`payload : { %s }`, payload))
 		}
@@ -340,8 +366,8 @@ func RESTtoGraphQL(c echo.Context, schema *models.ProjectSchema, rootModel strin
 		query = fmt.Sprintf(`mutation %s { %s }`, operationName, query)
 		break
 	case "DELETE":
-		queryModelName = strcase.ToLowerCamel("delete " + modelType.Name)
-		operationName = fmt.Sprintf(`Delete%s`, strings.Title(modelType.Name))
+		queryModelName = publicMutationField("delete", modelType.Name)
+		operationName = fmt.Sprintf(`Delete%s`, PascalFromAnyModelID(modelType.Name))
 		if _id, ok := rest["_id"]; ok {
 			filters = append(filters, fmt.Sprintf(`_ids: ["%s"]`, _id[0]))
 		}
@@ -358,10 +384,15 @@ func RESTtoGraphQL(c echo.Context, schema *models.ProjectSchema, rootModel strin
 		break
 	}
 
+	status := http.StatusOK
+	if c.Request().Method == http.MethodPost && queryModelName == publicMutationField("create", modelType.Name) {
+		status = http.StatusCreated
+	}
 	return &RESTtoGraphResponse{
 		Query:         query,
 		QueryName:     queryModelName,
 		OperationName: operationName,
+		HTTPStatus:    status,
 	}, nil
 }
 

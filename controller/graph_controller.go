@@ -425,7 +425,7 @@ func (g *GraphCtrl) RestToGraphQL(c echo.Context) error {
 	}
 
 	projectId := c.Param("pid")
-	model := utility.SingularResourceName(strings.TrimLeft(c.Param("model"), "/"))
+	model := strings.Trim(strings.TrimLeft(c.Param("model"), "/"), "/")
 	docId := c.Param("id")
 	relation := utility.SingularResourceName(c.Param("relation"))
 
@@ -565,8 +565,13 @@ func (g *GraphCtrl) RestToGraphQL(c echo.Context) error {
 		restStart := time.Now()
 		res, err := g.exePublicGraphql(c, req)
 		st := http.StatusOK
-		if err != nil {
+		switch {
+		case err != nil:
 			st = http.StatusInternalServerError
+		case res != nil && len(res.Errors) > 0:
+			st = http.StatusBadRequest
+		case builderResponse.HTTPStatus != 0:
+			st = builderResponse.HTTPStatus
 		}
 		telemetry.RecordRESTToGraphQL(c.Request().Context(), g.cfg, model, c.Request().Method, st, time.Since(restStart))
 		if err != nil {
@@ -575,8 +580,21 @@ func (g *GraphCtrl) RestToGraphQL(c echo.Context) error {
 				Code:    http.StatusInternalServerError,
 			})
 		}
+		if res != nil && len(res.Errors) > 0 {
+			message := "request failed"
+			if res.Errors[0].Message != "" {
+				message = res.Errors[0].Message
+			}
+			return c.JSON(http.StatusBadRequest, &models.HttpResponse{
+				Message: message,
+				Code:    http.StatusBadRequest,
+			})
+		}
 
-		return c.JSON(http.StatusOK, res)
+		if cache != nil && cache.Project != nil && c.Request() != nil {
+			notePublicAPI(c.Request().Host, cache.Project.ID, publicAPIOwner(cache), "rest")
+		}
+		return c.JSON(st, res)
 	}
 	return nil
 }
@@ -641,7 +659,20 @@ func (g *GraphCtrl) PublicGraphQL(i echo.Context) error {
 		})
 	}
 
+	if res == nil || len(res.Errors) == 0 {
+		cache, cacheErr := g.gqlServer.GetApplicationCache(i)
+		if cacheErr == nil && cache != nil && cache.Project != nil && i.Request() != nil {
+			notePublicAPI(i.Request().Host, cache.Project.ID, publicAPIOwner(cache), "graphql")
+		}
+	}
 	return i.JSON(http.StatusOK, res)
+}
+
+func publicAPIOwner(cache *models.ApplicationCache) string {
+	if cache == nil || cache.Param == nil {
+		return ""
+	}
+	return cache.Param.UserID
 }
 
 func (g *GraphCtrl) exePublicGraphql(i echo.Context, req *models.GraphQLIncomingRequest) (*graphql.Result, error) {

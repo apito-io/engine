@@ -4,6 +4,23 @@ Notable changes to **open-core** only. Release tags use `v1.x` (for example `v1.
 
 ## [Unreleased]
 
+## [1.9.4] - 2026-10-28
+
+### Added
+
+- Optional `AfterPublicAPI` hook. The public engine leaves it nil. A cloud build may set it.
+
+### Changed
+
+- Secured REST `POST /:model` creates a record and returns 201. `PUT /:model/:id` updates that record. A write with an explicit `_id` and no path id stays an update.
+- REST paths resolve the stored model from the singular id, snake_case, camelCase, the `{name}List` form, and an English plural such as `/notes`.
+- Generated OpenAPI documents `POST` create and `PUT /{id}` update.
+
+### Fixed
+
+- An empty or unknown REST write body returns 400 instead of creating an empty record. GraphQL errors from that write return 400.
+- `X-Use-Cookies: true` still uses the console cookie and ignores `Authorization`. `X-Use-Cookies: false` uses the bearer token.
+
 ## [1.9.3] - 2026-10-28
 
 ### Fixed
