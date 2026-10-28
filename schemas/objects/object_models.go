@@ -191,6 +191,10 @@ func (s *SchemaObjects) GetModelTypeObject(fieldInfoObj, connectionTypeObj, uniq
 					return false, nil
 				},
 			},
+			"is_common_model": &graphql.Field{
+				Type:    graphql.Boolean,
+				Resolve: resolveModelIsCommon,
+			},
 			"revision_filter": &graphql.Field{Type: graphql.NewList(graphql.NewObject(graphql.ObjectConfig{
 				Name: "RevisionFilter",
 				Fields: graphql.Fields{
@@ -200,6 +204,17 @@ func (s *SchemaObjects) GetModelTypeObject(fieldInfoObj, connectionTypeObj, uniq
 			}))},
 		},
 	})
+}
+
+func resolveModelIsCommon(p graphql.ResolveParams) (interface{}, error) {
+	switch m := p.Source.(type) {
+	case *models.ModelType:
+		return models.ModelIsCommon(m), nil
+	case models.ModelType:
+		return models.ModelIsCommon(&m), nil
+	default:
+		return false, nil
+	}
 }
 
 func (s *SchemaObjects) GetCloudFunctionObject(cloudFunctionRequestResponseObj, funcEnvVarObj, functionRuntimeConfigObj *graphql.Object) *graphql.Object {

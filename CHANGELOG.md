@@ -4,6 +4,12 @@ Notable changes to **open-core** only. Release tags use `v1.x` (for example `v1.
 
 ## [Unreleased]
 
+## [1.9.5] - 2026-10-28
+
+### Added
+
+- `ModelType.is_common_model` reads the model's common-model flag so schema sync can query it.
+
 ## [1.9.4] - 2026-10-28
 
 ### Added
