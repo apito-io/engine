@@ -142,6 +142,51 @@ func schemaModelByRESTPath(schema *models.ProjectSchema, raw string) *models.Mod
 	return nil
 }
 
+func relationSelection(schema *models.ProjectSchema, parent *models.ModelType, raw string) (string, error) {
+	conn := connectionForREST(parent, raw)
+	if conn == nil {
+		return "", errors.New("relation not found")
+	}
+	related := schemaModelByRESTPath(schema, conn.Model)
+	if related == nil {
+		return "", errors.New("relation not found")
+	}
+	selection := strings.Join(validFieldBuilder(getFieldsInfo(map[string]interface{}{}, related.Fields), nil), " ")
+	return fmt.Sprintf("%s { id data { %s } }", relationGraphQLField(conn), selection), nil
+}
+
+func connectionForREST(parent *models.ModelType, raw string) *models.ConnectionType {
+	if parent == nil {
+		return nil
+	}
+	want := map[string]bool{}
+	for _, candidate := range RESTModelCandidates(raw) {
+		want[candidate] = true
+		want[strings.ToLower(candidate)] = true
+	}
+	raw = strings.TrimSpace(raw)
+	want[raw] = true
+	want[strings.ToLower(raw)] = true
+	for _, conn := range parent.Connections {
+		if conn == nil {
+			continue
+		}
+		for _, name := range []string{conn.Model, conn.KnownAs, RelationFilterGraphQLKey(conn.Model, conn.KnownAs), RelationNestedListGraphQLKey(conn.Model, conn.KnownAs)} {
+			if name != "" && (want[name] || want[strings.ToLower(name)]) {
+				return conn
+			}
+		}
+	}
+	return nil
+}
+
+func relationGraphQLField(conn *models.ConnectionType) string {
+	if conn != nil && strings.EqualFold(strings.TrimSpace(conn.Relation), "has_one") {
+		return RelationFilterGraphQLKey(conn.Model, conn.KnownAs)
+	}
+	return RelationNestedListGraphQLKey(conn.Model, conn.KnownAs)
+}
+
 func publicMutationField(action, modelName string) string {
 	return action + PascalFromAnyModelID(modelName)
 }
@@ -225,12 +270,9 @@ func RESTtoGraphQL(c echo.Context, schema *models.ProjectSchema, rootModel strin
 	case "GET":
 		operationName = fmt.Sprintf(`Get%s`, strings.Title(modelType.Name))
 		var whereStrings []string
-		if _id, ok := rest["_id"]; ok {
-			id := _id[0]
+		if _id, ok := rest["_id"]; ok && strings.TrimSpace(_id[0]) != "" {
 			queryModelName = SingularResourceName(modelType.Name)
-			if strings.Contains(id, "-") {
-				filters = append(filters, fmt.Sprintf(`_id: "%s"`, id))
-			}
+			filters = append(filters, fmt.Sprintf(`_id: "%s"`, strings.TrimSpace(_id[0])))
 		} else {
 			queryModelName = MultipleResourceName(modelType.Name)
 			if limit, ok := rest["limit"]; ok {
@@ -293,15 +335,12 @@ func RESTtoGraphQL(c echo.Context, schema *models.ProjectSchema, rootModel strin
 		}
 
 		var nestedQuery string
-		if relation, ok := rest["relation"]; ok {
-			model := SingularResourceName(relation[0])
-			delete(rest, "_id") // nested doesn't need id. Must include to avoid loopOnNestedSets
-			delete(rest, "relation")
-			nestedBuildedQuery, err := RESTtoGraphQL(c, schema, model, rest, true)
+		if relation, ok := rest["relation"]; ok && strings.TrimSpace(relation[0]) != "" {
+			nested, err := relationSelection(schema, modelType, relation[0])
 			if err != nil {
 				return nil, err
 			}
-			nestedQuery = nestedBuildedQuery.Query
+			nestedQuery = nested
 		}
 
 		query = fmt.Sprintf(`

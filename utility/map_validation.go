@@ -9,7 +9,7 @@ import (
 func valueFormater(_val interface{}) interface{} {
 	switch reflect.ValueOf(_val).Kind() {
 	case reflect.String:
-		return fmt.Sprintf(`"%v"`, _val)
+		return graphqlQuote(_val.(string))
 	case reflect.Map:
 		v := _val.(map[string]interface{})
 		var values []string
@@ -32,6 +32,14 @@ func valueFormater(_val interface{}) interface{} {
 	return nil
 }
 
+func graphqlQuote(s string) string {
+	s = strings.ReplaceAll(s, `\`, `\\`)
+	s = strings.ReplaceAll(s, `"`, `\"`)
+	s = strings.ReplaceAll(s, "\r", "")
+	s = strings.ReplaceAll(s, "\n", `\n`)
+	return `"` + s + `"`
+}
+
 func validPayloadBuilder(reqPayload map[string]interface{}, validFields map[string]interface{}, validConnections map[string]string) (string, string) {
 	var connections []string
 	var payloads []string
@@ -41,6 +49,10 @@ func validPayloadBuilder(reqPayload map[string]interface{}, validFields map[stri
 			if field != nil {
 				reqValue := reqPayload[k]
 				switch reflect.ValueOf(reqValue).Kind() {
+				case reflect.String:
+					if keys, ok := field.([]string); ok && contains(keys, "html") {
+						_val = map[string]interface{}{"html": reqValue.(string)}
+					}
 				case reflect.Slice:
 					nestedVals := reqValue.([]interface{})
 					for _, nestedValue := range nestedVals {

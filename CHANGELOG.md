@@ -4,6 +4,18 @@ Notable changes to **open-core** only. Release tags use `v1.x` (for example `v1.
 
 ## [Unreleased]
 
+## [1.9.6] - 2026-10-29
+
+### Fixed
+
+- `registerUser` in email mode accepts an account with no phone number. Phone mode still requires a phone number. Admin `createUser` still requires a phone number.
+- Existing project `users` tables gain `tenant_id`, `username`, `secret`, and `google_sub` before signup reads them. The public engine build uses open_driver v1.0.30 for that migration.
+- REST get-by-id sends `_id` for every id, including ids that contain no hyphen.
+- REST relation reads select `category_list` or the has-one field name. They no longer select `categoryList`.
+- A multiline REST value sent as an HTML string is stored as `{ html }`.
+- OpenAPI paths match `/{model}`, `/{model}/{id}`, and `/{model}/{id}/{relation}`. The server URL keeps the host port from the request. A bare loopback host uses port 4055.
+- The MCP resource URL keeps `:4055` when nginx drops the port from `$host`.
+
 ## [1.9.5] - 2026-10-28
 
 ### Added

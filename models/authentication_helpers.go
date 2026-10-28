@@ -130,6 +130,22 @@ func GeneralIdentifierMethod(p *Project) string {
 	}
 }
 
+// RequireRegistrationIdentifier enforces the signup field selected by general auth.
+// Email mode leaves phone optional. Phone mode leaves email optional.
+func RequireRegistrationIdentifier(method, emailLower, phoneNorm string) error {
+	switch strings.ToLower(strings.TrimSpace(method)) {
+	case "phone":
+		if strings.TrimSpace(phoneNorm) == "" {
+			return errors.New("phone is required")
+		}
+	default:
+		if strings.TrimSpace(emailLower) == "" {
+			return errors.New("email is required")
+		}
+	}
+	return nil
+}
+
 // HasGoogleClientSecretConfigured reports whether a non-empty secret is stored.
 func HasGoogleClientSecretConfigured(p *Project) bool {
 	return HasOAuthClientSecretConfigured(p, OAuthProviderGoogle)

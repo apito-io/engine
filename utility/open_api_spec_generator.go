@@ -16,9 +16,18 @@ func ModelSchemaBuilder(modelType *models.ModelType, update bool) *oas.Schema {
 		if f.Validation != nil && (f.Validation.IsPassword || f.Validation.Hide) && !update { // skip password field
 			continue
 		}
-		switch f.InputType {
+		inputType := f.InputType
+		if f.FieldType == "multiline" {
+			inputType = "multiline"
+		}
+		switch inputType {
 		case "string":
 			schema[f.Identifier] = oas.String()
+			break
+		case "multiline":
+			schema[f.Identifier] = oas.ObjectOf(oas.Props{
+				"html": oas.String(),
+			})
 			break
 		case "int":
 			schema[f.Identifier] = oas.Integer()
@@ -116,7 +125,7 @@ func OpenApiSpecGenerator(env, publicAPIBase string, loader *models.ApplicationC
 
 	openapi.AddServer(oas.NewServer(restDocServerURL(env, publicAPIBase, project.ID)))
 
-	openapi.AddSecurityScheme("bearerAuth", oas.NewAPIKeySecurityScheme("Authorization", "Paste a project API key from <strong>Settings > API Secrets</strong>. Value should be `Bearer ak_…`. Do not use the console session.", "header"))
+	openapi.AddSecurityScheme("bearerAuth", oas.NewAPIKeySecurityScheme("Authorization", "External clients send `Bearer ak_…` from <strong>Settings > API Secrets</strong>. The console Send button uses the login session.", "header"))
 
 	if project.Schema == nil {
 		return openapi, nil
@@ -182,7 +191,7 @@ func OpenApiSpecGenerator(env, publicAPIBase string, loader *models.ApplicationC
 				op.SetDefaultResponse(resp)
 			}
 
-			openapi.AddOperation(oas.GET, fmt.Sprintf(`/%s`, MultipleResourceName(model.Name)), op)
+			openapi.AddOperation(oas.GET, "/"+model.Name, op)
 		}
 
 		// single data
@@ -214,7 +223,7 @@ func OpenApiSpecGenerator(env, publicAPIBase string, loader *models.ApplicationC
 				op.SetDefaultResponse(resp)
 			}
 
-			openapi.AddOperation(oas.GET, fmt.Sprintf(`/%s/{id}`, SingularResourceName(model.Name)), op)
+			openapi.AddOperation(oas.GET, "/"+model.Name+"/{id}", op)
 		}
 
 		// create
@@ -242,7 +251,7 @@ func OpenApiSpecGenerator(env, publicAPIBase string, loader *models.ApplicationC
 				resp.AddContent("application/json", oas.NewMediaTypeWithSchema(openapi.RefSchema("Error")))
 				op.SetDefaultResponse(resp)
 			}
-			openapi.AddOperation(oas.POST, fmt.Sprintf("/%s", MultipleResourceName(model.Name)), op)
+			openapi.AddOperation(oas.POST, "/"+model.Name, op)
 		}
 
 		// update
@@ -276,7 +285,7 @@ func OpenApiSpecGenerator(env, publicAPIBase string, loader *models.ApplicationC
 				resp.AddContent("application/json", oas.NewMediaTypeWithSchema(openapi.RefSchema("Error")))
 				op.SetDefaultResponse(resp)
 			}
-			openapi.AddOperation(oas.PUT, fmt.Sprintf("/%s/{id}", SingularResourceName(model.Name)), op)
+			openapi.AddOperation(oas.PUT, "/"+model.Name+"/{id}", op)
 		}
 
 		// delete
@@ -288,9 +297,9 @@ func OpenApiSpecGenerator(env, publicAPIBase string, loader *models.ApplicationC
 				"bearerAuth": []string{},
 			})
 
-			queryField := oas.QueryParameter("_id", oas.String(), false).
-				WithDesc(`The ID of the Doc`)
-			op.AddParameter(queryField)
+			idPath := oas.PathParameter("id", oas.String()).
+				WithDesc(`The ID of the document that you want to delete`)
+			op.AddParameter(idPath)
 
 			// 200
 			{
@@ -304,7 +313,7 @@ func OpenApiSpecGenerator(env, publicAPIBase string, loader *models.ApplicationC
 				resp.AddContent("application/json", oas.NewMediaTypeWithSchema(openapi.RefSchema("Error")))
 				op.SetDefaultResponse(resp)
 			}
-			openapi.AddOperation(oas.DELETE, fmt.Sprintf("/%s", MultipleResourceName(model.Name)), op)
+			openapi.AddOperation(oas.DELETE, "/"+model.Name+"/{id}", op)
 		}
 
 	}
@@ -385,7 +394,11 @@ func OpenApiSpecGenerator(env, publicAPIBase string, loader *models.ApplicationC
 						op.SetDefaultResponse(resp)
 					}
 
-					openapi.AddOperation(oas.GET, fmt.Sprintf(`/%s/{id}/%s`, model.Name, strings.ToLower(connectedModel)), op)
+					segment := c.Model
+					if strings.TrimSpace(c.KnownAs) != "" {
+						segment = c.KnownAs
+					}
+					openapi.AddOperation(oas.GET, fmt.Sprintf(`/%s/{id}/%s`, model.Name, segment), op)
 				}
 			}
 		}

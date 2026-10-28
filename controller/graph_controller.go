@@ -13,6 +13,7 @@ import (
 	"time"
 
 	apifn "github.com/apito-io/engine/functions"
+	"github.com/apito-io/engine/mcp"
 	"github.com/apito-io/engine/models"
 	"github.com/apito-io/engine/resolver"
 	"github.com/apito-io/engine/scaler"
@@ -609,7 +610,17 @@ func (g *GraphCtrl) RESTApiDocGenerator(c echo.Context) error {
 		})
 	}
 
-	val, err := utility.OpenApiSpecGenerator(g.cfg.Environment, g.cfg.PublicAPIURL, cache)
+	origin := g.cfg.PublicAPIURL
+	if req := c.Request(); req != nil {
+		scheme := "http"
+		if req.TLS != nil {
+			scheme = "https"
+		}
+		if built := mcp.PublicBase(scheme, req.Host, req.Header.Get("X-Forwarded-Proto"), req.Header.Get("X-Forwarded-Host"), req.Header.Get("X-Forwarded-Port"), g.cfg.PublicAPIURL); built != "" {
+			origin = built
+		}
+	}
+	val, err := utility.OpenApiSpecGenerator(g.cfg.Environment, origin, cache)
 	if err != nil {
 		return c.JSON(http.StatusInternalServerError, &models.HttpResponse{
 			Message: captureInternalServerError(err).Error(),

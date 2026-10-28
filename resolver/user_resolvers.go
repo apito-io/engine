@@ -438,18 +438,12 @@ func (s *GraphQLServer) createProjectEndUser(
 	}
 	emailLower := NormalizeUserEmail(getArgString(p.Args, "email"))
 	phoneNorm := models.NormalizeUserPhoneKey(strings.TrimSpace(getArgString(p.Args, "phone")))
-	if phoneNorm == "" {
-		return nil, errors.New("phone is required")
-	}
 	if forceRegistrationDefault {
-		switch models.GeneralIdentifierMethod(authProject) {
-		case "phone":
-			// phone already required above
-		default:
-			if emailLower == "" {
-				return nil, errors.New("email is required")
-			}
+		if err := models.RequireRegistrationIdentifier(models.GeneralIdentifierMethod(authProject), emailLower, phoneNorm); err != nil {
+			return nil, err
 		}
+	} else if phoneNorm == "" {
+		return nil, errors.New("phone is required")
 	}
 	uid := utility.NewID()
 	username, err := svc.ResolveCreateUsername(uid, getArgString(p.Args, "username"), "")

@@ -106,7 +106,9 @@ func DefaultURL(kind, custom string) (string, error) {
 }
 
 // PublicBase is scheme://host[:port] for the request the client actually used.
-func PublicBase(scheme, host, forwardedProto, forwardedHost, configured string) string {
+// A loopback host with no port is the Studio console on 4055. Nginx $host drops
+// that port, and the MCP resource must still be http://localhost:4055/mcp.
+func PublicBase(scheme, host, forwardedProto, forwardedHost, forwardedPort, configured string) string {
 	if configured = strings.TrimRight(strings.TrimSpace(configured), "/"); configured != "" {
 		return configured
 	}
@@ -119,9 +121,44 @@ func PublicBase(scheme, host, forwardedProto, forwardedHost, configured string) 
 	if scheme == "" {
 		scheme = "http"
 	}
-	host = strings.TrimSpace(host)
+	host = withPublicPort(strings.TrimSpace(host), forwardedPort)
 	if host == "" {
 		return ""
 	}
 	return scheme + "://" + host
+}
+
+func withPublicPort(host, forwardedPort string) string {
+	if host == "" || hostHasPort(host) {
+		return host
+	}
+	port := strings.TrimSpace(forwardedPort)
+	if port == "" && isLoopbackHost(host) {
+		port = "4055"
+	}
+	if port == "" {
+		return host
+	}
+	return host + ":" + port
+}
+
+func hostHasPort(host string) bool {
+	_, _, err := net.SplitHostPort(host)
+	return err == nil
+}
+
+func isLoopbackHost(host string) bool {
+	name := host
+	if h, _, err := net.SplitHostPort(host); err == nil {
+		name = h
+	}
+	name = strings.Trim(name, "[]")
+	switch strings.ToLower(name) {
+	case "localhost", "127.0.0.1", "::1":
+		return true
+	}
+	if ip := net.ParseIP(name); ip != nil && ip.IsLoopback() {
+		return true
+	}
+	return false
 }

@@ -43,6 +43,18 @@ func TestKindFollowsHost(t *testing.T) {
 	}
 }
 
+func TestPublicBaseKeepsStudioPort(t *testing.T) {
+	if got := PublicBase("http", "localhost", "", "", "", ""); got != "http://localhost:4055" {
+		t.Fatal(got)
+	}
+	if got := PublicBase("http", "localhost:5050", "", "", "", ""); got != "http://localhost:5050" {
+		t.Fatal(got)
+	}
+	if got := PublicBase("http", "localhost", "", "localhost", "4055", ""); got != "http://localhost:4055" {
+		t.Fatal(got)
+	}
+}
+
 func TestDefaultURLsStayClean(t *testing.T) {
 	cloud, err := DefaultURL("cloud", "")
 	if err != nil || cloud != CloudMCPURL {

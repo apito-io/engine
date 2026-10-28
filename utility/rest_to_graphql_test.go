@@ -43,6 +43,37 @@ func TestRESTtoGraphQLResolvesNamesAndWriteVerbs(t *testing.T) {
 	compat := restQuery(t, http.MethodPut, "/note", `{"title":"compat"}`, schema, "note", map[string]string{"_id": "doc-2"})
 	require.Contains(t, compat.Query, "updateNote")
 	require.Contains(t, compat.Query, `_id: "doc-2"`)
+
+	byID := restQuery(t, http.MethodGet, "/note/abc123", "", schema, "note", map[string]string{"_id": "abc123"})
+	require.Contains(t, byID.Query, `_id: "abc123"`)
+	require.Contains(t, byID.Query, "note")
+}
+
+func TestRESTtoGraphQLRelationAndRichText(t *testing.T) {
+	schema := &models.ProjectSchema{Models: []*models.ModelType{
+		{
+			Name:   "post",
+			Fields: []*models.FieldInfo{{Identifier: "body", FieldType: "multiline"}},
+			Connections: []*models.ConnectionType{
+				{Model: "author", Relation: "has_one", KnownAs: "writer"},
+				{Model: "comment", Relation: "has_many"},
+			},
+		},
+		{Name: "author", Fields: []*models.FieldInfo{{Identifier: "name", FieldType: "text"}}},
+		{Name: "comment", Fields: []*models.FieldInfo{{Identifier: "text", FieldType: "text"}}},
+	}}
+
+	one := restQuery(t, http.MethodGet, "/post/abc123/writer", "", schema, "post", map[string]string{"_id": "abc123", "relation": "writer"})
+	require.Contains(t, one.Query, "writer {")
+	require.Contains(t, one.Query, "name")
+	require.NotContains(t, one.Query, "authorList")
+
+	many := restQuery(t, http.MethodGet, "/post/abc123/comment", "", schema, "post", map[string]string{"_id": "abc123", "relation": "comment"})
+	require.Contains(t, many.Query, "comment_list {")
+	require.Contains(t, many.Query, "text")
+
+	body := restQuery(t, http.MethodPost, "/post", `{"body":"<p>hi</p>"}`, schema, "post", nil)
+	require.Contains(t, body.Query, `html : "<p>hi</p>"`)
 }
 
 func TestRESTtoGraphQLRejectsEmptyAndUnknownWrites(t *testing.T) {

@@ -19,6 +19,7 @@ func TestStudioNginxRoutesProtocolToEngine(t *testing.T) {
 		"location @mcp_engine",
 		"proxy_pass http://127.0.0.1:5055",
 		"X-Forwarded-Host",
+		"X-Forwarded-Port",
 		"proxy_buffering off",
 		"Mcp-Session-Id",
 		"/.well-known/oauth-protected-resource/mcp",

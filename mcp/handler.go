@@ -136,7 +136,7 @@ func (h *Handler) resource(c echo.Context) string {
 	if h.opt.Config != nil {
 		configured = h.opt.Config.MCPPublicURL
 	}
-	base := PublicBase(c.Scheme(), c.Request().Host, c.Request().Header.Get("X-Forwarded-Proto"), c.Request().Header.Get("X-Forwarded-Host"), configured)
+	base := PublicBase(c.Scheme(), c.Request().Host, c.Request().Header.Get("X-Forwarded-Proto"), c.Request().Header.Get("X-Forwarded-Host"), c.Request().Header.Get("X-Forwarded-Port"), configured)
 	if base == "" {
 		return LocalMCPURL
 	}
