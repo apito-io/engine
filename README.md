@@ -4,7 +4,7 @@
 
 # Apito Engine
 
-**Build locally. Scale when you’re ready.**
+**The open-source GraphQL & REST backend for your database.**
 
 Apito Engine is a self-hosted GraphQL stack. You run it on infrastructure you control. When you want managed hosting, sync the same project to Apito Cloud.
 
@@ -54,21 +54,21 @@ The self-hosted binary is `github.com/apito-io/open_driver/cmd/oss`. It injects 
 <td align="center" width="33%">
 
 **📋 Model Management**  
-<kbd><img src="https://cdn.apito.io/media/shikho_website_v2_8ma77/30RCY24Q15_Apito_Console___Model.png" alt="Apito Console - Model" width="100%"/></kbd>  
+<kbd><img src="https://apito.io/media/shikho_website_v2_8ma77/30RCY24Q15_Apito_Console___Model.png" alt="Apito Console - Model" width="100%"/></kbd>  
 _Design your data models with an intuitive visual editor_
 
 </td>
 <td align="center" width="33%">
 
 **📝 Content Management**  
-<kbd><img src="https://cdn.apito.io/media/shikho_website_v2_8ma77/1ZGH5QE8U5_Apito_Console___Content.png" alt="Apito Console - Content" width="100%"/></kbd>  
+<kbd><img src="https://apito.io/media/shikho_website_v2_8ma77/1ZGH5QE8U5_Apito_Console___Content.png" alt="Apito Console - Content" width="100%"/></kbd>  
 _Manage your content with a powerful admin interface_
 
 </td>
 <td align="center" width="33%">
 
 **🚀 API Explorer**  
-<kbd><img src="https://cdn.apito.io/media/shikho_website_v2_8ma77/IN1TXKJPX5_Apito_Console___API.png" alt="Apito Console - API" width="100%"/></kbd>  
+<kbd><img src="https://apito.io/media/shikho_website_v2_8ma77/IN1TXKJPX5_Apito_Console___API.png" alt="Apito Console - API" width="100%"/></kbd>  
 _Test and explore your GraphQL APIs in real-time_
 
 </td>
