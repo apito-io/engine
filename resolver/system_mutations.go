@@ -2,6 +2,7 @@ package resolver
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"regexp"
@@ -2978,6 +2979,7 @@ func (s *GraphQLServer) DeleteModelDataFn(p graphql.ResolveParams) (interface{},
 		if err != nil {
 			return nil, err
 		}
+		s.EmitModelChangeWithPrevious(cache.Ctx, param.ProjectID, modelName, models.ChangeEventDeleted, docId, nil, exists)
 	} else {
 		return nil, errors.New("doc not found to delete")
 	}
@@ -4068,7 +4070,16 @@ func (s *GraphQLServer) UpsertModelDataFnFn(p graphql.ResolveParams) (interface{
 		// cross-environment copies (apito sync content) keep document id parity.
 	}
 
+	changeEvent := models.ChangeEventCreated
+	var previous interface{}
 	if docExists {
+		changeEvent = models.ChangeEventUpdated
+		if raw, snapErr := json.Marshal(doc); snapErr == nil {
+			var snap map[string]interface{}
+			if json.Unmarshal(raw, &snap) == nil {
+				previous = snap
+			}
+		}
 
 		if len(modelType.Connections) > 0 {
 			if disconnects, ok := p.Args["disconnect"].(map[string]interface{}); ok && len(disconnects) > 0 {
@@ -4219,6 +4230,9 @@ func (s *GraphQLServer) UpsertModelDataFnFn(p graphql.ResolveParams) (interface{
 		return nil, err
 	} */
 
+	if doc != nil {
+		s.EmitModelChangeWithPrevious(cache.Ctx, param.ProjectID, modelName, changeEvent, doc.ID, doc, previous)
+	}
 	return doc, nil
 }
 
@@ -4396,6 +4410,7 @@ func (s *GraphQLServer) DeleteModelDataFnFn(p graphql.ResolveParams) (interface{
 		if err != nil {
 			return nil, err
 		}
+		s.EmitModelChangeWithPrevious(cache.Ctx, param.ProjectID, modelName, models.ChangeEventDeleted, docId, nil, exists)
 	} else {
 		return nil, errors.New("doc not found to delete")
 	}

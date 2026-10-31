@@ -623,7 +623,11 @@ func (s *GraphQLServer) registerPluginSchemaAndAPIs(ctx context.Context, plugin 
 
 // createPluginAPIHandler creates an Echo handler that routes requests to the plugin
 func (s *GraphQLServer) createPluginAPIHandler(pluginID string, route *protobuff.ThirdPartyRESTApi) echo.HandlerFunc {
+	stampPluginRESTAccess(pluginID, route)
 	return func(c echo.Context) error {
+		if err := s.guardPluginREST(c, pluginID, route); err != nil {
+			return err
+		}
 		if err := s.enforcePluginRESTActivation(c, pluginID); err != nil {
 			return err
 		}
@@ -650,6 +654,9 @@ func (s *GraphQLServer) createPluginAPIHandler(pluginID string, route *protobuff
 		}
 
 		// Handle different result types
+		if pluginRESTAccess(pluginID, route) == pluginRESTAccessPublic {
+			result = sanitizePublicPluginResult(result)
+		}
 		switch v := result.(type) {
 		case map[string]interface{}:
 			// Check if there's a specific status code

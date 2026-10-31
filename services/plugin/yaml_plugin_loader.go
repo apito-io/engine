@@ -157,7 +157,9 @@ func convertYAMLPluginToProtobuf(yamlPlugin YAMLPlugin) (*protobuff.PluginDetail
 			Signed:       yamlPlugin.UIConfig.Signed,
 		})
 	}
-	SetPluginContributions(yamlPlugin.ID, NormalizeContributions(yamlPlugin.Contributions))
+	if err := SetPluginContributions(yamlPlugin.ID, NormalizeContributions(yamlPlugin.Contributions)); err != nil {
+		return nil, fmt.Errorf("plugin %s: %w", yamlPlugin.ID, err)
+	}
 
 	// Convert environment variables
 	var envVars []*protobuff.EnvVariable

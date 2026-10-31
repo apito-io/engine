@@ -60,8 +60,11 @@ func ConvertProtoRestApisToLocal(protoApis []*protobuff.ThirdPartyRESTApi) []*pr
 	apis := make([]*protobuff.ThirdPartyRESTApi, len(protoApis))
 	for i, protoApi := range protoApis {
 		apis[i] = &protobuff.ThirdPartyRESTApi{
-			Method: protoApi.Method,
-			Path:   protoApi.Path,
+			Method:      protoApi.Method,
+			Path:        protoApi.Path,
+			Description: protoApi.Description,
+			Schema:      protoApi.Schema,
+			Handler:     protoApi.Handler,
 		}
 	}
 	return apis

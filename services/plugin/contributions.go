@@ -11,9 +11,10 @@ import (
 // Contributions is the signed + runtime plugin surface: API, UI, fields.
 // Absence of a section means the plugin does not contribute that surface.
 type Contributions struct {
-	API    *APIContribution    `json:"api,omitempty" yaml:"api,omitempty"`
-	UI     *UIContribution     `json:"ui,omitempty" yaml:"ui,omitempty"`
-	Fields []FieldContribution `json:"fields,omitempty" yaml:"fields,omitempty"`
+	API     *APIContribution             `json:"api,omitempty" yaml:"api,omitempty"`
+	UI      *UIContribution              `json:"ui,omitempty" yaml:"ui,omitempty"`
+	Fields  []FieldContribution          `json:"fields,omitempty" yaml:"fields,omitempty"`
+	Payment *PaymentProviderContribution `json:"payment,omitempty" yaml:"payment,omitempty"`
 }
 
 // APIContribution describes GraphQL, REST, and events.
@@ -38,6 +39,8 @@ type RESTOperation struct {
 	Method      string `json:"method" yaml:"method"`
 	Path        string `json:"path" yaml:"path"`
 	Description string `json:"description,omitempty" yaml:"description,omitempty"`
+	// Access is protected (default) or public. Query project_id never changes this.
+	Access string `json:"access,omitempty" yaml:"access,omitempty"`
 }
 
 // UIContribution describes console routes, nav, and settings.
@@ -106,16 +109,28 @@ var allowedStorageTypes = map[string]struct{}{
 }
 
 // SetPluginContributions records declared + merged contributions for a plugin id.
-func SetPluginContributions(id string, c *Contributions) {
+// A payment block is registered or the whole call fails and the previous provider binding is removed.
+func SetPluginContributions(id string, c *Contributions) error {
 	id = strings.TrimSpace(id)
 	capMu.Lock()
-	defer capMu.Unlock()
 	if c == nil || c.Empty() {
 		delete(contribIndex, id)
-		return
+		capMu.Unlock()
+		UnregisterPaymentProvider(id)
+		return nil
 	}
 	copied := c.Clone()
 	contribIndex[id] = copied
+	capMu.Unlock()
+	if copied.Payment == nil {
+		UnregisterPaymentProvider(id)
+		return nil
+	}
+	if err := RegisterPaymentProvider(id, copied.Payment); err != nil {
+		UnregisterPaymentProvider(id)
+		return err
+	}
+	return nil
 }
 
 // ContributionsFor returns merged contributions for a plugin id.
@@ -165,6 +180,9 @@ func MergeContributions(declared *Contributions, snap *RuntimeAPISnapshot, defau
 		if len(declared.Fields) > 0 {
 			out.Fields = cloneFields(declared.Fields)
 		}
+		if declared.Payment != nil {
+			out.Payment = clonePayment(declared.Payment)
+		}
 	}
 	if snap != nil && !snap.empty() {
 		if out.API == nil {
@@ -177,7 +195,11 @@ func MergeContributions(declared *Contributions, snap *RuntimeAPISnapshot, defau
 			out.API.Mutations = cloneOps(snap.Mutations)
 		}
 		if len(snap.REST) > 0 {
-			out.API.REST = cloneREST(snap.REST)
+			prev := []RESTOperation{}
+			if out.API != nil {
+				prev = out.API.REST
+			}
+			out.API.REST = overlayRESTAccess(cloneREST(snap.REST), prev)
 		}
 	}
 	if out.Empty() {
@@ -221,6 +243,11 @@ func NormalizeContributions(c *Contributions) *Contributions {
 		fields = append(fields, f)
 	}
 	out.Fields = fields
+	if out.API != nil {
+		for i := range out.API.REST {
+			out.API.REST[i].Access = normalizeRESTAccess(out.API.REST[i].Access)
+		}
+	}
 	if out.API != nil && out.API.Scope != "" {
 		scope := strings.ToLower(strings.TrimSpace(out.API.Scope))
 		if scope != "system" && scope != "project" {
@@ -229,6 +256,7 @@ func NormalizeContributions(c *Contributions) *Contributions {
 			out.API.Scope = scope
 		}
 	}
+	out.Payment = NormalizePaymentContribution(out.Payment)
 	return out
 }
 
@@ -247,6 +275,7 @@ func SnapshotRuntimeAPI(schemas *protobuff.ThirdPartyGraphQLSchemas, apis []*pro
 			Method:      strings.ToUpper(strings.TrimSpace(api.Method)),
 			Path:        api.Path,
 			Description: api.Description,
+			Access:      restAccessFromSchema(api.Schema),
 		})
 	}
 	sort.Slice(snap.REST, func(i, j int) bool {
@@ -298,6 +327,9 @@ func (c *Contributions) Empty() bool {
 	if c.UI != nil && (c.UI.Available || len(c.UI.Routes) > 0 || len(c.UI.Navigation) > 0 || len(c.UI.Settings) > 0) {
 		return false
 	}
+	if c.Payment != nil {
+		return false
+	}
 	return len(c.Fields) == 0
 }
 
@@ -307,9 +339,10 @@ func (c *Contributions) Clone() *Contributions {
 		return nil
 	}
 	out := &Contributions{
-		API:    mergeAPI(nil, c.API, true),
-		UI:     c.UI.clone(),
-		Fields: cloneFields(c.Fields),
+		API:     mergeAPI(nil, c.API, true),
+		UI:      c.UI.clone(),
+		Fields:  cloneFields(c.Fields),
+		Payment: clonePayment(c.Payment),
 	}
 	return out
 }
@@ -370,6 +403,46 @@ func mergeAPI(base, overlay *APIContribution, copyOnly bool) *APIContribution {
 		out.Events = append([]string{}, overlay.Events...)
 	}
 	return out
+}
+
+func normalizeRESTAccess(access string) string {
+	switch strings.ToLower(strings.TrimSpace(access)) {
+	case "public":
+		return "public"
+	case "protected":
+		return "protected"
+	default:
+		return ""
+	}
+}
+
+func restAccessFromSchema(schema *structpb.Struct) string {
+	if schema == nil {
+		return ""
+	}
+	raw, _ := schema.AsMap()["_apito"].(map[string]interface{})
+	if raw == nil {
+		return ""
+	}
+	access, _ := raw["access"].(string)
+	return normalizeRESTAccess(access)
+}
+
+func overlayRESTAccess(runtime, declared []RESTOperation) []RESTOperation {
+	by := map[string]string{}
+	for _, d := range declared {
+		if d.Access == "" {
+			continue
+		}
+		by[strings.ToUpper(d.Method)+" "+d.Path] = d.Access
+	}
+	for i := range runtime {
+		if runtime[i].Access != "" {
+			continue
+		}
+		runtime[i].Access = by[strings.ToUpper(runtime[i].Method)+" "+runtime[i].Path]
+	}
+	return runtime
 }
 
 func cloneOps(in []APIOperation) []APIOperation {

@@ -65,6 +65,31 @@ func TestMergeRuntimeContributionsPrefersSchemaRegister(t *testing.T) {
 	}
 }
 
+func TestMergeRuntimeContributionsPreservesDeclaredRESTAccess(t *testing.T) {
+	id := "hc-rest-access-plugin"
+	t.Cleanup(func() { SetPluginContributions(id, nil) })
+	SetPluginContributions(id, &Contributions{
+		API: &APIContribution{
+			REST: []RESTOperation{{
+				Method: "GET",
+				Path:   "/config",
+				Access: "protected",
+			}},
+		},
+	})
+
+	MergeRuntimeContributions(id, SnapshotRuntimeAPI(nil, []*protobuff.ThirdPartyRESTApi{
+		{Method: "GET", Path: "/config"},
+	}))
+	got := ContributionsFor(id)
+	if got == nil || got.API == nil || len(got.API.REST) != 1 {
+		t.Fatalf("contributions=%+v", got)
+	}
+	if got.API.REST[0].Access != "protected" {
+		t.Fatalf("access=%q", got.API.REST[0].Access)
+	}
+}
+
 func TestConvertYAMLPluginLoadsContributions(t *testing.T) {
 	id := "hc-yaml-contrib-plugin"
 	t.Cleanup(func() {

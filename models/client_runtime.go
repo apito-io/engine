@@ -450,6 +450,29 @@ func setImportedPlatform(runtime *ClientRuntime, platform string, block *Platfor
 	}
 }
 
+// ClientRuntimeExtra reads one extra from a platform block. Extras are a list
+// of one-key objects. An unknown platform or a missing key returns empty.
+func ClientRuntimeExtra(runtime *ClientRuntime, platform, key string) string {
+	name, ok := NormalizeClientRuntimePlatform(platform)
+	if !ok || runtime == nil {
+		return ""
+	}
+	key = strings.TrimSpace(key)
+	if key == "" {
+		return ""
+	}
+	block := platformByName(runtime, name)
+	if block == nil {
+		return ""
+	}
+	for _, item := range block.Extras {
+		if value, found := item[key]; found {
+			return strings.TrimSpace(value)
+		}
+	}
+	return ""
+}
+
 func platformByName(runtime *ClientRuntime, platform string) *PlatformClientRuntime {
 	switch platform {
 	case "android":

@@ -129,6 +129,12 @@ func annotateConnectionModifications(diff *models.SchemaDiff, active, draft *mod
 		if prev.FromRel == next.FromRel && prev.ToRel == next.ToRel {
 			continue
 		}
+		// A missing reverse half is not a cardinality change. Migrating from
+		// "has_one/" has no storage shape. The new backward row is already an
+		// added connection; publish ensures its columns.
+		if MissingBackwardCompletion(prev, next) {
+			continue
+		}
 		mc := modelChangeFor(diff, next.FromModel)
 		mc.ConnectionsModified = append(mc.ConnectionsModified, &models.SchemaConnectionChange{
 			Model: next.ToModel, KnownAs: next.KnownAs,
@@ -137,6 +143,18 @@ func annotateConnectionModifications(diff *models.SchemaDiff, active, draft *mod
 			Impact: models.SchemaImpactPhysicalDDL,
 		})
 	}
+}
+
+// MissingBackwardCompletion reports a forward edge whose reverse row was
+// absent and is now present, with the forward relation unchanged.
+func MissingBackwardCompletion(prev, next ForwardEdge) bool {
+	if strings.TrimSpace(prev.FromRel) == "" || strings.TrimSpace(next.FromRel) == "" || strings.TrimSpace(next.ToRel) == "" {
+		return false
+	}
+	if !strings.EqualFold(strings.TrimSpace(prev.FromRel), strings.TrimSpace(next.FromRel)) {
+		return false
+	}
+	return strings.TrimSpace(prev.ToRel) == ""
 }
 
 func modelChangeFor(diff *models.SchemaDiff, name string) *models.SchemaModelDiff {

@@ -325,6 +325,7 @@ func InitRouter(cfg *models.Config) (*echo.Echo, error) {
 	// PUBLIC ENDPOINTS
 	filesCtrl := controller.NewFilesController(cfg, server.GetConcreteServer().(*resolver.GraphQLServer))
 	publicProtectedEndpoint := router.Group("/secured")
+	publicProtectedEndpoint.Use(graphCtrl.RedeemSubscriptionTicket)
 	publicProtectedEndpoint.Use(server.Authorize())
 	{
 		fileRoutes := publicProtectedEndpoint.Group("/files")
@@ -342,6 +343,7 @@ func InitRouter(cfg *models.Config) (*echo.Echo, error) {
 		// graphql
 		publicProtectedEndpoint.POST("/graphql", graphCtrl.PublicGraphQL)
 		// realtime graphql subscriptions (auto-generated <model>Changed + broadcast)
+		publicProtectedEndpoint.POST("/graphql/subscription-ticket", graphCtrl.IssueSubscriptionTicket)
 		publicProtectedEndpoint.Any("/graphql/subscription", graphCtrl.PublicSubscriptionWrapHandler)
 	}
 
@@ -369,6 +371,19 @@ func InitRouter(cfg *models.Config) (*echo.Echo, error) {
 	if err := authCtrl.MountRemoteMCP(router, server.Authorize()); err != nil {
 		return nil, err
 	}
+
+	payCtrl := controller.NewPaymentController(concreteServer)
+	payPublic := router.Group("/system/v1/payments")
+	payPublic.POST("/projects/:projectId/providers/:provider/webhook", payCtrl.Webhook)
+	payPublic.GET("/projects/:projectId/providers/:provider/callback/:outcome", payCtrl.Callback)
+	payPublic.POST("/projects/:projectId/providers/:provider/callback/:outcome", payCtrl.Callback)
+	payAuth := router.Group("/system/v1/payments")
+	payAuth.Use(server.Authorize())
+	payAuth.GET("/projects/:projectId/providers", payCtrl.Providers)
+	payAuth.POST("/projects/:projectId/providers/:provider/checkout", payCtrl.Checkout)
+	payAuth.GET("/projects/:projectId/transactions", payCtrl.List)
+	payAuth.GET("/projects/:projectId/transactions/:transactionId", payCtrl.GetTransaction)
+	payAuth.POST("/projects/:projectId/transactions/:transactionId/reconcile", payCtrl.Reconcile)
 
 	return router, nil
 }

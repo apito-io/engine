@@ -34,23 +34,41 @@ func (s *GraphQLServer) realtimeTopic(ctx context.Context, base string) string {
 // EmitModelChange publishes a CREATED/UPDATED/DELETED event for a document onto
 // the realtime bus. Best-effort: never blocks or fails the originating mutation.
 func (s *GraphQLServer) EmitModelChange(ctx context.Context, projectID, model, event, id string, node interface{}) {
+	s.EmitModelChangeWithPrevious(ctx, projectID, model, event, id, node, nil)
+}
+
+// EmitModelChangeWithPrevious is EmitModelChange plus the pre-image. Deletes
+// pass the removed document as previous and a nil node.
+func (s *GraphQLServer) EmitModelChangeWithPrevious(ctx context.Context, projectID, model, event, id string, node, previous interface{}) {
+	if realtimeSuppressed(ctx) {
+		return
+	}
 	if s == nil || s.RealtimeBus == nil || projectID == "" || model == "" {
-		s.notifyDocumentEventSink(ctx, projectID, model, event, id, node)
+		if s != nil {
+			s.notifyDocumentEventSink(ctx, projectID, model, event, id, node)
+		}
 		return
 	}
 	evt := &models.ModelChangeEvent{
-		Event:     event,
-		Model:     model,
-		ProjectID: projectID,
-		ID:        id,
-		Node:      node,
+		Event:          event,
+		Model:          model,
+		ProjectID:      projectID,
+		ID:             id,
+		Node:           node,
+		PreviousValues: previous,
 	}
 	payload, err := json.Marshal(evt)
 	if err != nil {
 		return
 	}
 	topic := s.realtimeTopic(ctx, RealtimeModelBaseTopic(projectID, model))
-	_ = s.RealtimeBus.Publish(ctx, topic, payload)
+	if err := s.RealtimeBus.Publish(ctx, topic, payload); err == nil {
+		noteRealtimePublish()
+	}
+	if idTopic, err := realtimeModelIDTopic(projectID, model, id); err == nil {
+		idTopic = s.realtimeTopic(ctx, idTopic)
+		_ = s.RealtimeBus.Publish(ctx, idTopic, payload)
+	}
 	s.notifyDocumentEventSink(ctx, projectID, model, event, id, node)
 }
 
@@ -58,6 +76,10 @@ func (s *GraphQLServer) EmitModelChange(ctx context.Context, projectID, model, e
 func (s *GraphQLServer) PublishBroadcast(ctx context.Context, projectID, channel, event string, payload interface{}) error {
 	if s == nil || s.RealtimeBus == nil {
 		return fmt.Errorf("realtime bus is not configured")
+	}
+	if err := s.authorizeChannel(ctx, channel, "publish"); err != nil {
+		noteRealtimeAuthDeny()
+		return err
 	}
 	evt := &models.BroadcastEvent{
 		Channel:   channel,
@@ -99,15 +121,31 @@ func (s *GraphQLServer) ModelChangedSubscribeFn(projectID, model string) graphql
 		}
 		wantEvents := changeEventFilter(p.Args["events"])
 		idFilter, _ := p.Args["id"].(string)
-
-		topic := s.realtimeTopic(p.Context, RealtimeModelBaseTopic(projectID, model))
+		if err := validateWhere(p.Args["where"]); err != nil {
+			return nil, err
+		}
+		base := RealtimeModelBaseTopic(projectID, model)
+		if idFilter != "" {
+			idTopic, err := realtimeModelIDTopic(projectID, model, idFilter)
+			if err != nil {
+				return nil, err
+			}
+			base = idTopic
+		}
+		release, err := s.reserveRealtimeSubscription(p.Context, projectID)
+		if err != nil {
+			return nil, err
+		}
+		topic := s.realtimeTopic(p.Context, base)
 		msgs, err := s.RealtimeBus.Subscribe(p.Context, topic)
 		if err != nil {
+			release()
 			return nil, err
 		}
 
 		out := make(chan interface{}, 16)
 		go func() {
+			defer release()
 			defer close(out)
 			for raw := range msgs {
 				var evt models.ModelChangeEvent
@@ -115,21 +153,34 @@ func (s *GraphQLServer) ModelChangedSubscribeFn(projectID, model string) graphql
 					continue
 				}
 				if wantEvents != nil && !wantEvents[evt.Event] {
+					noteRealtimeFiltered()
 					continue
 				}
 				if idFilter != "" && evt.ID != idFilter {
+					noteRealtimeFiltered()
+					continue
+				}
+				if !eventMatchesWhere(evt, p.Args["where"]) {
+					noteRealtimeFiltered()
+					continue
+				}
+				if !eventReadable(p.Context, model, evt) {
 					continue
 				}
 				payload := map[string]interface{}{
 					"event":          evt.Event,
 					"id":             evt.ID,
 					"model":          evt.Model,
+					"projectId":      evt.ProjectID,
 					"node":           evt.Node,
 					"previousValues": evt.PreviousValues,
 				}
 				select {
 				case out <- payload:
 				case <-p.Context.Done():
+					return
+				default:
+					noteRealtimeDrop()
 					return
 				}
 			}
@@ -149,13 +200,23 @@ func (s *GraphQLServer) BroadcastSubscribeFn(projectID string) graphql.FieldReso
 		if channel == "" {
 			return nil, fmt.Errorf("channel is required")
 		}
+		if err := s.authorizeChannel(p.Context, channel, "subscribe"); err != nil {
+			noteRealtimeAuthDeny()
+			return nil, err
+		}
+		release, err := s.reserveRealtimeSubscription(p.Context, projectID)
+		if err != nil {
+			return nil, err
+		}
 		topic := s.realtimeTopic(p.Context, RealtimeBroadcastBaseTopic(projectID, channel))
 		msgs, err := s.RealtimeBus.Subscribe(p.Context, topic)
 		if err != nil {
+			release()
 			return nil, err
 		}
 		out := make(chan interface{}, 16)
 		go func() {
+			defer release()
 			defer close(out)
 			for raw := range msgs {
 				var evt models.BroadcastEvent
@@ -172,11 +233,24 @@ func (s *GraphQLServer) BroadcastSubscribeFn(projectID string) graphql.FieldReso
 				case out <- payload:
 				case <-p.Context.Done():
 					return
+				default:
+					noteRealtimeDrop()
+					return
 				}
 			}
 		}()
 		return out, nil
 	}
+}
+
+func (s *GraphQLServer) authorizeChannel(ctx context.Context, channel, op string) error {
+	if err := validateChannel(channel); err != nil {
+		return err
+	}
+	if s != nil && s.Cfg != nil && s.Cfg.RealtimeBroadcastAuthHook != nil {
+		return s.Cfg.RealtimeBroadcastAuthHook(ctx, channel, op)
+	}
+	return nil
 }
 
 // ModelReadableForRole reports whether a role may read a model (used to shape the

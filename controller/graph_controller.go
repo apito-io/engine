@@ -42,6 +42,7 @@ type GraphCtrl struct {
 	subscriptionSchema *graphql.Schema
 	gqlServer          *resolver.GraphQLServer
 	srv                wsgraphql.Server
+	tickets            *subscriptionTicketStore
 }
 
 func GetGraphQLController(cfg *models.Config, commonFn *resolver.GraphQLServer) *GraphCtrl {
@@ -53,7 +54,7 @@ func GetGraphQLController(cfg *models.Config, commonFn *resolver.GraphQLServer) 
 	}
 
 	// subscriptions / websocket handler
-	subHandler, err := newSubscriptionWSServer(*gqlSchema)
+	subHandler, err := newSubscriptionWSServer(*gqlSchema, cfg)
 	if err != nil {
 		fmt.Println(err.Error())
 	}
@@ -63,6 +64,7 @@ func GetGraphQLController(cfg *models.Config, commonFn *resolver.GraphQLServer) 
 		subscriptionSchema: gqlSchema,
 		gqlServer:          commonFn,
 		srv:                subHandler,
+		tickets:            newSubscriptionTicketStore(),
 	}
 }
 
@@ -70,7 +72,7 @@ func GetGraphQLController(cfg *models.Config, commonFn *resolver.GraphQLServer) 
 // using the standard apollo graphql-ws / graphql-transport-ws configuration.
 // It is reused for both the system subscription schema (built once at boot) and
 // per-connection public subscription schemas.
-func newSubscriptionWSServer(schema graphql.Schema) (wsgraphql.Server, error) {
+func newSubscriptionWSServer(schema graphql.Schema, cfg *models.Config) (wsgraphql.Server, error) {
 	return wsgraphql.NewServer(
 		schema,
 		wsgraphql.WithKeepalive(time.Second*30),
@@ -79,7 +81,7 @@ func newSubscriptionWSServer(schema graphql.Schema) (wsgraphql.Server, error) {
 			ReadBufferSize:  1024,
 			WriteBufferSize: 1024,
 			CheckOrigin: func(r *http.Request) bool {
-				return true
+				return realtimeOriginAllowed(cfg, r)
 			},
 			Subprotocols: []string{
 				wsgraphql.WebsocketSubprotocolGraphqlWS.String(),
@@ -1013,11 +1015,58 @@ func (g *GraphCtrl) publishMutationField() *graphql.Field {
 	}
 }
 
-// PublicSubscriptionWrapHandler serves per-project public GraphQL subscriptions
-// over websockets. The subscription schema (auto-generated <model>Changed fields
-// + broadcast) is built per connection from the authenticated project/role, then
-// served via a per-connection wsgraphql server.
+// PublicSubscriptionWrapHandler serves per-project public GraphQL subscriptions.
+// A WebSocket upgrade streams <model>Changed and broadcast. A normal POST runs
+// the same schema so the console explorer can introspect it.
 func (g *GraphCtrl) PublicSubscriptionWrapHandler(c echo.Context) error {
+	if websocket.IsWebSocketUpgrade(c.Request()) {
+		return g.servePublicSubscriptionSocket(c)
+	}
+	return g.servePublicSubscriptionHTTP(c)
+}
+
+func (g *GraphCtrl) servePublicSubscriptionHTTP(c echo.Context) error {
+	var req struct {
+		Query         string                 `json:"query"`
+		Variables     map[string]interface{} `json:"variables"`
+		OperationName string                 `json:"operationName"`
+		OpName        string                 `json:"operation_name"`
+	}
+	if err := c.Bind(&req); err != nil {
+		return c.JSON(http.StatusBadRequest, &models.HttpResponse{
+			Message: err.Error(),
+			Code:    http.StatusBadRequest,
+		})
+	}
+	if strings.TrimSpace(req.Query) == "" {
+		return c.JSON(http.StatusBadRequest, &models.HttpResponse{
+			Message: "Query can not be empty!",
+			Code:    http.StatusBadRequest,
+		})
+	}
+	schema, err := g.publicSubscriptionSchema(c)
+	if err != nil {
+		return c.JSON(http.StatusBadRequest, &models.HttpResponse{
+			Message: err.Error(),
+			Code:    http.StatusBadRequest,
+		})
+	}
+	opName := req.OperationName
+	if opName == "" {
+		opName = req.OpName
+	}
+	ctx := context.WithValue(c.Request().Context(), "router", c)
+	res := graphql.Do(graphql.Params{
+		Context:        ctx,
+		Schema:         *schema,
+		RequestString:  req.Query,
+		VariableValues: req.Variables,
+		OperationName:  opName,
+	})
+	return c.JSON(http.StatusOK, res)
+}
+
+func (g *GraphCtrl) servePublicSubscriptionSocket(c echo.Context) error {
 	cache, err := g.gqlServer.GetApplicationCache(c)
 	if err != nil {
 		return c.JSON(http.StatusBadRequest, &models.HttpResponse{
@@ -1025,7 +1074,6 @@ func (g *GraphCtrl) PublicSubscriptionWrapHandler(c echo.Context) error {
 			Code:    http.StatusBadRequest,
 		})
 	}
-
 	schema, err := schemas.PublicSubscriptionSchema(g.gqlServer, cache)
 	if err != nil {
 		return c.JSON(http.StatusBadRequest, &models.HttpResponse{
@@ -1034,7 +1082,7 @@ func (g *GraphCtrl) PublicSubscriptionWrapHandler(c echo.Context) error {
 		})
 	}
 
-	srv, err := newSubscriptionWSServer(*schema)
+	srv, err := newSubscriptionWSServer(*schema, g.cfg)
 	if err != nil {
 		return c.JSON(http.StatusInternalServerError, &models.HttpResponse{
 			Message: err.Error(),
@@ -1042,18 +1090,31 @@ func (g *GraphCtrl) PublicSubscriptionWrapHandler(c echo.Context) error {
 		})
 	}
 
-	// Prefer cache.Ctx (enriched with tenant/routing keys by a host binary) so
-	// the realtime topic hook resolves the same scoped topic as the emit side.
 	base := cache.Ctx
 	if base == nil {
 		base = c.Request().Context()
 	}
+	connID := utility.NewID()
+	userID := ""
+	var role *models.Role
+	if cache.Param != nil {
+		userID = cache.Param.UserID
+		role = cache.Param.Role
+	}
 	ctx := context.WithValue(base, "router", c)
+	ctx = resolver.WithRealtimeAuth(ctx, role, userID, connID)
 	resp := c.Response()
 	req := c.Request().WithContext(ctx)
-
 	srv.ServeHTTP(resp, req)
 	return nil
+}
+
+func (g *GraphCtrl) publicSubscriptionSchema(c echo.Context) (*graphql.Schema, error) {
+	cache, err := g.gqlServer.GetApplicationCache(c)
+	if err != nil {
+		return nil, err
+	}
+	return schemas.PublicSubscriptionSchema(g.gqlServer, cache)
 }
 
 func CaptureInternalServerError(err error, scopes map[string]interface{}) error {

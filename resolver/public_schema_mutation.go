@@ -577,6 +577,7 @@ func (s *GraphQLServer) MutationResolverFn(p graphql.ResolveParams) (resp interf
 			deltaUpdate = val
 		}
 
+		previous, _ := projectDriver.GetSingleProjectDocument(dbCtx, param)
 		_, err := s.updateAndConnectDocument(ctx, cache, param, hooks, payload, permission, connections, disconnects, deltaUpdate)
 		if err != nil {
 			return nil, err
@@ -587,7 +588,7 @@ func (s *GraphQLServer) MutationResolverFn(p graphql.ResolveParams) (resp interf
 			return nil, err
 		}
 
-		s.EmitModelChange(dbCtx, param.ProjectID, modelType.Name, models.ChangeEventUpdated, param.DocumentID, doc)
+		s.EmitModelChangeWithPrevious(dbCtx, param.ProjectID, modelType.Name, models.ChangeEventUpdated, param.DocumentID, doc, previous)
 		return doc, nil
 	case "delete":
 		fields := p.Args
@@ -609,7 +610,7 @@ func (s *GraphQLServer) MutationResolverFn(p graphql.ResolveParams) (resp interf
 			if err != nil {
 				return nil, err
 			}
-			s.EmitModelChange(dbCtx, param.ProjectID, modelType.Name, models.ChangeEventDeleted, param.DocumentID, nil)
+			s.EmitModelChangeWithPrevious(dbCtx, param.ProjectID, modelType.Name, models.ChangeEventDeleted, param.DocumentID, nil, doc)
 			documentToDelete++
 		}
 

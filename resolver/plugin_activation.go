@@ -78,6 +78,12 @@ func removeProjectPlugin(plugins []*models.SavedPluginDetails, id string) []*mod
 	return out
 }
 
+// ProjectPluginActivated reports whether a system-installed plugin is activated on this project.
+// The same install may be activated independently on many projects.
+func ProjectPluginActivated(project *models.Project, pluginID string) bool {
+	return isProjectPluginActivated(project, pluginID)
+}
+
 func isProjectPluginActivated(project *models.Project, pluginID string) bool {
 	if project == nil || pluginID == "" {
 		return false
@@ -172,6 +178,16 @@ func mergeYAMLAndProjectEnvVars(yamlVars, projectVars []*protobuff.EnvVariable) 
 	return out
 }
 
+func secretEnvKey(key string) bool {
+	upper := strings.ToUpper(key)
+	for _, part := range []string{"PASSWORD", "SECRET", "HASH", "TOKEN", "PRIVATE"} {
+		if strings.Contains(upper, part) {
+			return true
+		}
+	}
+	return false
+}
+
 func applyEnvVars(details *models.SavedPluginDetails, incoming []*protobuff.EnvVariable) {
 	if details.EnvVars == nil {
 		details.EnvVars = cloneEnvVars(incoming)
@@ -184,6 +200,10 @@ func applyEnvVars(details *models.SavedPluginDetails, incoming []*protobuff.EnvV
 		found := false
 		for _, existing := range details.EnvVars {
 			if existing != nil && existing.Key == next.Key {
+				if strings.TrimSpace(next.Value) == "" && secretEnvKey(existing.Key) && strings.TrimSpace(existing.Value) != "" {
+					found = true
+					break
+				}
 				existing.Value = next.Value
 				found = true
 				break
@@ -248,7 +268,29 @@ func (s *GraphQLServer) enforcePluginRESTActivation(c echo.Context, pluginID str
 	return nil
 }
 
+type paymentReconcileBypassKey struct{}
+
+// WithPaymentReconcileBypass lets an already-created payment verify after the plugin
+// is deactivated for new checkouts. New checkout must not set this.
+func WithPaymentReconcileBypass(ctx context.Context) context.Context {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	return context.WithValue(ctx, paymentReconcileBypassKey{}, true)
+}
+
+func paymentReconcileBypass(ctx context.Context) bool {
+	if ctx == nil {
+		return false
+	}
+	ok, _ := ctx.Value(paymentReconcileBypassKey{}).(bool)
+	return ok
+}
+
 func (s *GraphQLServer) enforcePluginGraphQLActivation(ctx context.Context, pluginID string) error {
+	if paymentReconcileBypass(ctx) {
+		return nil
+	}
 	if !pluginRequiresProjectActivation(pluginID) {
 		return nil
 	}

@@ -98,6 +98,13 @@ type Config struct {
 	RealtimeNatsJetStream bool `env:"REALTIME_NATS_JETSTREAM" env-default:"true"`
 	// RealtimeNatsStoreDir is the JetStream file store directory for embedded NATS.
 	RealtimeNatsStoreDir string `env:"REALTIME_NATS_STORE_DIR" env-default:""`
+	// RealtimeMaxSubscriptionsPerConnection caps multiplexed operations on one socket.
+	RealtimeMaxSubscriptionsPerConnection int `env:"REALTIME_MAX_SUBS_PER_CONNECTION" env-default:"32"`
+	// RealtimeMaxSubscriptionsPerProject caps live subscriptions for one project.
+	RealtimeMaxSubscriptionsPerProject int `env:"REALTIME_MAX_SUBS_PER_PROJECT" env-default:"2000"`
+	// RealtimeAllowedOrigins is a comma-separated browser Origin allowlist.
+	// Empty allows every origin so local console and mobile clients keep working.
+	RealtimeAllowedOrigins string `env:"REALTIME_ALLOWED_ORIGINS" env-default:""`
 
 	// Token Encryption Credential
 	PublicKeyPath  string `env:"PUBLIC_KEY_PATH" env-default:"keys/public.key"`
@@ -290,6 +297,12 @@ type Config struct {
 	// neutral base topic and applies this hook identically on both the emit and
 	// subscribe sides so they match. Open-core does not encode tenant semantics.
 	RealtimeTopicHook func(ctx context.Context, baseTopic string) string `env:"-"`
+
+	// RealtimeBroadcastAuthHook lets the host accept or reject a broadcast
+	// channel. op is "publish" or "subscribe". Nil allows any channel that
+	// already passed open-core length and charset checks. Open-core does not
+	// encode tenant policy here.
+	RealtimeBroadcastAuthHook func(ctx context.Context, channel, op string) error `env:"-"`
 
 	// NamingV2ArangoPerModelCollections is used when applying Arango naming V2 physical migration:
 	// true means one document collection per model layout; false uses a single p_{projectId} bucket.

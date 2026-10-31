@@ -675,6 +675,23 @@ func (s *GraphQLExecutor) SolvePublicMutation(ctx context.Context, resolverName 
 	}
 }
 
+// repeatedFieldRows reads a stored repeated field. Drivers do not all decode
+// the JSON array as []interface{}: SQLite uses []map[string]interface{}.
+func repeatedFieldRows(v interface{}) ([]interface{}, bool) {
+	switch rows := v.(type) {
+	case []interface{}:
+		return rows, true
+	case []map[string]interface{}:
+		out := make([]interface{}, len(rows))
+		for i := range rows {
+			out[i] = rows[i]
+		}
+		return out, true
+	default:
+		return nil, false
+	}
+}
+
 func (s *GraphQLExecutor) HandlePayloadFormatting(ctx context.Context, param *models.CommonSystemParams, local string,
 	fields []*models.FieldInfo,
 	inputPayload map[string]interface{},
@@ -875,9 +892,16 @@ func (s *GraphQLExecutor) HandlePayloadFormatting(ctx context.Context, param *mo
 						}
 
 						if _currentID != "" {
-							if oldVals, ok := dbPayload[f.Identifier].([]interface{}); ok && len(oldVals) > 0 {
+							// SQLite decodes a repeated field as []map[string]interface{}.
+							// A JSON payload arrives as []interface{}. Both are the stored rows.
+							oldVals, ok := repeatedFieldRows(dbPayload[f.Identifier])
+							if ok && len(oldVals) > 0 {
+								dbPayload[f.Identifier] = oldVals
 								for j, _ov := range oldVals {
-									ov := _ov.(map[string]interface{})
+									ov, isMap := _ov.(map[string]interface{})
+									if !isMap {
+										continue
+									}
 									if _oldID, ok := ov["_id"].(string); ok && _oldID == _currentID {
 										repeatedUserInput, err = s.HandlePayloadFormatting(ctx, param, local, f.SubFieldInfo, repeatedUserInput, ov, deltaUpdate)
 										if err != nil {

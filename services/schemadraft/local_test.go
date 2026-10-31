@@ -140,3 +140,57 @@ func TestSynchronousPublishClearsDraft(t *testing.T) {
 		t.Fatalf("file still has ops %+v", draft.Ops)
 	}
 }
+
+func TestComputeDiff_MissingBackwardIsNotMigration(t *testing.T) {
+	active := &models.ProjectSchema{Models: []*models.ModelType{
+		{Name: "active_journey", Connections: []*models.ConnectionType{
+			{Model: "users", Relation: "has_one", Type: "forward", KnownAs: "owner"},
+		}},
+		{Name: "users"},
+	}}
+	draft := &models.ProjectSchema{Models: []*models.ModelType{
+		{Name: "active_journey", Connections: []*models.ConnectionType{
+			{Model: "users", Relation: "has_one", Type: "forward", KnownAs: "owner"},
+		}},
+		{Name: "users", Connections: []*models.ConnectionType{
+			{Model: "active_journey", Relation: "has_many", Type: "backward", KnownAs: "owner"},
+		}},
+	}}
+	diff := ComputeDiff(active, draft)
+	for _, mc := range diff.ModelChanges {
+		if len(mc.ConnectionsModified) != 0 {
+			t.Fatalf("missing reverse must not migrate, got %+v", mc.ConnectionsModified)
+		}
+	}
+	var added bool
+	for _, mc := range diff.ModelChanges {
+		if mc.ModelName == "users" && len(mc.ConnectionsAdded) == 1 {
+			added = true
+		}
+	}
+	if !added {
+		t.Fatalf("expected the backward row as an added connection, diff %+v", diff.ModelChanges)
+	}
+
+	changed := &models.ProjectSchema{Models: []*models.ModelType{
+		{Name: "active_journey", Connections: []*models.ConnectionType{
+			{Model: "users", Relation: "has_one", Type: "forward", KnownAs: "owner"},
+		}},
+		{Name: "users", Connections: []*models.ConnectionType{
+			{Model: "active_journey", Relation: "has_one", Type: "backward", KnownAs: "owner"},
+		}},
+	}}
+	migrated := ComputeDiff(draft, changed)
+	var found bool
+	for _, mc := range migrated.ModelChanges {
+		if mc.ModelName == "active_journey" && len(mc.ConnectionsModified) == 1 {
+			ch := mc.ConnectionsModified[0]
+			if ch.BeforeRelation == "has_one" && ch.PeerBeforeRelation == "has_many" && ch.PeerAfterRelation == "has_one" {
+				found = true
+			}
+		}
+	}
+	if !found {
+		t.Fatalf("real cardinality change must still migrate, diff %+v", migrated.ModelChanges)
+	}
+}
