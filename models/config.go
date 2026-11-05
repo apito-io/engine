@@ -36,8 +36,10 @@ type Config struct {
 	PluginRegistrySigURL string `env:"PLUGIN_REGISTRY_SIG_URL" env-default:""`
 	// PluginRegistryPublicKey is hex-encoded Ed25519 public key. Empty uses the embedded Apito key.
 	PluginRegistryPublicKey string `env:"PLUGIN_REGISTRY_PUBLIC_KEY" env-default:""`
-	// PluginAllowLocalUpload is the operator escape hatch for multipart POST /system/plugin.
-	// Production should leave this false when the remote registry is enabled.
+	// PluginAllowLocalUpload allows multipart POST /system/plugin.
+	// Unset follows the install: hosted Apito (APITO_CLOUD=true) stays false so a
+	// CLI user cannot push a system plugin. A self-hosted or enterprise engine
+	// stays true unless the operator sets this false.
 	PluginAllowLocalUpload bool `env:"PLUGIN_ALLOW_LOCAL_UPLOAD" env-default:"false"`
 	// EngineVersion is the semver used to match catalog engine_semver ranges.
 	EngineVersion string `env:"ENGINE_VERSION" env-default:"2.4.49"`

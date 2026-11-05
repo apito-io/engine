@@ -118,7 +118,7 @@ func (pc *PluginV2Controller) CreateOrUpdatePlugin(c echo.Context) error {
 		return c.JSON(http.StatusForbidden, pluginErrorResponse{
 			Success: false,
 			Code:    "LOCAL_UPLOAD_DISABLED",
-			Message: "multipart plugin upload is disabled; use POST /system/plugin/install from the signed registry",
+			Message: "Unsigned plugin upload is disabled on this server. Hosted Apito keeps PLUGIN_ALLOW_LOCAL_UPLOAD off so a CLI user cannot push a system plugin. A self-hosted or enterprise operator can set it true on their own engine.",
 		})
 	}
 	// Parse the multipart form
