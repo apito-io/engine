@@ -381,13 +381,15 @@ func normalizeCLIPreset(raw string, caps []string) (string, []string, error) {
 		return "cli_login", nil, nil
 	case "cli_sync":
 		return "cli_sync", nil, nil
+	case "cli_plugin":
+		return "cli_plugin", nil, nil
 	case "custom":
 		if len(caps) == 0 {
 			return "", nil, errors.New("custom preset requires capabilities")
 		}
 		return "custom", append([]string(nil), caps...), nil
 	default:
-		return "", nil, errors.New("choose CLI login, CLI sync, or Custom")
+		return "", nil, errors.New("choose CLI login, CLI sync, CLI plugin, or Custom")
 	}
 }
 

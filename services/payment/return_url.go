@@ -47,6 +47,16 @@ func requestOrigin(r *http.Request) string {
 
 var paymentReturnScheme = regexp.MustCompile(`^[a-z][a-z0-9+.-]{0,31}$`)
 
+func localHTTPReturnHost(host string) bool {
+	host = strings.ToLower(strings.TrimSpace(host))
+	switch host {
+	case "localhost", "127.0.0.1":
+		return true
+	default:
+		return strings.HasSuffix(host, ".localhost")
+	}
+}
+
 // mergeReturnMeta stores the app return link on the ledger. An empty URL
 // leaves metadata unchanged. The plugin never receives this object.
 func mergeReturnMeta(metadata, platform, returnURL string) (string, error) {
@@ -59,7 +69,7 @@ func mergeReturnMeta(metadata, platform, returnURL string) (string, error) {
 		return "", fmt.Errorf("client_platform must be android, ios, or web")
 	}
 	if !validPaymentReturnURL(returnURL) {
-		return "", fmt.Errorf("payment return url must be https or an app scheme")
+		return "", fmt.Errorf("payment return url must be https, a local http host, or an app scheme")
 	}
 	payload := map[string]interface{}{}
 	if strings.TrimSpace(metadata) != "" {
@@ -89,7 +99,9 @@ func validPaymentReturnURL(raw string) bool {
 	switch scheme {
 	case "https":
 		return parsed.Host != "" && parsed.Opaque == ""
-	case "http", "javascript", "data", "file", "vbscript", "about", "blob":
+	case "http":
+		return localHTTPReturnHost(parsed.Hostname()) && parsed.Opaque == ""
+	case "javascript", "data", "file", "vbscript", "about", "blob":
 		return false
 	default:
 		if !paymentReturnScheme.MatchString(scheme) {

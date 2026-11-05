@@ -141,6 +141,9 @@ func TestCheckoutThenVerifyIsIdempotent(t *testing.T) {
 				if args["server_amount"] != "1000.00" {
 					t.Fatalf("amount leaked or missing: %#v", args["server_amount"])
 				}
+				if args["value_a"] != "tenant-1" || args["product_name"] != "ultra" {
+					t.Fatalf("tenant label: %#v", args)
+				}
 				return map[string]interface{}{"redirect_url": "https://pay.example/redirect", "provider_session_id": "init-uuid", "amount": "1000.00", "currency": "BDT"}, nil
 			}
 			return map[string]interface{}{
@@ -150,8 +153,8 @@ func TestCheckoutThenVerifyIsIdempotent(t *testing.T) {
 		},
 	}
 	tx, err := svc.BeginCheckout(context.Background(), CheckoutInput{
-		ProjectID: "p1", UserID: "u1", Provider: "hosted", ProductKey: "pro",
-		ExpectedAmount: "1000.00", Currency: "BDT",
+		ProjectID: "p1", UserID: "u1", Provider: "hosted", ProductKey: "ultra",
+		ValueA: "tenant-1", ExpectedAmount: "1000.00", Currency: "BDT",
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -285,6 +288,51 @@ func TestReturnURLStaysOffThePlugin(t *testing.T) {
 	})
 	if err == nil || bad != nil {
 		t.Fatalf("http url must be rejected: %#v %v", bad, err)
+	}
+}
+
+func TestLocalHTTPReturnURL(t *testing.T) {
+	good := []string{
+		"http://localhost/plans/return",
+		"http://localhost:3057/plans/return",
+		"http://127.0.0.1:3057/plans/return",
+		"http://demo.localhost:3057/plans/return",
+	}
+	for _, raw := range good {
+		if !validPaymentReturnURL(raw) {
+			t.Fatalf("want allow %s", raw)
+		}
+	}
+	bad := []string{
+		"http://suchok.example/payment/done",
+		"http://10.0.3.2:3057/plans/return",
+		"http://evil.localhost.example/plans/return",
+	}
+	for _, raw := range bad {
+		if validPaymentReturnURL(raw) {
+			t.Fatalf("want reject %s", raw)
+		}
+	}
+	tx := &models.PaymentTransaction{
+		ID:           "tx-local",
+		Status:       StatusSucceeded,
+		MetadataJSON: `{"client_platform":"web","return_url":"http://demo.localhost:3057/plans/return"}`,
+	}
+	page := RenderResultPage(tx)
+	if !strings.Contains(page, "Return to app") || !strings.Contains(page, "http://demo.localhost:3057/plans/return") {
+		t.Fatalf("page %s", page)
+	}
+	if !strings.Contains(page, "location.assign") || !strings.Contains(page, "transaction_id=tx-local") {
+		t.Fatalf("redirect missing: %s", page)
+	}
+	app := &models.PaymentTransaction{
+		ID:           "tx-app",
+		Status:       StatusSucceeded,
+		MetadataJSON: `{"return_url":"kisti://payment/return"}`,
+	}
+	appPage := RenderResultPage(app)
+	if strings.Contains(appPage, "location.assign") {
+		t.Fatalf("app scheme must stay a tap: %s", appPage)
 	}
 }
 

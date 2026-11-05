@@ -81,6 +81,23 @@ func TestResolvePreset_CLILogin(t *testing.T) {
 	require.False(t, HasCapability(caps, CapSyncWrite))
 	require.False(t, HasCapability(caps, CapFunctionsDeploy))
 	require.False(t, HasCapability(caps, CapSettingsRead))
+	require.False(t, HasCapability(caps, CapPluginsDeploy))
+	require.False(t, HasCapability(caps, CapPluginsRead))
+}
+
+func TestResolvePreset_CLIPlugin(t *testing.T) {
+	caps, err := ResolvePreset("cli_plugin", nil)
+	require.NoError(t, err)
+	require.True(t, HasCapability(caps, CapPluginsRead))
+	require.True(t, HasCapability(caps, CapPluginsDeploy))
+	require.False(t, HasCapability(caps, CapSchemaWrite))
+	require.False(t, HasCapability(caps, CapDataRead))
+	for _, preset := range Presets() {
+		if preset.ID == "cli_plugin" {
+			require.True(t, preset.Danger)
+			require.Equal(t, 30, preset.DefaultDays)
+		}
+	}
 }
 
 func TestValidateCapabilities_AuthCaps(t *testing.T) {

@@ -69,6 +69,8 @@ type CheckoutInput struct {
 	Currency       string
 	IdempotencyKey string
 	MetadataJSON   string
+	// ValueA is copied onto the provider request as a label. The host does not unlock from it.
+	ValueA string
 	// ClientPlatform is android, ios, or web. ReturnURL is copied from the
 	// project client runtime by the caller. Neither value is sent to the plugin.
 	ClientPlatform string
@@ -154,6 +156,7 @@ func (s *Service) BeginCheckout(ctx context.Context, in CheckoutInput) (*models.
 		CancelURL:       callback("cancel"),
 		ProjectID:       projectID,
 		CustomerRef:     tx.CustomerRef,
+		ValueA:          strings.TrimSpace(in.ValueA),
 	}.Args(), false)
 	if err != nil {
 		return s.fail(ctx, tx, err)

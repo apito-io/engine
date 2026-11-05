@@ -53,6 +53,7 @@ type CheckoutRequest struct {
 	CancelURL       string
 	ProjectID       string
 	CustomerRef     string
+	ValueA          string
 }
 
 func (r CheckoutRequest) Args() map[string]interface{} {
@@ -71,6 +72,8 @@ func (r CheckoutRequest) Args() map[string]interface{} {
 		"merchant_transaction_id": r.ClientReference,
 		"total_amount":            r.ServerAmount,
 		"currency":                r.ServerCurrency,
+		"value_a":                 r.ValueA,
+		"product_name":            r.ProductKey,
 	}
 }
 

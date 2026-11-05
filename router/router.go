@@ -283,6 +283,7 @@ func InitRouter(cfg *models.Config) (*echo.Echo, error) {
 			pluginRoutes.GET("/manifest", pluginV2Ctrl.GetPluginManifest)
 			pluginRoutes.GET("/:id/ui.js", pluginV2Ctrl.GetPluginUI)
 			pluginRoutes.GET("", pluginV2Ctrl.ListPlugins)
+			pluginRoutes.GET("/:id/archive", pluginV2Ctrl.DownloadPluginArchive)
 			pluginRoutes.GET("/:id", pluginV2Ctrl.GetPluginStatus)
 
 			pluginRoutes.GET("/platform", pluginV2Ctrl.GetPlatformInfo)
@@ -307,6 +308,7 @@ func InitRouter(cfg *models.Config) (*echo.Echo, error) {
 					"create_update": "POST /system/plugin",
 					"list":          "GET /system/plugin",
 					"status":        "GET /system/plugin/:id",
+					"archive":       "GET /system/plugin/:id/archive",
 					"delete":        "DELETE /system/plugin/:id",
 					"restart":       "POST /system/plugin/:id/restart",
 					"stop":          "POST /system/plugin/:id/stop",

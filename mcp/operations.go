@@ -124,7 +124,7 @@ var operations = map[string]string{
 	"list_tenants":                      `query { getTenants { tenants { id name } } }`,
 	"search_tenants":                    `query($project_id: String!, $limit: Int, $offset: Int, $q: String, $status: String) { searchTenants(project_id: $project_id, limit: $limit, offset: $offset, q: $q, status: $status) { count } }`,
 	"create_tenant":                     `mutation($name: String!, $data: String, $domain: String, $plan_tier: String) { createTenant(name: $name, data: $data, domain: $domain, plan_tier: $plan_tier) { id name } }`,
-	"update_tenant":                     `mutation($tenant_id: String!, $name: String, $data: String, $domain: String, $plan_tier: String) { updateTenant(tenant_id: $tenant_id, name: $name, data: $data, domain: $domain, plan_tier: $plan_tier) { id } }`,
+	"update_tenant":                     `mutation($tenant_id: String!, $name: String, $data: String, $domain: String, $plan_tier: String, $subscription_discount: Float = null) { updateTenant(tenant_id: $tenant_id, name: $name, data: $data, domain: $domain, plan_tier: $plan_tier, subscription_discount: $subscription_discount) { id subscription_discount } }`,
 	"delete_tenant":                     `mutation($tenant_id: String!) { deleteTenant(tenant_id: $tenant_id) }`,
 	"restore_tenant":                    `mutation($tenant_id: String!) { restoreTenant(tenant_id: $tenant_id) }`,
 	"generate_tenant_token":             `mutation($tenant_id: String!, $duration: String!, $role: String) { generateTenantToken(tenant_id: $tenant_id, duration: $duration, role: $role) { tenant_id role } }`,

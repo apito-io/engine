@@ -1,6 +1,7 @@
 package payment
 
 import (
+	"encoding/json"
 	"html/template"
 	"net/url"
 	"strconv"
@@ -48,6 +49,9 @@ document.querySelector("a[data-intent]").addEventListener("click",function(e){
   window.location.href=app;
   setTimeout(function(){window.location.href=intent;},500);
 });
+</script>{{end}}
+{{if .WebReturn}}<script>
+setTimeout(function(){ window.location.assign({{.ReturnJSON}}); }, 1200);
 </script>{{end}}
 </body>
 </html>
@@ -127,21 +131,44 @@ func RenderResultPage(tx *models.PaymentTransaction) string {
 		mark = markCross
 	}
 	link := ReturnLink(tx)
+	webReturn, returnJSON := webReturnAssign(link)
 	var buf strings.Builder
 	_ = resultPageTmpl.Execute(&buf, struct {
-		Title     string
-		Tone      string
-		Mark      template.HTML
-		ReturnURL template.URL
-		IntentURL template.URL
+		Title      string
+		Tone       string
+		Mark       template.HTML
+		ReturnURL  template.URL
+		IntentURL  template.URL
+		WebReturn  bool
+		ReturnJSON template.JS
 	}{
-		Title:     title,
-		Tone:      tone,
-		Mark:      mark,
-		ReturnURL: template.URL(link),
-		IntentURL: template.URL(androidIntentLink(link)),
+		Title:      title,
+		Tone:       tone,
+		Mark:       mark,
+		ReturnURL:  template.URL(link),
+		IntentURL:  template.URL(androidIntentLink(link)),
+		WebReturn:  webReturn,
+		ReturnJSON: returnJSON,
 	})
 	return buf.String()
+}
+
+// webReturnAssign is the JS literal for an http(s) shop return.
+// App schemes stay a tap. The card stays up for a moment, then the browser leaves.
+func webReturnAssign(link string) (bool, template.JS) {
+	parsed, err := url.Parse(link)
+	if err != nil || link == "" {
+		return false, ""
+	}
+	scheme := strings.ToLower(parsed.Scheme)
+	if scheme != "http" && scheme != "https" {
+		return false, ""
+	}
+	raw, err := json.Marshal(link)
+	if err != nil {
+		return false, ""
+	}
+	return true, template.JS(raw)
 }
 
 // androidIntentLink is the Android browser form of an app scheme.

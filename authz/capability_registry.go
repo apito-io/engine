@@ -168,6 +168,16 @@ var presets = []Preset{
 		},
 	},
 	{
+		ID:          "cli_plugin",
+		Label:       "CLI plugin",
+		Description: "List, install, and remove system plugins. Cannot read tenant documents or change schema.",
+		Danger:      true,
+		DefaultDays: 30,
+		Capabilities: []string{
+			CapPluginsRead, CapPluginsDeploy,
+		},
+	},
+	{
 		ID:          "function_deploy",
 		Label:       "Function deploy",
 		Description: "Read/write/test/deploy edge functions.",

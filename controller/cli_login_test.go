@@ -253,6 +253,11 @@ func TestDeviceLoginPresetChoices(t *testing.T) {
 	require.Equal(t, "cli_sync", syncPreset.Preset)
 	require.Empty(t, syncPreset.Capabilities)
 
+	pluginPreset, err := deviceLoginMintRequest(deviceAudienceCLI, "ABCD", cliLoginScope{Preset: "cli_plugin"})
+	require.NoError(t, err)
+	require.Equal(t, "cli_plugin", pluginPreset.Preset)
+	require.Empty(t, pluginPreset.Capabilities)
+
 	_, err = deviceLoginMintRequest(deviceAudienceCLI, "ABCD", cliLoginScope{Preset: "mcp_advanced"})
 	require.Error(t, err)
 }
