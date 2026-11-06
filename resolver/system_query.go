@@ -1001,24 +1001,11 @@ func (s *GraphQLServer) ProjectSpecificInstalledPlugins(p graphql.ResolveParams)
 		return nil, fmt.Errorf("failed to load HashiCorp plugin registry: %w", err)
 	}
 
-	// Convert map to slice
-	var _plugins []*protobuff.PluginDetails
-	for _, plugin := range _hashiCorpPlugins {
-		for _, projectPlugin := range project.Plugins {
-			if projectPlugin.ID == plugin.Id {
-				cloned := *plugin
-				cloned.Type = protobuff.PluginType_PLUGIN_TYPE_SYSTEM
-				cloned.LoadStatus = protobuff.PluginLoadStatus_PLUGIN_LOAD_STATUS_INSTALLED
-				cloned.Enable = projectPlugin.Enable
-				cloned.ActivateStatus = projectPlugin.ActivateStatus
-				cloned.EnvVars = mergeYAMLAndProjectEnvVars(plugin.EnvVars, projectPlugin.EnvVars)
-				_plugins = append(_plugins, &cloned)
-				break
-			}
-		}
+	var saved []*models.SavedPluginDetails
+	if project != nil {
+		saved = project.Plugins
 	}
-
-	return _plugins, nil
+	return projectInstalledPluginViews(_hashiCorpPlugins, saved), nil
 }
 
 // deprecated

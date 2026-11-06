@@ -220,6 +220,50 @@ func TestPluginExecuteContextAddsPluginID(t *testing.T) {
 	}
 }
 
+func TestRegistryPluginProjectRowStartsDeactivated(t *testing.T) {
+	row := registryPluginProjectRow("p1", &protobuff.PluginDetails{
+		Id:     "hc-eps-payment-plugin",
+		Enable: true,
+	})
+	if row.Enable || row.ActivateStatus != protobuff.PluginActivateStatus_PLUGIN_ACTIVATE_STATUS_DEACTIVATED {
+		t.Fatalf("catalog enable must not turn the project on: %+v", row)
+	}
+	project := &models.Project{ID: "p1"}
+	got, err := applyPluginUpsert(project, row, pluginUpsertInput{ID: row.ID})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.Enable || isSavedPluginActivated(got) {
+		t.Fatalf("first attach must stay off: %+v", got)
+	}
+}
+
+func TestProjectInstalledPluginViewsIncludesUnattachedAsOff(t *testing.T) {
+	registry := map[string]*protobuff.PluginDetails{
+		"hc-eps-payment-plugin": {Id: "hc-eps-payment-plugin", Enable: true, Title: "EPS"},
+		"hc-other-plugin":       {Id: "hc-other-plugin", Enable: true},
+	}
+	on := protobuff.PluginActivateStatus_PLUGIN_ACTIVATE_STATUS_ACTIVATED
+	views := projectInstalledPluginViews(registry, []*models.SavedPluginDetails{
+		{ID: "hc-other-plugin", Enable: true, ActivateStatus: on},
+	})
+	if len(views) != 2 {
+		t.Fatalf("len=%d", len(views))
+	}
+	byID := map[string]*protobuff.PluginDetails{}
+	for _, view := range views {
+		byID[view.Id] = view
+	}
+	eps := byID["hc-eps-payment-plugin"]
+	if eps == nil || eps.Enable || eps.ActivateStatus != protobuff.PluginActivateStatus_PLUGIN_ACTIVATE_STATUS_DEACTIVATED {
+		t.Fatalf("unattached eps %+v", eps)
+	}
+	other := byID["hc-other-plugin"]
+	if other == nil || !other.Enable || other.ActivateStatus != on {
+		t.Fatalf("attached plugin %+v", other)
+	}
+}
+
 func TestEnforcePluginGraphQLActivation(t *testing.T) {
 	pluginService.SetPluginCapabilities("hc-sys-gql", []string{pluginService.CapSystemGraphQL})
 	pluginService.SetPluginCapabilities("hc-proj-gql", []string{pluginService.CapProjectGraphQL})

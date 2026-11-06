@@ -482,9 +482,8 @@ func (pc *PluginV2Controller) GetPluginManifest(c echo.Context) error {
 			entry.BlockedReason = "compiled Console UI requires an Apito-signed official bundle"
 			entry.BundleURL = ""
 		}
-		if !entry.Activated && pluginService.HasCapability(pluginID, pluginService.CapProjectREST) {
-			entry.BlockedReason = "plugin is not activated for this project"
-		}
+		// A system install is visible on every project. Activated stays false
+		// until that project turns the plugin on. Payment and REST stay gated.
 		plugins = append(plugins, entry)
 	}
 

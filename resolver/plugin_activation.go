@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"net/http"
+	"sort"
 	"strings"
 
 	"github.com/apito-io/engine/models"
@@ -18,6 +19,51 @@ type pluginUpsertInput struct {
 	Enable         *bool
 	ActivateStatus *protobuff.PluginActivateStatus
 	EnvVars        []*protobuff.EnvVariable
+}
+
+// registryPluginProjectRow is the first project copy of a system plugin.
+// config.yml enable is the catalog default and must not turn the project on.
+func registryPluginProjectRow(projectID string, plugin *protobuff.PluginDetails) *models.SavedPluginDetails {
+	row := &models.SavedPluginDetails{
+		ProjectID:      projectID,
+		Enable:         false,
+		ActivateStatus: protobuff.PluginActivateStatus_PLUGIN_ACTIVATE_STATUS_DEACTIVATED,
+	}
+	if plugin == nil {
+		return row
+	}
+	row.ID = plugin.Id
+	row.EnvVars = cloneEnvVars(plugin.EnvVars)
+	row.LoadStatus = plugin.LoadStatus
+	return row
+}
+
+// projectInstalledPluginViews lists every system plugin for a project.
+// A missing project row is installed and deactivated.
+func projectInstalledPluginViews(registry map[string]*protobuff.PluginDetails, saved []*models.SavedPluginDetails) []*protobuff.PluginDetails {
+	out := make([]*protobuff.PluginDetails, 0, len(registry))
+	for _, plugin := range registry {
+		if plugin == nil || plugin.Id == "" {
+			continue
+		}
+		cloned := *plugin
+		cloned.Type = protobuff.PluginType_PLUGIN_TYPE_SYSTEM
+		cloned.LoadStatus = protobuff.PluginLoadStatus_PLUGIN_LOAD_STATUS_INSTALLED
+		cloned.Enable = false
+		cloned.ActivateStatus = protobuff.PluginActivateStatus_PLUGIN_ACTIVATE_STATUS_DEACTIVATED
+		for _, projectPlugin := range saved {
+			if projectPlugin == nil || projectPlugin.ID != plugin.Id {
+				continue
+			}
+			cloned.Enable = projectPlugin.Enable
+			cloned.ActivateStatus = projectPlugin.ActivateStatus
+			cloned.EnvVars = mergeYAMLAndProjectEnvVars(plugin.EnvVars, projectPlugin.EnvVars)
+			break
+		}
+		out = append(out, &cloned)
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].Id < out[j].Id })
+	return out
 }
 
 // applyPluginUpsert mutates project.Plugins: honor enable, set activate_status

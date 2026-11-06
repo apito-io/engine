@@ -44,3 +44,33 @@ func TestBuildSystemParamPreservesProjectUserFlag(t *testing.T) {
 		t.Fatalf("passenger project user should read own user_profile: %v", err)
 	}
 }
+
+func TestBuildSystemParamOwnerWithoutRoleCatalogIsAdmin(t *testing.T) {
+	e := echo.New()
+	req := httptest.NewRequest(http.MethodPost, "/secured/graphql", nil)
+	c := e.NewContext(req, httptest.NewRecorder())
+	c.Set("role", "owner")
+	c.Set("user", "user_1")
+	c.Set("project", "apito_website")
+
+	s := &GraphQLServer{Cfg: &models.Config{}}
+	param, err := s.BuildSystemParam(c, &models.Project{ID: "apito_website"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if param.Role.ID != "owner" || !param.Role.IsAdmin {
+		t.Fatalf("owner %+v", param.Role)
+	}
+	if err := requireProjectAdmin(&models.ApplicationCache{Param: param}); err != nil {
+		t.Fatal(err)
+	}
+
+	c.Set("is_project_user", true)
+	param, err = s.BuildSystemParam(c, &models.Project{ID: "apito_website"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := requireProjectAdmin(&models.ApplicationCache{Param: param}); err == nil {
+		t.Fatal("app-user token must stay rejected")
+	}
+}

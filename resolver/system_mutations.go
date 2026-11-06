@@ -1003,14 +1003,7 @@ func (s *GraphQLServer) UpsertPluginResolverFn(p graphql.ResolveParams) (interfa
 			return nil, fmt.Errorf("failed to load HashiCorp plugin registry: %w", err)
 		}
 		if plugin, exists := _hashiCorpPlugins[id]; exists {
-			catalog = &models.SavedPluginDetails{
-				ProjectID:      project.ID,
-				ID:             id,
-				EnvVars:        cloneEnvVars(plugin.EnvVars),
-				ActivateStatus: plugin.ActivateStatus,
-				LoadStatus:     plugin.LoadStatus,
-				Enable:         plugin.Enable,
-			}
+			catalog = registryPluginProjectRow(project.ID, plugin)
 		}
 	}
 
@@ -1021,7 +1014,7 @@ func (s *GraphQLServer) UpsertPluginResolverFn(p graphql.ResolveParams) (interfa
 				return nil, err
 			}
 			if ok {
-				catalog = &models.SavedPluginDetails{ProjectID: project.ID, ID: id, Enable: true}
+				catalog = registryPluginProjectRow(project.ID, &protobuff.PluginDetails{Id: id})
 			}
 		}
 	}

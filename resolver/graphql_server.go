@@ -934,17 +934,23 @@ func (s *GraphQLServer) BuildSystemParam(i echo.Context, project *models.Project
 			param.Role.SystemGenerated = true
 			param.Role.IsAdmin = false
 		} else if param.Role.ID == "owner" {
-			// SQL CreateProject historically wrote user_projects.role = "owner" while project.roles only
-			// defines "admin" (Arango/Mongo use "admin"). Treat owner like admin when that template exists.
-			if val, ok := project.Roles["admin"]; ok && val != nil {
-				merged := *val
-				if merged.ID == "" {
-					merged.ID = "owner"
+			// SQL CreateProject writes user_projects.role = "owner". The role
+			// catalog, when present, calls that same person "admin". An empty
+			// roles document must not demote the owner.
+			if project != nil {
+				if val, ok := project.Roles["admin"]; ok && val != nil {
+					merged := *val
+					if merged.ID == "" {
+						merged.ID = "owner"
+					}
+					merged.IsAdmin = true
+					merged.IsProjectUser = param.Role.IsProjectUser
+					merged.ReadOnlyProject = param.Role.ReadOnlyProject
+					param.Role = &merged
+				} else {
+					param.Role.IsAdmin = true
+					param.Role.SystemGenerated = true
 				}
-				param.Role = &merged
-			} else {
-				param.Role.IsAdmin = false
-				param.Role.SystemGenerated = false
 			}
 		} else {
 			// Project end-user roles (e.g. "none", custom app roles from loginUser tokens).
