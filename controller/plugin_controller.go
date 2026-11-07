@@ -168,6 +168,9 @@ func (pc *PluginV2Controller) CreateOrUpdatePlugin(c echo.Context) error {
 			Error:   err.Error(),
 		})
 	}
+	if err := pc.stopPlugin(req.ID); err != nil {
+		fmt.Printf("Warning: Failed to stop plugin %s before upload: %v\n", req.ID, err)
+	}
 
 	// Handle file uploads
 	for _, fileHeader := range pluginFiles {
@@ -645,24 +648,29 @@ func (pc *PluginV2Controller) extractTarGz(file io.Reader, destDir string) error
 				return err
 			}
 		case tar.TypeReg:
-			// Create directory if it doesn't exist
 			if err := os.MkdirAll(filepath.Dir(cleanPath), 0755); err != nil {
 				return err
 			}
-
-			outFile, err := os.Create(cleanPath)
+			tmp, err := os.CreateTemp(filepath.Dir(cleanPath), ".upload-*")
 			if err != nil {
 				return err
 			}
-
-			if _, err := io.Copy(outFile, tr); err != nil {
-				outFile.Close()
+			tmpName := tmp.Name()
+			if _, err := io.Copy(tmp, tr); err != nil {
+				tmp.Close()
+				os.Remove(tmpName)
 				return err
 			}
-			outFile.Close()
-
-			// Set file permissions
-			if err := os.Chmod(cleanPath, os.FileMode(header.Mode)); err != nil {
+			if err := tmp.Close(); err != nil {
+				os.Remove(tmpName)
+				return err
+			}
+			if err := os.Chmod(tmpName, os.FileMode(header.Mode)&0o777); err != nil {
+				os.Remove(tmpName)
+				return err
+			}
+			if err := os.Rename(tmpName, cleanPath); err != nil {
+				os.Remove(tmpName)
 				return err
 			}
 		}
