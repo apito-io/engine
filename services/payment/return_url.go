@@ -147,6 +147,18 @@ func validPaymentReturnURL(raw string) bool {
 	}
 }
 
+func httpsLogoURL(raw string) string {
+	raw = strings.TrimSpace(raw)
+	parsed, err := url.Parse(raw)
+	if err != nil || parsed.User != nil || parsed.Host == "" || parsed.Opaque != "" {
+		return ""
+	}
+	if strings.ToLower(parsed.Scheme) != "https" {
+		return ""
+	}
+	return raw
+}
+
 func metadataString(tx *models.PaymentTransaction, key string) string {
 	if tx == nil || strings.TrimSpace(tx.MetadataJSON) == "" {
 		return ""

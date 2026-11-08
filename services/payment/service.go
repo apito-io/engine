@@ -179,6 +179,17 @@ func ReviewArgs(tx *models.PaymentTransaction, notice string) map[string]interfa
 	}
 	view["item"] = item
 	view["status"] = tx.Status
+	for _, key := range []string{"software_name", "item_label", "item_detail", "account_name"} {
+		if value := metadataString(tx, key); value != "" {
+			view[key] = value
+		}
+	}
+	if logo := httpsLogoURL(metadataString(tx, "logo_url")); logo != "" {
+		view["logo_url"] = logo
+	}
+	if ref := strings.TrimSpace(tx.ClientReference); ref != "" {
+		view["reference"] = ref
+	}
 	if strings.TrimSpace(notice) == "" {
 		view["error"] = strings.TrimSpace(tx.ErrorMessage)
 	}

@@ -357,6 +357,12 @@ func TestPrepareCheckoutWaitsForProceed(t *testing.T) {
 				if args["return_url"] != nil || args["metadata_json"] != nil {
 					t.Fatalf("review args include the shop return: %#v", args)
 				}
+				if args["software_name"] != "Rosna" || args["item_label"] != "Pro" || args["logo_url"] != "https://cdn.example/rosna.png" {
+					t.Fatalf("review display %#v", args)
+				}
+				if _, ok := args["logo_url"].(string); ok && strings.Contains(fmt.Sprint(args["logo_url"]), "javascript:") {
+					t.Fatal(args["logo_url"])
+				}
 				return map[string]interface{}{"html": fmt.Sprintf("%v %v %v", args["amount"], args["item"], args["proceed_path"])}, nil
 			}
 			calls++
@@ -370,6 +376,7 @@ func TestPrepareCheckoutWaitsForProceed(t *testing.T) {
 		ProjectID: "p1", Provider: "reviewpay", ProductKey: "ultra",
 		ExpectedAmount: "500.00", Currency: "BDT",
 		ClientPlatform: "web", ReturnURL: "https://demo.rosna.menu/plans",
+		MetadataJSON:  `{"software_name":"Rosna","item_label":"Pro","logo_url":"https://cdn.example/rosna.png","logo_bad":"javascript:alert(1)"}`,
 		DeferProvider: true,
 	})
 	if err != nil {
