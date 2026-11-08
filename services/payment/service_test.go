@@ -336,6 +336,80 @@ func TestLocalHTTPReturnURL(t *testing.T) {
 	}
 }
 
+func TestPrepareCheckoutWaitsForProceed(t *testing.T) {
+	const pluginID = "hc-test-review"
+	t.Cleanup(func() { plugin.UnregisterPaymentProvider(pluginID) })
+	if err := plugin.RegisterPaymentProvider(pluginID, &plugin.PaymentProviderContribution{
+		ContractVersion: plugin.PaymentContractVersion,
+		ProviderID:      "reviewpay",
+		Label:           "Review",
+		Flows:           []string{"one_time"},
+		Operations:      plugin.PaymentOperations{Initialize: "init", Verify: "verify", Review: "review"},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	calls := 0
+	svc := &Service{
+		Store:        newMemStore(),
+		PublicAPIURL: "https://engine.udbhabon.com",
+		Exec: func(ctx context.Context, pluginID, operation string, args map[string]interface{}, reconcile bool) (map[string]interface{}, error) {
+			if operation == "review" {
+				if args["return_url"] != nil || args["metadata_json"] != nil {
+					t.Fatalf("review args include the shop return: %#v", args)
+				}
+				return map[string]interface{}{"html": fmt.Sprintf("%v %v %v", args["amount"], args["item"], args["proceed_path"])}, nil
+			}
+			calls++
+			if args["success_url"] == nil || args["return_url"] != nil {
+				t.Fatalf("plugin args %#v", args)
+			}
+			return map[string]interface{}{"redirect_url": "https://pg.example/pay", "amount": "500.00", "currency": "BDT"}, nil
+		},
+	}
+	tx, err := svc.BeginCheckout(context.Background(), CheckoutInput{
+		ProjectID: "p1", Provider: "reviewpay", ProductKey: "ultra",
+		ExpectedAmount: "500.00", Currency: "BDT",
+		ClientPlatform: "web", ReturnURL: "https://demo.rosna.menu/plans",
+		DeferProvider: true,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if calls != 0 || tx.Status != StatusCreated || RedirectURL(tx) != "" {
+		t.Fatalf("prepare called the provider: calls=%d status=%s redirect=%s", calls, tx.Status, RedirectURL(tx))
+	}
+	if metadataString(tx, "return_url") != "https://demo.rosna.menu/plans" {
+		t.Fatalf("return url %s", tx.MetadataJSON)
+	}
+	page, err := svc.RenderReview(context.Background(), "reviewpay", tx, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(page, "500.00") || !strings.Contains(page, "ultra") {
+		t.Fatalf("review page %s", page)
+	}
+	if !strings.Contains(page, "/payment/reviewpay/p1/"+tx.ID+"/proceed") {
+		t.Fatalf("proceed path missing: %s", page)
+	}
+	started, err := svc.Proceed(context.Background(), tx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if calls != 1 || started.Status != StatusPending || RedirectURL(started) != "https://pg.example/pay" {
+		t.Fatalf("proceed %#v calls=%d", started, calls)
+	}
+	again, err := svc.Proceed(context.Background(), started)
+	if err != nil || again.ID != started.ID || calls != 1 {
+		t.Fatalf("second proceed called the provider again: calls=%d err=%v", calls, err)
+	}
+	if got := ReviewURL("https://engine.udbhabon.com/", "eps", "proj", tx.ID); got != "https://engine.udbhabon.com/payment/eps/proj/"+tx.ID {
+		t.Fatal(got)
+	}
+	if ProviderBrowserURL("javascript:alert(1)") != "" {
+		t.Fatal("script redirect must be rejected")
+	}
+}
+
 func TestCallbackBaseUsesRequestHost(t *testing.T) {
 	req, err := http.NewRequest(http.MethodPost, "http://10.0.3.2:5050/secured/graphql", nil)
 	if err != nil {

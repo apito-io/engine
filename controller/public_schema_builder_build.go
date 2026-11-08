@@ -88,7 +88,13 @@ func expandModelsForPreConnectionMaps(project *models.Project, filteredModels []
 			queue = append(queue, n)
 		}
 	}
-	for i := 0; i < len(queue); i++ {
+	// Expand only 1-hop direct connection targets of filteredModels (not a full
+	// transitive BFS across the entire schema). attachConnectionFields and
+	// buildWhereRelationArgs only iterate over st.filteredModels and inspect their
+	// direct connections; deeper nested selections are already included in
+	// filteredModels by ExtractModelNames.
+	directRoots := len(queue)
+	for i := 0; i < directRoots; i++ {
 		name := queue[i]
 		m := byName[name]
 		if m == nil {
@@ -133,6 +139,19 @@ func expandModelsForPreConnectionMaps(project *models.Project, filteredModels []
 	return out
 }
 
+func localEnumFromMutationArgs(args map[string]graphql.FieldConfigArgument) *graphql.Enum {
+	for _, argMap := range args {
+		cfg := argMap["local"]
+		if cfg == nil || cfg.Type == nil {
+			continue
+		}
+		if enum, ok := cfg.Type.(*graphql.Enum); ok && enum.Name() == "LOCAL_TYPE_ENUM" {
+			return enum
+		}
+	}
+	return nil
+}
+
 func (st *publicSchemaBuildState) loadOrBuildPreConnectionMaps() error {
 	g := st.g
 	filteredModels := expandModelsForPreConnectionMaps(st.project, st.filteredModels)
@@ -152,6 +171,13 @@ func (st *publicSchemaBuildState) loadOrBuildPreConnectionMaps() error {
 			st.updateMutationFieldsArguments = pre.updateMutationFieldsArguments
 			st.connectionFields = pre.connectionFields
 			st.skipPre = true
+			// Cached mutation args already point at the enum instance from the
+			// miss that filled the cache. A new BuildLocalEnum() has the same
+			// name and a different pointer, and graphql.NewSchema rejects the
+			// schema ("multiple types named LOCAL_TYPE_ENUM").
+			if cachedEnum := localEnumFromMutationArgs(pre.commonMutationFieldsConfigArgs); cachedEnum != nil {
+				st.localEnum = cachedEnum
+			}
 			if st.span != nil {
 				st.span.SetAttributes(attribute.Bool("schema_cache_hit", true))
 			}

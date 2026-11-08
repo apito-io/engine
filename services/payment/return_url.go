@@ -45,6 +45,42 @@ func requestOrigin(r *http.Request) string {
 	return scheme + "://" + host
 }
 
+func proceedPath(tx *models.PaymentTransaction) string {
+	if tx == nil {
+		return ""
+	}
+	return "/payment/" + url.PathEscape(strings.ToLower(strings.TrimSpace(tx.Provider))) +
+		"/" + url.PathEscape(strings.TrimSpace(tx.ProjectID)) +
+		"/" + url.PathEscape(strings.TrimSpace(tx.ID)) + "/proceed"
+}
+
+// ReviewURL is the public page on the engine host. The provider is not called yet.
+func ReviewURL(base, provider, projectID, transactionID string) string {
+	base = strings.TrimRight(strings.TrimSpace(base), "/")
+	provider = strings.ToLower(strings.TrimSpace(provider))
+	projectID = strings.TrimSpace(projectID)
+	transactionID = strings.TrimSpace(transactionID)
+	if base == "" || provider == "" || projectID == "" || transactionID == "" {
+		return ""
+	}
+	return base + "/payment/" + url.PathEscape(provider) + "/" + url.PathEscape(projectID) + "/" + url.PathEscape(transactionID)
+}
+
+// ProviderBrowserURL is a provider redirect the shopper's browser may open.
+func ProviderBrowserURL(raw string) string {
+	raw = strings.TrimSpace(raw)
+	parsed, err := url.Parse(raw)
+	if err != nil || parsed.Host == "" {
+		return ""
+	}
+	switch strings.ToLower(parsed.Scheme) {
+	case "https", "http":
+		return raw
+	default:
+		return ""
+	}
+}
+
 var paymentReturnScheme = regexp.MustCompile(`^[a-z][a-z0-9+.-]{0,31}$`)
 
 func localHTTPReturnHost(host string) bool {

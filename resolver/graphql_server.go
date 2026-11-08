@@ -676,8 +676,10 @@ func (s *GraphQLServer) LoadProjectCache(ctx context.Context, projectID string) 
 
 	// get the project details
 	var _project *models.Project
+	cacheHit := false
 	if val, err := s.ProjectCache.GetProject(ctx, projectID); err == nil && val != nil && val.ID != "" {
 		_project = val
+		cacheHit = true
 	} else {
 		var err error
 		_project, err = s.SystemDriver.GetProject(ctx, projectID)
@@ -687,6 +689,15 @@ func (s *GraphQLServer) LoadProjectCache(ctx context.Context, projectID string) 
 		if models.EnsureProjectPlansSeeds(_project) {
 			if uerr := s.SystemDriver.UpdateProject(ctx, _project, false); uerr != nil {
 				return nil, uerr
+			}
+		}
+		if _project != nil {
+			if _project.Schema != nil {
+				models.NormalizeProjectSchemaConnectionTypes(_project.Schema)
+				applyRuntimeSchemaAugments(_project)
+			}
+			if err := s.ApplyNamingV2AfterProjectLoad(ctx, _project); err != nil {
+				return nil, err
 			}
 		}
 
@@ -701,14 +712,9 @@ func (s *GraphQLServer) LoadProjectCache(ctx context.Context, projectID string) 
 		return nil, err
 	}
 
-	if _project != nil {
-		if _project.Schema != nil {
-			models.NormalizeProjectSchemaConnectionTypes(_project.Schema)
-			applyRuntimeSchemaAugments(_project)
-		}
-		if err := s.ApplyNamingV2AfterProjectLoad(ctx, _project); err != nil {
-			return nil, err
-		}
+	if !cacheHit && _project != nil && _project.Schema != nil {
+		models.NormalizeProjectSchemaConnectionTypes(_project.Schema)
+		applyRuntimeSchemaAugments(_project)
 	}
 
 	return _project, nil
@@ -848,18 +854,24 @@ func (s *GraphQLServer) GetApplicationCache(router echo.Context) (*models.Applic
 	}
 
 	// Try to reuse previously cached plugin schemas (per project) to avoid re-registering every request
+	appCacheHit := false
 	if existing, err := s.ProjectCache.GetAppCache(ctx, projectID); err == nil && existing != nil && existing.RawSchemas != nil {
 		cache.RawSchemas = existing.RawSchemas
+		cache.PluginSchemasRegistered = existing.PluginSchemasRegistered
+		appCacheHit = true
 	}
 
 	// Load project-specific plugins into the cache only when not already cached
-	if cache.RawSchemas == nil || (len(cache.RawSchemas.Queries) == 0 && len(cache.RawSchemas.Mutations) == 0) {
+	if !appCacheHit {
 		fmt.Printf("[DEBUG] GetApplicationCache: Loading project-specific plugins for project %s\n", _project.ID)
 		err = s.LoadProjectSpecificPlugins(ctx, cache)
 		if err != nil {
 			fmt.Printf("[ERROR] GetApplicationCache: Failed to load project-specific plugins for project %s: %v\n", _project.ID, err)
 		} else {
-			_ = s.ProjectCache.PutAppCache(ctx, projectID, &models.ApplicationCache{RawSchemas: cache.RawSchemas})
+			_ = s.ProjectCache.PutAppCache(ctx, projectID, &models.ApplicationCache{
+				RawSchemas:              cache.RawSchemas,
+				PluginSchemasRegistered: cache.PluginSchemasRegistered,
+			})
 			fmt.Printf("[DEBUG] GetApplicationCache: Project-specific plugins loaded and cached for project %s\n", _project.ID)
 		}
 
@@ -878,8 +890,6 @@ func (s *GraphQLServer) GetApplicationCache(router echo.Context) (*models.Applic
 					_project.ID, pd.ID)
 			}
 		}
-	} else {
-		fmt.Printf("[DEBUG] GetApplicationCache: Using cached project-specific plugin schemas for project %s\n", _project.ID)
 	}
 
 	if h := s.Cfg.PostApplicationCacheHook; h != nil {

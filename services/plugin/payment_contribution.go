@@ -39,9 +39,11 @@ type PaymentProviderContribution struct {
 }
 
 // PaymentOperations names plugin Execute functions. Initialize and Verify are required.
+// Review is the public checkout page. The host calls it and returns the HTML.
 type PaymentOperations struct {
 	Initialize string `json:"initialize" yaml:"initialize"`
 	Verify     string `json:"verify" yaml:"verify"`
+	Review     string `json:"review,omitempty" yaml:"review,omitempty"`
 	Cancel     string `json:"cancel,omitempty" yaml:"cancel,omitempty"`
 	Webhook    string `json:"webhook,omitempty" yaml:"webhook,omitempty"`
 }
@@ -107,6 +109,7 @@ func NormalizePaymentContribution(c *PaymentProviderContribution) *PaymentProvid
 	}
 	out.Operations.Initialize = strings.TrimSpace(c.Operations.Initialize)
 	out.Operations.Verify = strings.TrimSpace(c.Operations.Verify)
+	out.Operations.Review = strings.TrimSpace(c.Operations.Review)
 	out.Operations.Cancel = strings.TrimSpace(c.Operations.Cancel)
 	out.Operations.Webhook = strings.TrimSpace(c.Operations.Webhook)
 	flows := make([]string, 0, len(c.Flows))

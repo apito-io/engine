@@ -634,7 +634,6 @@ func (g *GraphCtrl) RESTApiDocGenerator(c echo.Context) error {
 }
 
 func (g *GraphCtrl) PublicGraphQL(i echo.Context) error {
-
 	var req models.GraphQLIncomingRequest
 	if err := i.Bind(&req); err != nil {
 		return i.JSON(http.StatusBadRequest, &models.HttpResponse{
@@ -673,7 +672,11 @@ func (g *GraphCtrl) PublicGraphQL(i echo.Context) error {
 	}
 
 	if res == nil || len(res.Errors) == 0 {
-		cache, cacheErr := g.gqlServer.GetApplicationCache(i)
+		cache, ok := i.Get("apito_last_app_cache").(*models.ApplicationCache)
+		var cacheErr error
+		if !ok || cache == nil {
+			cache, cacheErr = g.gqlServer.GetApplicationCache(i)
+		}
 		if cacheErr == nil && cache != nil && cache.Project != nil && i.Request() != nil {
 			notePublicAPI(i.Request().Host, cache.Project.ID, publicAPIOwner(cache), "graphql")
 		}
@@ -693,6 +696,7 @@ func (g *GraphCtrl) exePublicGraphql(i echo.Context, req *models.GraphQLIncoming
 	if err != nil {
 		return nil, err
 	}
+	i.Set("apito_last_app_cache", cache)
 
 	project := cache.Project
 

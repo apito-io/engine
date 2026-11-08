@@ -375,6 +375,8 @@ func InitRouter(cfg *models.Config) (*echo.Echo, error) {
 	}
 
 	payCtrl := controller.NewPaymentController(concreteServer)
+	router.GET("/payment/:provider/:projectId/:transactionId", payCtrl.Review)
+	router.POST("/payment/:provider/:projectId/:transactionId/proceed", payCtrl.Proceed)
 	payPublic := router.Group("/system/v1/payments")
 	payPublic.POST("/projects/:projectId/providers/:provider/webhook", payCtrl.Webhook)
 	payPublic.GET("/projects/:projectId/providers/:provider/callback/:outcome", payCtrl.Callback)

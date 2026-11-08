@@ -75,6 +75,8 @@ type CheckoutInput struct {
 	// project client runtime by the caller. Neither value is sent to the plugin.
 	ClientPlatform string
 	ReturnURL      string
+	// DeferProvider writes the ledger row and skips the plugin. Proceed starts it.
+	DeferProvider bool
 }
 
 // BeginCheckout persists a row before the plugin talks to the provider.
@@ -87,7 +89,7 @@ func (s *Service) BeginCheckout(ctx context.Context, in CheckoutInput) (*models.
 	if projectID == "" || providerID == "" {
 		return nil, fmt.Errorf("project_id and provider are required")
 	}
-	pluginID, contrib, ok := plugin.LookupPaymentProvider(providerID)
+	_, contrib, ok := plugin.LookupPaymentProvider(providerID)
 	if !ok {
 		return nil, fmt.Errorf("payment provider is not registered")
 	}
@@ -137,17 +139,120 @@ func (s *Service) BeginCheckout(ctx context.Context, in CheckoutInput) (*models.
 	if err := s.Store.UpsertPaymentTransaction(ctx, tx); err != nil {
 		return nil, err
 	}
+	if in.DeferProvider {
+		return tx, nil
+	}
+	return s.startProvider(ctx, tx, in.ValueA)
+}
+
+// ReviewArgs is the public checkout page request. It never includes the shop return URL.
+func ReviewArgs(tx *models.PaymentTransaction, notice string) map[string]interface{} {
+	view := map[string]interface{}{
+		"found":        false,
+		"amount":       "",
+		"currency":     "",
+		"item":         "",
+		"error":        strings.TrimSpace(notice),
+		"can_proceed":  false,
+		"proceed_path": "",
+		"status":       "",
+	}
+	if tx == nil {
+		return view
+	}
+	view["found"] = true
+	view["provider"] = tx.Provider
+	view["project_id"] = tx.ProjectID
+	view["transaction_id"] = tx.ID
+	amount := strings.TrimSpace(tx.Amount)
+	if amount == "" {
+		amount = "—"
+	}
+	view["amount"] = amount
+	view["currency"] = strings.TrimSpace(tx.Currency)
+	item := strings.TrimSpace(tx.ProductKey)
+	if item == "" {
+		item = tx.Flow
+	}
+	if item == "" {
+		item = "Payment"
+	}
+	view["item"] = item
+	view["status"] = tx.Status
+	if strings.TrimSpace(notice) == "" {
+		view["error"] = strings.TrimSpace(tx.ErrorMessage)
+	}
+	switch tx.Status {
+	case StatusCreated, StatusFailed, StatusPending:
+		view["can_proceed"] = true
+		view["proceed_path"] = proceedPath(tx)
+	}
+	return view
+}
+
+// RenderReview asks the provider plugin for the public checkout page.
+func (s *Service) RenderReview(ctx context.Context, provider string, tx *models.PaymentTransaction, notice string) (string, error) {
+	if s == nil || s.Exec == nil {
+		return "", fmt.Errorf("payment service is not configured")
+	}
+	providerID := strings.ToLower(strings.TrimSpace(provider))
+	if tx != nil && strings.TrimSpace(tx.Provider) != "" {
+		providerID = strings.ToLower(strings.TrimSpace(tx.Provider))
+	}
+	pluginID, contrib, ok := plugin.LookupPaymentProvider(providerID)
+	if !ok || strings.TrimSpace(contrib.Operations.Review) == "" {
+		return "", fmt.Errorf("payment provider has no review page")
+	}
+	payload, err := s.Exec(ctx, pluginID, contrib.Operations.Review, ReviewArgs(tx, notice), false)
+	if err != nil {
+		return "", err
+	}
+	html := firstString(payload, "html")
+	if strings.TrimSpace(html) == "" {
+		return "", fmt.Errorf("provider did not return a review page")
+	}
+	return html, nil
+}
+
+// Proceed starts the provider for a prepared row. A row that already has a
+// provider link is returned unchanged.
+func (s *Service) Proceed(ctx context.Context, tx *models.PaymentTransaction) (*models.PaymentTransaction, error) {
+	if s == nil || s.Store == nil || s.Exec == nil || tx == nil {
+		return nil, fmt.Errorf("payment service is not configured")
+	}
+	if redirect := RedirectURL(tx); redirect != "" && (tx.Status == StatusPending || tx.Status == StatusCreated) {
+		return tx, nil
+	}
+	switch tx.Status {
+	case StatusCreated, StatusFailed:
+		return s.startProvider(ctx, tx, tx.CustomerRef)
+	default:
+		return tx, fmt.Errorf("payment cannot be started")
+	}
+}
+
+func (s *Service) startProvider(ctx context.Context, tx *models.PaymentTransaction, valueA string) (*models.PaymentTransaction, error) {
+	if tx == nil {
+		return nil, fmt.Errorf("payment service is not configured")
+	}
+	pluginID, contrib, ok := plugin.LookupPaymentProvider(tx.Provider)
+	if !ok {
+		return s.fail(ctx, tx, fmt.Errorf("payment provider is not registered"))
+	}
 	base := strings.TrimRight(strings.TrimSpace(s.PublicAPIURL), "/")
 	if base == "" {
 		return s.fail(ctx, tx, fmt.Errorf("payment callback host is missing"))
 	}
+	ref := tx.ClientReference
+	projectID := tx.ProjectID
+	providerID := tx.Provider
 	callback := func(outcome string) string {
 		return base + "/system/v1/payments/projects/" + projectID + "/providers/" + providerID + "/callback/" + outcome + "?merchant_transaction_id=" + ref
 	}
 	payload, err := s.Exec(ctx, pluginID, contrib.Operations.Initialize, CheckoutRequest{
 		TransactionID:   tx.ID,
 		ClientReference: ref,
-		Flow:            flow,
+		Flow:            tx.Flow,
 		ProductKey:      tx.ProductKey,
 		ServerAmount:    tx.Amount,
 		ServerCurrency:  tx.Currency,
@@ -156,7 +261,7 @@ func (s *Service) BeginCheckout(ctx context.Context, in CheckoutInput) (*models.
 		CancelURL:       callback("cancel"),
 		ProjectID:       projectID,
 		CustomerRef:     tx.CustomerRef,
-		ValueA:          strings.TrimSpace(in.ValueA),
+		ValueA:          strings.TrimSpace(valueA),
 	}.Args(), false)
 	if err != nil {
 		return s.fail(ctx, tx, err)
@@ -187,6 +292,8 @@ func (s *Service) BeginCheckout(ctx context.Context, in CheckoutInput) (*models.
 	}
 	tx.ProviderSessionID = firstNonEmpty(init.ProviderSessionID, firstString(payload, "transaction_id"))
 	tx.Status = StatusPending
+	tx.ErrorMessage = ""
+	tx.CompletedAt = ""
 	tx.UpdatedAt = s.now().UTC().Format(time.RFC3339)
 	tx.MetadataJSON = mergeRedirect(tx.MetadataJSON, redirect)
 	if err := s.Store.UpsertPaymentTransaction(ctx, tx); err != nil {

@@ -88,6 +88,86 @@ func (pc *PaymentController) Checkout(c echo.Context) error {
 	})
 }
 
+// Review is the public page the shopper opens before the provider is called.
+// The HTML comes from the plugin that registered this provider.
+func (pc *PaymentController) Review(c echo.Context) error {
+	svc, _, err := pc.service()
+	if err != nil {
+		return c.String(http.StatusServiceUnavailable, "payment page is not available")
+	}
+	tx, status, err := pc.loadPublicPayment(c)
+	if err != nil && status != http.StatusNotFound {
+		return c.String(status, "payment page is not available")
+	}
+	page, rerr := svc.RenderReview(c.Request().Context(), c.Param("provider"), tx, "")
+	if rerr != nil {
+		code := http.StatusNotFound
+		if tx != nil {
+			code = http.StatusBadGateway
+		}
+		return c.String(code, "payment page is not available")
+	}
+	if tx == nil {
+		return c.HTML(http.StatusNotFound, page)
+	}
+	return c.HTML(http.StatusOK, page)
+}
+
+// Proceed calls the provider for a prepared row and sends the browser to its page.
+func (pc *PaymentController) Proceed(c echo.Context) error {
+	svc, _, err := pc.service()
+	if err != nil {
+		return c.String(http.StatusServiceUnavailable, "payment page is not available")
+	}
+	tx, status, err := pc.loadPublicPayment(c)
+	if err != nil {
+		if status == http.StatusNotFound {
+			return pc.reviewHTML(c, svc, nil, status, "")
+		}
+		return c.String(status, "payment page is not available")
+	}
+	svc.PublicAPIURL = payment.CallbackBase(svc.PublicAPIURL, c.Request())
+	updated, perr := svc.Proceed(c.Request().Context(), tx)
+	if perr != nil {
+		show := updated
+		if show == nil {
+			show = tx
+		}
+		return pc.reviewHTML(c, svc, show, http.StatusBadGateway, perr.Error())
+	}
+	target := payment.ProviderBrowserURL(payment.RedirectURL(updated))
+	if target == "" {
+		return pc.reviewHTML(c, svc, updated, http.StatusBadGateway, "provider did not return a redirect url")
+	}
+	return c.Redirect(http.StatusSeeOther, target)
+}
+
+func (pc *PaymentController) reviewHTML(c echo.Context, svc *payment.Service, tx *models.PaymentTransaction, status int, notice string) error {
+	page, err := svc.RenderReview(c.Request().Context(), c.Param("provider"), tx, notice)
+	if err != nil {
+		return c.String(status, "payment page is not available")
+	}
+	return c.HTML(status, page)
+}
+
+func (pc *PaymentController) loadPublicPayment(c echo.Context) (*models.PaymentTransaction, int, error) {
+	_, store, err := pc.service()
+	if err != nil {
+		return nil, http.StatusServiceUnavailable, err
+	}
+	projectID := strings.TrimSpace(c.Param("projectId"))
+	provider := strings.ToLower(strings.TrimSpace(c.Param("provider")))
+	id := strings.TrimSpace(c.Param("transactionId"))
+	if projectID == "" || provider == "" || id == "" {
+		return nil, http.StatusNotFound, echo.NewHTTPError(http.StatusNotFound, "payment not found")
+	}
+	tx, err := store.GetPaymentTransaction(c.Request().Context(), projectID, id)
+	if err != nil || tx == nil || !strings.EqualFold(tx.Provider, provider) {
+		return nil, http.StatusNotFound, echo.NewHTTPError(http.StatusNotFound, "payment not found")
+	}
+	return tx, http.StatusOK, nil
+}
+
 func (pc *PaymentController) Callback(c echo.Context) error {
 	return pc.dispatchCallback(c, true)
 }

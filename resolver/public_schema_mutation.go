@@ -505,7 +505,6 @@ func (s *GraphQLServer) MutationResolverFn(p graphql.ResolveParams) (resp interf
 		}
 		return responses, nil
 	case "create":
-
 		if err := utility.AuthorizeModelCreate(param.Role, modelType.Name); err != nil {
 			return nil, err
 		}
