@@ -142,8 +142,12 @@ type CommonSystemParams struct {
 	SkipWhereFilter   bool `json:"skip_filter,omitempty"`         // used in intersection of two collections, where filter is not needed
 	SkipDefaultFilter bool `json:"skip_default_filter,omitempty"` // if you want to skip the default filter
 
-	ReturnOnlyID     bool   `json:"return_only_id,omitempty"`
-	OnlyReturnCount  bool   `json:"only_return_count,omitempty"`
+	ReturnOnlyID    bool `json:"return_only_id,omitempty"`
+	OnlyReturnCount bool `json:"only_return_count,omitempty"`
+	// QuotaCountFrom and QuotaCountUntil bound a count to meta.created_at in [from, until).
+	// Both are YYYY-MM-DD. When set, SQL counts join meta and skip the row-count cache.
+	QuotaCountFrom   string `json:"-"`
+	QuotaCountUntil  string `json:"-"`
 	IsAggregateQuery bool   `json:"is_aggregate_query,omitempty"`
 	ReturnOverwrite  string `json:"return_overwrite,omitempty"`
 

@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/apito-io/engine/models"
 	"github.com/apito-io/engine/utility"
@@ -21,18 +22,26 @@ func (s *GraphQLServer) enforcePlanCreateQuota(ctx context.Context, cache *model
 	if modelName == "" {
 		return nil
 	}
-	limit := utility.PlanQuotaLimit(param.ActivePlan, utility.RecordsQuotaKey(modelName))
-	if limit <= 0 {
+	key := utility.RecordsQuotaKey(modelName)
+	parsed, err := utility.ParsePlanQuota(param.ActivePlan, key)
+	if err != nil {
+		return err
+	}
+	if parsed.Window == utility.QuotaWindowUnlimited {
 		return nil
 	}
-	count, err := s.cachedModelDocCount(ctx, cache, param, modelName)
+	from, until := "", ""
+	if parsed.Window == utility.QuotaWindowMonthly {
+		from, until = utility.DhakaMonthBounds(time.Now())
+	}
+	count, err := s.cachedModelDocCount(ctx, cache, param, modelName, from, until)
 	if err != nil {
 		return fmt.Errorf("plan quota check: %w", err)
 	}
-	return utility.CheckPlanRecordsQuota(param.ActivePlan, modelName, count)
+	return utility.CheckCountedQuota(parsed, key, count)
 }
 
-func (s *GraphQLServer) cachedModelDocCount(ctx context.Context, cache *models.ApplicationCache, param *models.CommonSystemParams, modelName string) (int, error) {
+func (s *GraphQLServer) cachedModelDocCount(ctx context.Context, cache *models.ApplicationCache, param *models.CommonSystemParams, modelName, from, until string) (int, error) {
 	if s == nil || param == nil {
 		return 0, nil
 	}
@@ -44,7 +53,11 @@ func (s *GraphQLServer) cachedModelDocCount(ctx context.Context, cache *models.A
 		raw = make(map[string]int)
 		param.Ext[extKeyQuotaCountCache] = raw
 	}
-	if c, ok := raw[modelName]; ok {
+	cacheKey := modelName
+	if from != "" {
+		cacheKey = modelName + "@" + from
+	}
+	if c, ok := raw[cacheKey]; ok {
 		return c, nil
 	}
 	var modelType *models.ModelType
@@ -57,16 +70,18 @@ func (s *GraphQLServer) cachedModelDocCount(ctx context.Context, cache *models.A
 		}
 	}
 	if modelType == nil {
-		raw[modelName] = 0
+		raw[cacheKey] = 0
 		return 0, nil
 	}
 	if s.GraphQLExecutor == nil {
-		raw[modelName] = 0
+		raw[cacheKey] = 0
 		return 0, nil
 	}
 	countParam := s.NewParam(param)
 	countParam.Model = modelType
 	countParam.OnlyReturnCount = true
+	countParam.QuotaCountFrom = from
+	countParam.QuotaCountUntil = until
 	if cache != nil && cache.Project != nil && cache.Project.Schema != nil {
 		countParam.ProjectSchemaModels = cache.Project.Schema.Models
 	}
@@ -75,7 +90,7 @@ func (s *GraphQLServer) cachedModelDocCount(ctx context.Context, cache *models.A
 		return 0, err
 	}
 	if driver == nil {
-		raw[modelName] = 0
+		raw[cacheKey] = 0
 		return 0, nil
 	}
 	result, err := driver.CountDocOfProject(ctx, countParam)
@@ -99,6 +114,6 @@ func (s *GraphQLServer) cachedModelDocCount(ctx context.Context, cache *models.A
 			n = int(c)
 		}
 	}
-	raw[modelName] = n
+	raw[cacheKey] = n
 	return n, nil
 }

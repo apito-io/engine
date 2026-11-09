@@ -4,6 +4,7 @@ import (
 	"errors"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/apito-io/engine/models"
 	"github.com/apito-io/engine/scaler"
@@ -118,7 +119,7 @@ func (s *GraphQLServer) MyEffectivePermissionsResolverFn(p graphql.ResolveParams
 	usage := map[string]interface{}{}
 	if plan != nil && plan.Quotas != nil && cache.Param != nil {
 		for k, limit := range plan.Quotas {
-			quotas[k] = limit
+			quotas[k] = limit.AsJSON()
 			if !strings.HasPrefix(k, utility.QuotaKeyRecordsPrefix) {
 				continue
 			}
@@ -126,10 +127,18 @@ func (s *GraphQLServer) MyEffectivePermissionsResolverFn(p graphql.ResolveParams
 			if modelName == "" {
 				continue
 			}
+			parsed, err := utility.ParsePlanQuota(plan, k)
+			if err != nil || parsed.Window == utility.QuotaWindowUnlimited {
+				continue
+			}
+			from, until := "", ""
+			if parsed.Window == utility.QuotaWindowMonthly {
+				from, until = utility.DhakaMonthBounds(time.Now())
+			}
 			// Best-effort usage; never fail the query on count errors / missing driver.
 			func() {
 				defer func() { _ = recover() }()
-				count, err := s.cachedModelDocCount(p.Context, cache, cache.Param, modelName)
+				count, err := s.cachedModelDocCount(p.Context, cache, cache.Param, modelName, from, until)
 				if err == nil {
 					usage[k] = count
 				}

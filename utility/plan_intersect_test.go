@@ -2,6 +2,7 @@ package utility
 
 import (
 	"testing"
+	"time"
 
 	"github.com/apito-io/engine/models"
 )
@@ -97,7 +98,7 @@ func TestIntersectRoleWithPlanNilIsPassthroughClone(t *testing.T) {
 }
 
 func TestCheckPlanRecordsQuotaBlocksCreateOnlySemantics(t *testing.T) {
-	plan := &models.Plan{Quotas: map[string]int{"max_records.student": 2}}
+	plan := &models.Plan{Quotas: map[string]models.QuotaValue{"max_records.student": "2"}}
 	if err := CheckPlanRecordsQuota(plan, "student", 1); err != nil {
 		t.Fatal("under limit should pass")
 	}
@@ -109,6 +110,40 @@ func TestCheckPlanRecordsQuotaBlocksCreateOnlySemantics(t *testing.T) {
 	}
 	if err := CheckPlanRecordsQuota(nil, "student", 100); err != nil {
 		t.Fatal("nil plan unlimited")
+	}
+	for _, raw := range []models.QuotaValue{"0", "-1"} {
+		open := &models.Plan{Quotas: map[string]models.QuotaValue{"max_records.student": raw}}
+		if err := CheckPlanRecordsQuota(open, "student", 100); err != nil {
+			t.Fatalf("%s should be unlimited: %v", raw, err)
+		}
+	}
+	monthly := &models.Plan{Quotas: map[string]models.QuotaValue{"max_records.student": "M2"}}
+	parsed, err := ParsePlanQuota(monthly, "max_records.student")
+	if err != nil || parsed.Window != QuotaWindowMonthly || parsed.Limit != 2 {
+		t.Fatalf("M2 parse = %#v %v", parsed, err)
+	}
+	if err := CheckPlanRecordsQuota(monthly, "student", 1); err != nil {
+		t.Fatal("under monthly limit should pass")
+	}
+	if err := CheckPlanRecordsQuota(monthly, "student", 2); err == nil {
+		t.Fatal("monthly limit should block at 2")
+	}
+	if _, err := ParseQuotaValue("M0", true); err == nil {
+		t.Fatal("M0 must be rejected")
+	}
+	if _, err := ParseQuotaValue("nope", true); err == nil {
+		t.Fatal("text must be rejected")
+	}
+	if _, err := ParseQuotaValue("M5", false); err == nil {
+		t.Fatal("monthly quota must be rejected for non-record keys")
+	}
+	bad := &models.Plan{Quotas: map[string]models.QuotaValue{"max_records.student": "nope"}}
+	if err := CheckPlanRecordsQuota(bad, "student", 0); err == nil {
+		t.Fatal("bad stored quota must error")
+	}
+	from, until := DhakaMonthBounds(time.Date(2026, 11, 10, 15, 0, 0, 0, time.UTC))
+	if from != "2026-11-01" || until != "2026-12-01" {
+		t.Fatalf("dhaka month = %s %s", from, until)
 	}
 }
 

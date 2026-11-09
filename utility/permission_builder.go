@@ -1,8 +1,12 @@
 package utility
 
 import (
+	"encoding/json"
 	"errors"
+	"fmt"
+	"strconv"
 	"strings"
+	"time"
 
 	"github.com/apito-io/engine/models"
 )
@@ -466,8 +470,10 @@ func IntersectLogicExecutions(roleLogic, planLogic []string) []string {
 }
 
 // IntersectAPIPermission applies the plan ceiling with read-only grace:
-//   create/update/delete = min(role, plan) always
-//   read = min(role, plan) when plan.read != none; otherwise falls back to role.read
+//
+//	create/update/delete = min(role, plan) always
+//	read = min(role, plan) when plan.read != none; otherwise falls back to role.read
+//
 // Returns the intersected permission and whether read grace applied.
 func IntersectAPIPermission(roleAP, planAP *models.APIPermission) (out *models.APIPermission, readGrace bool) {
 	roleAP = coalesceAP(roleAP)
@@ -598,42 +604,158 @@ const QuotaKeyStorageMB = "storage_mb"
 // QuotaKeyRecordsPrefix prefixes per-model record limits: max_records.<model>.
 const QuotaKeyRecordsPrefix = "max_records."
 
-// CheckPlanRecordsQuota returns ErrQuotaExceeded when currentCount >= limit (>0).
-// Limit 0 means unlimited.
-func CheckPlanRecordsQuota(plan *models.Plan, modelName string, currentCount int) error {
-	limit := PlanQuotaLimit(plan, RecordsQuotaKey(modelName))
-	if limit <= 0 {
+// QuotaWindow is how a stored quota value is enforced.
+type QuotaWindow int
+
+const (
+	// QuotaWindowUnlimited is empty, 0, or -1. The create check does not count rows.
+	QuotaWindowUnlimited QuotaWindow = iota
+	// QuotaWindowLifetime counts rows that exist now.
+	QuotaWindowLifetime
+	// QuotaWindowMonthly counts rows created in the current Asia/Dhaka calendar month.
+	QuotaWindowMonthly
+)
+
+// ParsedQuota is a quota value after validation.
+type ParsedQuota struct {
+	Window QuotaWindow
+	Limit  int
+}
+
+// Dhaka is UTC+6 with no daylight-saving shift.
+var dhaka = time.FixedZone("Asia/Dhaka", 6*60*60)
+
+// DhakaMonthBounds returns the current Asia/Dhaka month as [from, until) dates, YYYY-MM-DD.
+func DhakaMonthBounds(now time.Time) (from, until string) {
+	t := now.In(dhaka)
+	start := time.Date(t.Year(), t.Month(), 1, 0, 0, 0, 0, dhaka)
+	next := start.AddDate(0, 1, 0)
+	return start.Format("2006-01-02"), next.Format("2006-01-02")
+}
+
+// ParseQuotaValue reads one quota. allowMonthly is true only for max_records.* keys.
+func ParseQuotaValue(raw string, allowMonthly bool) (ParsedQuota, error) {
+	s := strings.TrimSpace(raw)
+	if s == "" || s == "0" || s == "-1" {
+		return ParsedQuota{Window: QuotaWindowUnlimited}, nil
+	}
+	if s[0] == 'M' || s[0] == 'm' {
+		if !allowMonthly {
+			return ParsedQuota{}, fmt.Errorf("monthly quota is only valid for max_records")
+		}
+		n, err := strconv.Atoi(strings.TrimSpace(s[1:]))
+		if err != nil || n <= 0 {
+			return ParsedQuota{}, fmt.Errorf("invalid quota %q", raw)
+		}
+		return ParsedQuota{Window: QuotaWindowMonthly, Limit: n}, nil
+	}
+	n, err := strconv.Atoi(s)
+	if err != nil || n < 0 {
+		return ParsedQuota{}, fmt.Errorf("invalid quota %q", raw)
+	}
+	if n == 0 {
+		return ParsedQuota{Window: QuotaWindowUnlimited}, nil
+	}
+	return ParsedQuota{Window: QuotaWindowLifetime, Limit: n}, nil
+}
+
+// ParsePlanQuota reads plan.Quotas[key]. A missing key is unlimited.
+func ParsePlanQuota(plan *models.Plan, key string) (ParsedQuota, error) {
+	if plan == nil || plan.Quotas == nil {
+		return ParsedQuota{Window: QuotaWindowUnlimited}, nil
+	}
+	raw, ok := plan.Quotas[key]
+	if !ok {
+		return ParsedQuota{Window: QuotaWindowUnlimited}, nil
+	}
+	return ParseQuotaValue(string(raw), strings.HasPrefix(key, QuotaKeyRecordsPrefix))
+}
+
+// CanonicalQuota validates raw and returns the stored form: "0", "-1", "1000", or "M1000".
+func CanonicalQuota(raw string, allowMonthly bool) (models.QuotaValue, error) {
+	parsed, err := ParseQuotaValue(raw, allowMonthly)
+	if err != nil {
+		return "", err
+	}
+	switch parsed.Window {
+	case QuotaWindowMonthly:
+		return models.QuotaValue("M" + strconv.Itoa(parsed.Limit)), nil
+	case QuotaWindowLifetime:
+		return models.QuotaValue(strconv.Itoa(parsed.Limit)), nil
+	default:
+		if strings.TrimSpace(raw) == "0" {
+			return "0", nil
+		}
+		if strings.TrimSpace(raw) == "" {
+			return "0", nil
+		}
+		return "-1", nil
+	}
+}
+
+// QuotaFromArg accepts a GraphQL JSON number or string.
+func QuotaFromArg(v interface{}, allowMonthly bool) (models.QuotaValue, error) {
+	switch n := v.(type) {
+	case string:
+		return CanonicalQuota(n, allowMonthly)
+	case json.Number:
+		if i, err := n.Int64(); err == nil {
+			return CanonicalQuota(strconv.FormatInt(i, 10), allowMonthly)
+		}
+		f, err := n.Float64()
+		if err != nil {
+			return "", fmt.Errorf("invalid quota value")
+		}
+		return CanonicalQuota(strconv.FormatInt(int64(f), 10), allowMonthly)
+	case float64:
+		return CanonicalQuota(strconv.FormatInt(int64(n), 10), allowMonthly)
+	case float32:
+		return CanonicalQuota(strconv.FormatInt(int64(n), 10), allowMonthly)
+	case int:
+		return CanonicalQuota(strconv.Itoa(n), allowMonthly)
+	case int64:
+		return CanonicalQuota(strconv.FormatInt(n, 10), allowMonthly)
+	case int32:
+		return CanonicalQuota(strconv.FormatInt(int64(n), 10), allowMonthly)
+	default:
+		return "", fmt.Errorf("invalid quota value")
+	}
+}
+
+// CheckCountedQuota returns ErrQuotaExceeded when currentCount has reached a finite limit.
+func CheckCountedQuota(parsed ParsedQuota, key string, currentCount int) error {
+	if parsed.Window == QuotaWindowUnlimited || parsed.Limit <= 0 {
 		return nil
 	}
-	if currentCount >= limit {
-		return errors.New(ErrQuotaExceeded + ": " + RecordsQuotaKey(modelName))
+	if currentCount >= parsed.Limit {
+		return errors.New(ErrQuotaExceeded + ": " + key)
 	}
 	return nil
 }
 
+// CheckPlanRecordsQuota compares currentCount with the plan's record quota.
+// For a monthly quota, currentCount must already be this month's count.
+func CheckPlanRecordsQuota(plan *models.Plan, modelName string, currentCount int) error {
+	key := RecordsQuotaKey(modelName)
+	parsed, err := ParsePlanQuota(plan, key)
+	if err != nil {
+		return err
+	}
+	return CheckCountedQuota(parsed, key, currentCount)
+}
+
 // CheckPlanAppUsersQuota returns ErrQuotaExceeded when currentCount >= max_app_users.
 func CheckPlanAppUsersQuota(plan *models.Plan, currentCount int) error {
-	limit := PlanQuotaLimit(plan, QuotaKeyAppUsers)
-	if limit <= 0 {
-		return nil
+	parsed, err := ParsePlanQuota(plan, QuotaKeyAppUsers)
+	if err != nil {
+		return err
 	}
-	if currentCount >= limit {
-		return errors.New(ErrQuotaExceeded + ": " + QuotaKeyAppUsers)
-	}
-	return nil
+	return CheckCountedQuota(parsed, QuotaKeyAppUsers, currentCount)
 }
 
 // RecordsQuotaKey builds max_records.<model> quota key.
 func RecordsQuotaKey(modelName string) string {
 	return QuotaKeyRecordsPrefix + strings.TrimSpace(modelName)
-}
-
-// PlanQuotaLimit returns the numeric quota for key, or 0 when unlimited / missing.
-func PlanQuotaLimit(plan *models.Plan, key string) int {
-	if plan == nil || plan.Quotas == nil {
-		return 0
-	}
-	return plan.Quotas[key]
 }
 
 // ComputeReadGraceByModel returns per-model true when read grace applied under the plan.

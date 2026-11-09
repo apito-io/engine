@@ -50,9 +50,11 @@ type Plan struct {
 	Description     string                    `json:"description,omitempty" firestore:"description,omitempty" bson:"description,omitempty"`
 	APIPermissions  map[string]*APIPermission `json:"api_permissions,omitempty" firestore:"api_permissions,omitempty" bson:"api_permissions,omitempty"`
 	LogicExecutions []string                  `json:"logic_executions,omitempty" firestore:"logic_executions,omitempty" bson:"logic_executions,omitempty"`
-	// Quotas keys: max_app_users, max_records.<model>, storage_mb. Zero / missing = unlimited.
-	Quotas          map[string]int `json:"quotas,omitempty" firestore:"quotas,omitempty" bson:"quotas,omitempty"`
-	SystemGenerated bool           `json:"system_generated,omitempty" firestore:"system_generated,omitempty" bson:"system_generated,omitempty"`
+	// Quotas keys: max_app_users, max_records.<model>, storage_mb.
+	// Empty, 0, and -1 are unlimited. A positive number is a lifetime cap.
+	// max_records values may also be "M1000" for the current calendar month.
+	Quotas          map[string]QuotaValue `json:"quotas,omitempty" firestore:"quotas,omitempty" bson:"quotas,omitempty"`
+	SystemGenerated bool                  `json:"system_generated,omitempty" firestore:"system_generated,omitempty" bson:"system_generated,omitempty"`
 
 	// Host keeps JSON keys this module does not model (commercial catalog fields
 	// written by a host binary). Marshal/Unmarshal round-trips them so a save
@@ -72,7 +74,7 @@ func DefaultSeededPlans() map[string]*Plan {
 			Description:     "Default starter plan — fully permissive until customized",
 			APIPermissions:  map[string]*APIPermission{"*": all},
 			LogicExecutions: []string{"*"},
-			Quotas:          map[string]int{},
+			Quotas:          map[string]QuotaValue{},
 			SystemGenerated: true,
 		},
 	}
@@ -128,7 +130,7 @@ func EnsureProjectPlansSeeds(project *Project) (changed bool) {
 			cp.LogicExecutions = append([]string(nil), seed.LogicExecutions...)
 		}
 		if seed.Quotas != nil {
-			cp.Quotas = make(map[string]int, len(seed.Quotas))
+			cp.Quotas = make(map[string]QuotaValue, len(seed.Quotas))
 			for k, v := range seed.Quotas {
 				cp.Quotas[k] = v
 			}

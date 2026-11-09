@@ -20,7 +20,7 @@ type planJSONCore struct {
 	Description     string                    `json:"description,omitempty"`
 	APIPermissions  map[string]*APIPermission `json:"api_permissions,omitempty"`
 	LogicExecutions []string                  `json:"logic_executions,omitempty"`
-	Quotas          map[string]int            `json:"quotas,omitempty"`
+	Quotas          map[string]QuotaValue     `json:"quotas,omitempty"`
 	SystemGenerated bool                      `json:"system_generated,omitempty"`
 }
 

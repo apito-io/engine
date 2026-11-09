@@ -58,7 +58,7 @@ func planToMap(p *models.Plan, commercial func(*models.Plan) map[string]interfac
 	if p.Quotas != nil {
 		quotas := make(map[string]interface{}, len(p.Quotas))
 		for k, v := range p.Quotas {
-			quotas[k] = v
+			quotas[k] = v.AsJSON()
 		}
 		m["quotas"] = quotas
 	}
@@ -177,18 +177,14 @@ func (s *GraphQLServer) UpsertPlanToProjectResolverFn(p graphql.ResolveParams) (
 	}
 
 	if val, ok := p.Args["quotas"].(map[string]interface{}); ok {
-		quotas := make(map[string]int, len(val))
+		quotas := make(map[string]models.QuotaValue, len(val))
 		for k, vv := range val {
-			switch n := vv.(type) {
-			case int:
-				quotas[k] = n
-			case int64:
-				quotas[k] = int(n)
-			case float64:
-				quotas[k] = int(n)
-			default:
+			allowMonthly := strings.HasPrefix(k, utility.QuotaKeyRecordsPrefix)
+			q, err := utility.QuotaFromArg(vv, allowMonthly)
+			if err != nil {
 				return nil, fmt.Errorf("invalid quota value for %s", k)
 			}
+			quotas[k] = q
 		}
 		plan.Quotas = quotas
 	}
@@ -337,7 +333,7 @@ func clonePlan(src *models.Plan) *models.Plan {
 		}
 	}
 	if src.Quotas != nil {
-		dst.Quotas = make(map[string]int, len(src.Quotas))
+		dst.Quotas = make(map[string]models.QuotaValue, len(src.Quotas))
 		for k, v := range src.Quotas {
 			dst.Quotas[k] = v
 		}

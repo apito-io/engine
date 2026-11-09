@@ -1074,8 +1074,12 @@ func enforceExecutorPlanCreateQuota(ctx context.Context, s *GraphQLExecutor, cac
 	if param == nil || param.ActivePlan == nil || modelType == nil || s == nil {
 		return nil
 	}
-	limit := utility.PlanQuotaLimit(param.ActivePlan, utility.RecordsQuotaKey(modelType.Name))
-	if limit <= 0 {
+	key := utility.RecordsQuotaKey(modelType.Name)
+	parsed, err := utility.ParsePlanQuota(param.ActivePlan, key)
+	if err != nil {
+		return err
+	}
+	if parsed.Window == utility.QuotaWindowUnlimited {
 		return nil
 	}
 	if param.Ext == nil {
@@ -1086,7 +1090,13 @@ func enforceExecutorPlanCreateQuota(ctx context.Context, s *GraphQLExecutor, cac
 		raw = make(map[string]int)
 		param.Ext[executorQuotaCountCacheKey] = raw
 	}
-	count, ok := raw[modelType.Name]
+	from, until := "", ""
+	cacheKey := modelType.Name
+	if parsed.Window == utility.QuotaWindowMonthly {
+		from, until = utility.DhakaMonthBounds(time.Now())
+		cacheKey = modelType.Name + "@" + from
+	}
+	count, ok := raw[cacheKey]
 	if !ok {
 		driver, err := s.GetProjectDriver(models.ProjectDBContext(ctx, param))
 		if err != nil {
@@ -1095,6 +1105,8 @@ func enforceExecutorPlanCreateQuota(ctx context.Context, s *GraphQLExecutor, cac
 		cp := *param
 		cp.Model = modelType
 		cp.OnlyReturnCount = true
+		cp.QuotaCountFrom = from
+		cp.QuotaCountUntil = until
 		if cache != nil && cache.Project != nil && cache.Project.Schema != nil {
 			cp.ProjectSchemaModels = cache.Project.Schema.Models
 		}
@@ -1118,7 +1130,7 @@ func enforceExecutorPlanCreateQuota(ctx context.Context, s *GraphQLExecutor, cac
 				count = int(c)
 			}
 		}
-		raw[modelType.Name] = count
+		raw[cacheKey] = count
 	}
-	return utility.CheckPlanRecordsQuota(param.ActivePlan, modelType.Name, count)
+	return utility.CheckCountedQuota(parsed, key, count)
 }
