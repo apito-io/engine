@@ -360,8 +360,11 @@ func TestPrepareCheckoutWaitsForProceed(t *testing.T) {
 				if args["software_name"] != "Rosna" || args["item_label"] != "Pro" || args["logo_url"] != "https://cdn.example/rosna.png" {
 					t.Fatalf("review display %#v", args)
 				}
-				if _, ok := args["logo_url"].(string); ok && strings.Contains(fmt.Sprint(args["logo_url"]), "javascript:") {
-					t.Fatal(args["logo_url"])
+				if args["account_logo"] != "https://cdn.example/tenant.png" || args["seller_name"] != "Northwind" || args["provider_label"] != "Review" {
+					t.Fatalf("review display %#v", args)
+				}
+				if args["seller_logo"] != nil || strings.Contains(fmt.Sprint(args["logo_url"]), "javascript:") {
+					t.Fatal(args)
 				}
 				return map[string]interface{}{"html": fmt.Sprintf("%v %v %v", args["amount"], args["item"], args["proceed_path"])}, nil
 			}
@@ -376,7 +379,7 @@ func TestPrepareCheckoutWaitsForProceed(t *testing.T) {
 		ProjectID: "p1", Provider: "reviewpay", ProductKey: "ultra",
 		ExpectedAmount: "500.00", Currency: "BDT",
 		ClientPlatform: "web", ReturnURL: "https://demo.rosna.menu/plans",
-		MetadataJSON:  `{"software_name":"Rosna","item_label":"Pro","logo_url":"https://cdn.example/rosna.png","logo_bad":"javascript:alert(1)"}`,
+		MetadataJSON:  `{"software_name":"Rosna","item_label":"Pro","logo_url":"https://cdn.example/rosna.png","logo_bad":"javascript:alert(1)","seller_name":"Northwind","seller_logo":"javascript:alert(1)","account_logo":"https://cdn.example/tenant.png"}`,
 		DeferProvider: true,
 	})
 	if err != nil {

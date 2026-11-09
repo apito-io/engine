@@ -179,13 +179,21 @@ func ReviewArgs(tx *models.PaymentTransaction, notice string) map[string]interfa
 	}
 	view["item"] = item
 	view["status"] = tx.Status
-	for _, key := range []string{"software_name", "item_label", "item_detail", "account_name"} {
+	for _, key := range []string{
+		"software_name", "item_label", "item_detail", "account_name",
+		"seller_name", "seller_address", "seller_phone", "seller_extra",
+	} {
 		if value := metadataString(tx, key); value != "" {
 			view[key] = value
 		}
 	}
-	if logo := httpsLogoURL(metadataString(tx, "logo_url")); logo != "" {
-		view["logo_url"] = logo
+	for _, key := range []string{"logo_url", "seller_logo", "account_logo"} {
+		if logo := httpsLogoURL(metadataString(tx, key)); logo != "" {
+			view[key] = logo
+		}
+	}
+	if label := providerReviewLabel(tx.Provider); label != "" {
+		view["provider_label"] = label
 	}
 	if ref := strings.TrimSpace(tx.ClientReference); ref != "" {
 		view["reference"] = ref
@@ -199,6 +207,15 @@ func ReviewArgs(tx *models.PaymentTransaction, notice string) map[string]interfa
 		view["proceed_path"] = proceedPath(tx)
 	}
 	return view
+}
+
+// providerReviewLabel is the name the plugin declared for itself.
+func providerReviewLabel(providerID string) string {
+	_, contrib, ok := plugin.LookupPaymentProvider(strings.ToLower(strings.TrimSpace(providerID)))
+	if !ok {
+		return ""
+	}
+	return strings.TrimSpace(contrib.Label)
 }
 
 // RenderReview asks the provider plugin for the public checkout page.
