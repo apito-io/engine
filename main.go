@@ -34,8 +34,6 @@ func main() {
 	if err != nil {
 		panic(fmt.Sprintf("Failed to load configuration: %v", err))
 	}
-	models.ApplyPluginUploadPolicy(&cfg)
-
 	cfg.DriverFactory = odfactory.NewDefaultFactory()
 	cfg.CacheFactory = odfactory.NewDefaultCacheFactory()
 	cfg.KVFactory = odfactory.NewDefaultKVFactory()

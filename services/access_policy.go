@@ -245,6 +245,7 @@ var systemGraphQLFieldAliases = map[string]string{
 	"cancelTenantSubscription":            authz.CapTenantsWrite,
 	"deleteTenantSubscription":            authz.CapTenantsWrite,
 	"createTenantInvoice":                 authz.CapTenantsWrite,
+	"deleteTenantInvoice":                 authz.CapTenantsWrite,
 	"markInvoicePaid":                     authz.CapTenantsWrite,
 	"searchPlatformAccounts":              authz.CapMembersRead,
 	"previewSchemaVersionRevert":          authz.CapSchemaRead,

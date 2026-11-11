@@ -239,7 +239,7 @@ func TestSystemGraphQLCapabilityBindingsCoverRegisteredRoots(t *testing.T) {
 		"restoreBackup", "listTenantSubscribers", "listTenantInvoices",
 		"getProjectPaymentProviders", "createTenantSubscription",
 		"updateTenantSubscription", "cancelTenantSubscription", "deleteTenantSubscription", "markInvoicePaid",
-		"createTenantInvoice", "updateProjectPaymentProviders", "searchPartners",
+		"createTenantInvoice", "deleteTenantInvoice", "updateProjectPaymentProviders", "searchPartners",
 		"listPartnerProjectRates", "upsertPartnerProjectRate", "createPartner",
 		"updatePartner", "getInvoiceProfile", "updateInvoiceProfile",
 		"searchPlatformAccounts", "slowQueryLogs", "searchSystemLogs", "systemLog",
