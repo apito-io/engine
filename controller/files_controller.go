@@ -64,17 +64,17 @@ func (g *graphqlProjectFilesResolver) GetProjectFilesStore(ctx context.Context) 
 
 // FilesController handles /secured/files REST endpoints.
 type FilesController struct {
-	Cfg           *models.Config
-	cacheProvider applicationCacheProvider
+	Cfg            *models.Config
+	cacheProvider  applicationCacheProvider
 	driverResolver projectDriverResolver
-	Storage       func(project *models.Project, cfg *models.Config) (ObjectUploader, error)
+	Storage        func(project *models.Project, cfg *models.Config) (ObjectUploader, error)
 }
 
 // NewFilesController creates a FilesController with default S3 storage factory.
 func NewFilesController(cfg *models.Config, server *resolver.GraphQLServer) *FilesController {
 	return &FilesController{
-		Cfg:           cfg,
-		cacheProvider: server,
+		Cfg:            cfg,
+		cacheProvider:  server,
 		driverResolver: &graphqlProjectFilesResolver{exec: server.GraphQLExecutor},
 		Storage: func(project *models.Project, cfg *models.Config) (ObjectUploader, error) {
 			return storage.NewProjectS3Storage(project, cfg)
@@ -166,17 +166,6 @@ func (fc *FilesController) Upload(c echo.Context) error {
 		return fc.jsonError(c, http.StatusBadRequest, "file exceeds maximum upload size")
 	}
 
-	if models.UseFreeCloudStorageEffective(cache.Project) {
-		currentBytes, err := store.SumProjectFilesSize(dbCtx)
-		if err != nil {
-			return fc.jsonError(c, http.StatusInternalServerError, "could not verify storage usage")
-		}
-		limitBytes := models.FreeCloudStorageLimitBytes(fc.Cfg)
-		if currentBytes+upload.Size > limitBytes {
-			return fc.jsonError(c, http.StatusForbidden, ae.MEDIA_STORAGE_LIMIT_REACHED)
-		}
-	}
-
 	fileType := strings.TrimSpace(c.FormValue("file_type"))
 	src, err := upload.Open()
 	if err != nil {
@@ -187,6 +176,19 @@ func (fc *FilesController) Upload(c echo.Context) error {
 	body, err := io.ReadAll(src)
 	if err != nil {
 		return fc.jsonError(c, http.StatusBadRequest, "could not read uploaded file")
+	}
+	size := int64(len(body))
+	if size > defaultMaxUploadBytes {
+		return fc.jsonError(c, http.StatusBadRequest, "file exceeds maximum upload size")
+	}
+	if models.UseFreeCloudStorageEffective(cache.Project) {
+		currentBytes, err := store.SumProjectFilesSize(dbCtx)
+		if err != nil {
+			return fc.jsonError(c, http.StatusInternalServerError, "could not verify storage usage")
+		}
+		if currentBytes+size > models.FreeCloudStorageLimitBytes(fc.Cfg) {
+			return fc.jsonError(c, http.StatusForbidden, ae.MEDIA_STORAGE_LIMIT_REACHED)
+		}
 	}
 
 	contentType, ext := models.ResolveUploadMIME(upload.Filename, upload.Header.Get("Content-Type"), body)
@@ -218,9 +220,12 @@ func (fc *FilesController) Upload(c echo.Context) error {
 		return fc.jsonError(c, http.StatusBadRequest, err.Error())
 	}
 
-	publicURL, err := objStore.Upload(dbCtx, storageKey, bytes.NewReader(body), contentType, upload.Size)
+	publicURL, err := objStore.Upload(dbCtx, storageKey, bytes.NewReader(body), contentType, size)
 	if err != nil {
 		return fc.jsonError(c, http.StatusInternalServerError, "upload to storage failed")
+	}
+	if cdnURL := fc.freeCloudObjectURL(cache.Project, storageKey); cdnURL != "" {
+		publicURL = cdnURL
 	}
 
 	now := utility.GetCurrentTime()
@@ -241,7 +246,7 @@ func (fc *FilesController) Upload(c echo.Context) error {
 		FileName:      baseName,
 		FileExtension: ext,
 		ContentType:   contentType,
-		Size:          upload.Size,
+		Size:          size,
 		StorageKey:    storageKey,
 		URL:           publicURL,
 		CreatedBy:     userID,
@@ -309,16 +314,36 @@ func (fc *FilesController) List(c echo.Context) error {
 		return fc.jsonError(c, http.StatusInternalServerError, err.Error())
 	}
 
-	files := make([]systemFileJSON, 0, len(resp.Results))
-	for _, f := range resp.Results {
-		files = append(files, toSystemFileJSON(f))
+	publicBase := ""
+	if cache.Project != nil {
+		if resolved, err := models.ResolveProjectStorageConfig(cache.Project, fc.Cfg); err == nil {
+			publicBase = resolved.PublicBaseURL
+		}
 	}
 
-	return c.JSON(http.StatusOK, map[string]interface{}{
+	files := make([]systemFileJSON, 0, len(resp.Results))
+	for _, f := range resp.Results {
+		shown := f
+		if url := models.PublicObjectURL(publicBase, f.StorageKey); url != "" && models.UseFreeCloudStorageEffective(cache.Project) {
+			copied := *f
+			copied.URL = url
+			shown = &copied
+		}
+		files = append(files, toSystemFileJSON(shown))
+	}
+
+	out := map[string]interface{}{
 		"success": true,
 		"files":   files,
 		"total":   resp.Total,
-	})
+	}
+	if models.UseFreeCloudStorageEffective(cache.Project) {
+		if used, err := store.SumProjectFilesSize(dbCtx); err == nil {
+			out["storage_used_bytes"] = used
+			out["storage_limit_bytes"] = models.FreeCloudStorageLimitBytes(fc.Cfg)
+		}
+	}
+	return c.JSON(http.StatusOK, out)
 }
 
 type deleteFilesRequest struct {
@@ -396,6 +421,17 @@ func (fc *FilesController) Delete(c echo.Context) error {
 		out["message"] = "some objects could not be removed from storage"
 	}
 	return c.JSON(http.StatusOK, out)
+}
+
+func (fc *FilesController) freeCloudObjectURL(project *models.Project, storageKey string) string {
+	if !models.UseFreeCloudStorageEffective(project) {
+		return ""
+	}
+	resolved, err := models.ResolveProjectStorageConfig(project, fc.Cfg)
+	if err != nil {
+		return ""
+	}
+	return models.PublicObjectURL(resolved.PublicBaseURL, storageKey)
 }
 
 func sanitizeFileBaseName(name string) string {

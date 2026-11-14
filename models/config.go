@@ -130,6 +130,7 @@ type Config struct {
 	FreeCloudDefaultS3Endpoint       string  `env:"FREE_CLOUD_DEFAULT_S3_ENDPOINT" env-default:""`
 	FreeCloudDefaultS3BucketName     string  `env:"FREE_CLOUD_DEFAULT_S3_BUCKET_NAME" env-default:""`
 	FreeCloudDefaultS3PublicBaseURL  string  `env:"FREE_CLOUD_DEFAULT_S3_PUBLIC_BASE_URL" env-default:""`
+	FreeCloudDefaultCDNURL           string  `env:"FREE_CLOUD_DEFAULT_CDN_URL" env-default:""`
 	FreeCloudDefaultS3ForcePathStyle bool    `env:"FREE_CLOUD_DEFAULT_S3_FORCE_PATH_STYLE" env-default:"true"`
 	FreeCloudStorageLimitGB          float64 `env:"FREE_CLOUD_STORAGE_LIMIT_GB" env-default:"0.5"`
 

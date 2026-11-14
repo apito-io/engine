@@ -34,7 +34,7 @@ func ResolveProjectStorageConfig(project *Project, cfg *Config) (*ProjectStorage
 		out.Bucket = strings.TrimSpace(cfg.FreeCloudDefaultS3BucketName)
 		out.AccessKeyID = strings.TrimSpace(cfg.FreeCloudDefaultS3AccessKey)
 		out.SecretAccessKey = strings.TrimSpace(cfg.FreeCloudDefaultS3SecretKey)
-		out.PublicBaseURL = strings.TrimSpace(cfg.FreeCloudDefaultS3PublicBaseURL)
+		out.PublicBaseURL = freeCloudPublicBase(cfg)
 		out.ForcePathStyle = cfg.FreeCloudDefaultS3ForcePathStyle
 		return out, nil
 	}
@@ -57,4 +57,25 @@ func ResolveProjectStorageConfig(project *Project, cfg *Config) (*ProjectStorage
 		return nil, errors.New("custom storage is not fully configured")
 	}
 	return out, nil
+}
+
+// freeCloudPublicBase prefers the CDN host. The S3 public base is the fallback when the CDN URL is empty.
+func freeCloudPublicBase(cfg *Config) string {
+	if cfg == nil {
+		return ""
+	}
+	if cdn := strings.TrimSpace(cfg.FreeCloudDefaultCDNURL); cdn != "" {
+		return strings.TrimRight(cdn, "/")
+	}
+	return strings.TrimRight(strings.TrimSpace(cfg.FreeCloudDefaultS3PublicBaseURL), "/")
+}
+
+// PublicObjectURL joins a public base and an object key. The bucket name stays out of the path.
+func PublicObjectURL(publicBase, key string) string {
+	base := strings.TrimRight(strings.TrimSpace(publicBase), "/")
+	objectKey := strings.TrimLeft(strings.TrimSpace(key), "/")
+	if base == "" || objectKey == "" {
+		return ""
+	}
+	return base + "/" + objectKey
 }

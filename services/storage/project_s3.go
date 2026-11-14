@@ -126,8 +126,8 @@ func TenantObjectPrefix(projectID, tenantID string) (string, error) {
 
 // PublicURL builds the object URL from PublicBaseURL or endpoint/bucket/key.
 func (s *ProjectS3Storage) PublicURL(key string) string {
-	if s.publicBaseURL != "" {
-		return s.publicBaseURL + "/" + strings.TrimLeft(key, "/")
+	if url := models.PublicObjectURL(s.publicBaseURL, key); url != "" {
+		return url
 	}
 	if s.forcePathStyle && s.client.Options().BaseEndpoint != nil {
 		base := strings.TrimRight(*s.client.Options().BaseEndpoint, "/")

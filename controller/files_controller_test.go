@@ -3,6 +3,7 @@ package controller
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"io"
 	"mime/multipart"
 	"net/http"
@@ -280,4 +281,99 @@ func TestFilesControllerList(t *testing.T) {
 	c := e.NewContext(req, rec)
 	require.NoError(t, fc.List(c))
 	require.Equal(t, http.StatusOK, rec.Code)
+}
+
+func freeCloudFilesConfig() *models.Config {
+	return &models.Config{
+		FreeCloudDefaultS3AccessKey:  "key",
+		FreeCloudDefaultS3SecretKey:  "secret",
+		FreeCloudDefaultS3Endpoint:   "https://account.r2.cloudflarestorage.com",
+		FreeCloudDefaultS3BucketName: "apito-free-storage",
+		FreeCloudDefaultCDNURL:       "https://cdn.apito.io",
+	}
+}
+
+func TestFilesControllerUploadFreeCloudRejectsAtLimit(t *testing.T) {
+	e := echo.New()
+	body := &bytes.Buffer{}
+	w := multipart.NewWriter(body)
+	part, err := w.CreateFormFile("file", "photo.png")
+	require.NoError(t, err)
+	_, err = part.Write([]byte{0x89, 0x50, 0x4e, 0x47})
+	require.NoError(t, err)
+	require.NoError(t, w.Close())
+
+	cfg := freeCloudFilesConfig()
+	db := &mockProjectFilesDB{files: []*models.ProjectFile{{
+		ID: "full", ProjectID: "proj-1", Size: models.FreeCloudStorageLimitBytes(cfg),
+	}}}
+	uploader := &mockUploader{}
+	fc := &FilesController{
+		Cfg: cfg,
+		cacheProvider: &stubCacheProvider{cache: &models.ApplicationCache{
+			Ctx: context.Background(),
+			Project: &models.Project{
+				ID: "proj-1",
+				StorageSettings: &models.StorageSettings{
+					UseFreeCloudStorage: models.BoolPtr(true),
+				},
+			},
+		}},
+		driverResolver: &stubProjectDriverResolver{store: db},
+		Storage: func(project *models.Project, cfg *models.Config) (ObjectUploader, error) {
+			return uploader, nil
+		},
+	}
+
+	req := httptest.NewRequest(http.MethodPost, "/secured/files/upload", body)
+	req.Header.Set(echo.HeaderContentType, w.FormDataContentType())
+	rec := httptest.NewRecorder()
+	c := e.NewContext(req, rec)
+	require.NoError(t, fc.Upload(c))
+	require.Equal(t, http.StatusForbidden, rec.Code)
+	require.Contains(t, rec.Body.String(), "media storage limit reached")
+	require.Empty(t, uploader.uploaded)
+	require.Len(t, db.files, 1)
+}
+
+func TestFilesControllerListRewritesFreeCloudURL(t *testing.T) {
+	e := echo.New()
+	const key = "apito_website/media/01M7B9ZGZM0Q1759ZHYE8WK3X3.jpg"
+	db := &mockProjectFilesDB{files: []*models.ProjectFile{{
+		ID: "f1", ProjectID: "apito_website", FileType: models.SystemFileTypeMedia,
+		FileName: "photo", FileExtension: "jpg", Size: 43520,
+		StorageKey: key,
+		URL:        "https://account.r2.cloudflarestorage.com/apito-free-storage/" + key,
+	}}}
+	fc := &FilesController{
+		Cfg: freeCloudFilesConfig(),
+		cacheProvider: &stubCacheProvider{cache: &models.ApplicationCache{
+			Ctx: context.Background(),
+			Project: &models.Project{
+				ID: "apito_website",
+				StorageSettings: &models.StorageSettings{
+					UseFreeCloudStorage: models.BoolPtr(true),
+				},
+			},
+		}},
+		driverResolver: &stubProjectDriverResolver{store: db},
+	}
+	req := httptest.NewRequest(http.MethodGet, "/secured/files/list", nil)
+	rec := httptest.NewRecorder()
+	c := e.NewContext(req, rec)
+	require.NoError(t, fc.List(c))
+	require.Equal(t, http.StatusOK, rec.Code)
+
+	var payload struct {
+		Files []struct {
+			URL string `json:"url"`
+		} `json:"files"`
+		StorageUsedBytes  int64 `json:"storage_used_bytes"`
+		StorageLimitBytes int64 `json:"storage_limit_bytes"`
+	}
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &payload))
+	require.Equal(t, "https://cdn.apito.io/"+key, payload.Files[0].URL)
+	require.Equal(t, int64(43520), payload.StorageUsedBytes)
+	require.Equal(t, models.FreeCloudStorageLimitBytes(fc.Cfg), payload.StorageLimitBytes)
+	require.Contains(t, db.files[0].URL, ".r2.cloudflarestorage.com")
 }
