@@ -18,7 +18,6 @@ import (
 
 	"github.com/apito-io/engine/models"
 	pluginService "github.com/apito-io/engine/services/plugin"
-	"github.com/apito-io/engine/utility"
 	"github.com/apito-io/types/protobuff"
 	"github.com/hashicorp/go-hclog"
 	hcplugin "github.com/hashicorp/go-plugin"
@@ -200,8 +199,6 @@ func (s *GraphQLServer) LoadHashiCorpPlugins(ctx context.Context) error {
 		return fmt.Errorf("failed to create plugin directory: %w", err)
 	}
 
-	var loadedPlugins []*protobuff.PluginDetails
-
 	// Load plugins based on registry entries instead of directory scanning
 	for pluginName, pluginDetails := range _hashiCorpPlugins {
 
@@ -243,11 +240,8 @@ func (s *GraphQLServer) LoadHashiCorpPlugins(ctx context.Context) error {
 
 				_pluginDetails.EnvVars = append(_pluginDetails.EnvVars, envs...) */
 
-				loadedPlugin, err := s.LoadHashiCorpPlugin(context.Background(), dir, _pluginDetails)
-				if err != nil {
+				if _, err := s.LoadHashiCorpPlugin(context.Background(), dir, _pluginDetails); err != nil {
 					errs = append(errs, err)
-				} else {
-					loadedPlugins = append(loadedPlugins, loadedPlugin)
 				}
 
 				return errs
@@ -515,9 +509,7 @@ func (s *GraphQLServer) LoadHashiCorpPlugin(ctx context.Context, _dir string, _p
 		return nil, fmt.Errorf("%s schema/API registration failed: %w", pluginID, err)
 	}
 
-	if !utility.ArrayContains(s.InstalledHCPluginList, pluginID) {
-		s.InstalledHCPluginList = append(s.InstalledHCPluginList, pluginID)
-	}
+	s.addInstalledHCPlugin(pluginID)
 
 	s.Lock()
 	_pluginDetails.LoadStatus = protobuff.PluginLoadStatus_PLUGIN_LOAD_STATUS_LOADED
@@ -547,34 +539,13 @@ func (s *GraphQLServer) registerPluginSchemaAndAPIs(ctx context.Context, plugin 
 			return fmt.Errorf("failed to convert plugin schemas: %w", err)
 		}
 
-		// Register queries
-		if convertedSchemas.Queries != nil {
-			for k, v := range convertedSchemas.Queries {
-				queryKey := DEFAULT_INTERNAL_PREFIX + "_" + k
-				if pluginService.HasCapability(pluginDetails.Id, pluginService.CapSystemGraphQL) {
-					if val := s.SystemQueries[queryKey]; val == nil {
-						fmt.Printf("--> Registering plugin schema from %s query `%s` to system schema\n", pluginDetails.Id, k)
-						s.SystemQueries[queryKey] = v
-						continue
-					}
-					fmt.Printf("the query '%s' on '%s' already found on another plugin. please change the id. ignoring this query\n", k, pluginDetails.Id)
-				}
-			}
-		}
-
-		// Register mutations
-		if convertedSchemas.Mutations != nil {
-			for k, v := range convertedSchemas.Mutations {
-				mutationKey := DEFAULT_INTERNAL_PREFIX + "_" + k
-				if pluginService.HasCapability(pluginDetails.Id, pluginService.CapSystemGraphQL) {
-					if val := s.SystemMutations[mutationKey]; val == nil {
-						fmt.Printf("--> Registering plugin schema from %s mutation `%s` to system schema\n", pluginDetails.Id, k)
-						s.SystemMutations[mutationKey] = v
-						continue
-					}
-					fmt.Printf("the mutation '%s' on '%s' already found on another plugin. please change the id. ignoring this mutation\n", k, pluginDetails.Id)
-				}
-			}
+		// Register queries and mutations into the system schema. Plugin load
+		// goroutines run concurrently and requests read these maps, so the
+		// merge goes through the copy-on-write helper.
+		if pluginService.HasCapability(pluginDetails.Id, pluginService.CapSystemGraphQL) {
+			s.mergePluginSystemFields(pluginDetails.Id,
+				prefixSystemFieldKeys(convertedSchemas.Queries),
+				prefixSystemFieldKeys(convertedSchemas.Mutations))
 		}
 	}
 
@@ -588,32 +559,25 @@ func (s *GraphQLServer) registerPluginSchemaAndAPIs(ctx context.Context, plugin 
 		// Convert protobuf APIs to REST routes
 		convertedAPIs := pluginService.ConvertProtoRestApisToLocal(pluginAPIs)
 
-		// Register routes with the extension router
+		// Register routes on the plugin REST router (never on the live Echo
+		// router: this also runs on hot reload while requests are served).
 		for _, route := range convertedAPIs {
 			path := "/" + pluginDetails.Id + route.Path
 			if pluginService.HasCapability(pluginDetails.Id, pluginService.CapSystemREST) &&
 				!pluginService.HasCapability(pluginDetails.Id, pluginService.CapProjectREST) {
 				path = "/" + route.Path
 			}
-			if !utility.ArrayContains(s.ExtensionRouterList, path) {
-				fmt.Printf("--> Registering plugin REST API %s %s to system routes\n", route.Method, path)
+			fmt.Printf("--> Registering plugin REST API %s %s to system routes\n", route.Method, path)
 
-				// Create a handler that will call the plugin
-				handler := s.createPluginAPIHandler(pluginDetails.Id, route)
+			// Create a handler that will call the plugin
+			handler := s.createPluginAPIHandler(pluginDetails.Id, route)
 
-				// Register the route with the echo router
-				s.ExtensionRouter.Add(route.Method, path, handler)
-				s.ExtensionRouterList = append(s.ExtensionRouterList, path)
-
-				fmt.Printf("--> Plugin REST API registered %s %s to system routes\n", route.Method, path)
-			} else {
-				fmt.Printf("--> Plugin REST API already registered %s %s to system routes\n", route.Method, path)
+			if ok, owner := s.pluginREST.register(pluginDetails.Id, route.Method, path, handler); !ok {
+				fmt.Printf("--> Plugin REST API %s %s already registered by %s, ignoring\n", route.Method, path, owner)
+				continue
 			}
+			fmt.Printf("--> Plugin REST API registered %s %s to system routes\n", route.Method, path)
 		}
-
-		// Show all registered Echo routes including plugin routes
-		fmt.Printf("\n🔌 [PLUGIN-LOADER] Plugin REST APIs registered, showing all Echo routes:\n")
-		s.PrintAllPluginRoutes()
 	}
 
 	pluginService.MergeRuntimeContributions(pluginDetails.Id, pluginService.SnapshotRuntimeAPI(pluginSchemas, pluginAPIs))

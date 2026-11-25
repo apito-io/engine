@@ -15,12 +15,16 @@ func (s *GraphQLServer) Config() *models.Config {
 	return s.Cfg
 }
 
+// GetSystemQueries returns the current system query fields (read-only).
 func (s *GraphQLServer) GetSystemQueries() graphql.Fields {
-	return s.SystemQueries
+	queries, _ := s.SystemFieldsSnapshot()
+	return queries
 }
 
+// GetSystemMutations returns the current system mutation fields (read-only).
 func (s *GraphQLServer) GetSystemMutations() graphql.Fields {
-	return s.SystemMutations
+	_, mutations := s.SystemFieldsSnapshot()
+	return mutations
 }
 
 func (s *GraphQLServer) GetExtensionRouter() *echo.Group {
@@ -28,7 +32,7 @@ func (s *GraphQLServer) GetExtensionRouter() *echo.Group {
 }
 
 func (s *GraphQLServer) RegisterPluginID(id string) {
-	s.InstalledHCPluginList = append(s.InstalledHCPluginList, id)
+	s.addInstalledHCPlugin(id)
 }
 
 func (s *GraphQLServer) PluginIDs() []string {

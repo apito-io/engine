@@ -43,15 +43,19 @@ func SystemSchema(ctx context.Context, graphqlRequest *models.GraphQLIncomingReq
 		},
 	}*/
 
+	// Plugins can add fields while requests are served; take a consistent
+	// read-only snapshot instead of reading the live maps.
+	systemQueries, systemMutations := server.SystemFieldsSnapshot()
+
 	schema, err := graphql.NewSchema(
 		graphql.SchemaConfig{
 			Query: graphql.NewObject(graphql.ObjectConfig{
 				Name:   "QueryType",
-				Fields: server.SystemQueries,
+				Fields: systemQueries,
 			}),
 			Mutation: graphql.NewObject(graphql.ObjectConfig{
 				Name:   "MutationQuery",
-				Fields: server.SystemMutations,
+				Fields: systemMutations,
 			}),
 			Types: []graphql.Type{
 				scaler.ScalarJSON,

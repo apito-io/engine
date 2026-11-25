@@ -111,6 +111,7 @@ func InitRouter(cfg *models.Config) (*echo.Echo, error) {
 
 	fmt.Println(" ---> waiting for plugins to finish loading <--- ")
 	server.WaitForPluginsToLoad()
+	server.PrintAllPluginRoutes()
 
 	fmt.Println(" ---> initializing plugin health monitor <--- ")
 	host.StartMonitoring(ctx, concreteServer)

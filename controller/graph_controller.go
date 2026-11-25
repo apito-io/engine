@@ -922,11 +922,12 @@ func (g *GraphCtrl) SystemGraphQL(i echo.Context) error {
 	// resolver/admin gates and bootstrap policy; dynamic plugin roots must not
 	// make those callers fail closed merely because they are not apt_ bindings.
 	if g.gqlServer != nil && services.PrincipalFromEcho(i) != nil {
-		roots := make([]string, 0, len(g.gqlServer.SystemQueries)+len(g.gqlServer.SystemMutations))
-		for name := range g.gqlServer.SystemQueries {
+		systemQueries, systemMutations := g.gqlServer.SystemFieldsSnapshot()
+		roots := make([]string, 0, len(systemQueries)+len(systemMutations))
+		for name := range systemQueries {
 			roots = append(roots, name)
 		}
-		for name := range g.gqlServer.SystemMutations {
+		for name := range systemMutations {
 			roots = append(roots, name)
 		}
 		if err := services.ValidateSystemGraphQLCapabilityBindings(roots); err != nil {

@@ -89,6 +89,11 @@ type GraphQLServer struct {
 	PrivateSchemObjects *objects.SchemaObjects
 	SystemDataloaders   *dl.SystemDataloader
 
+	// SystemQueries/SystemMutations are copy-on-write: writers publish a new
+	// map under systemFieldsMu (mergeSystemFields), readers take the current
+	// pointers via SystemFieldsSnapshot. A published map is never mutated.
+	systemFieldsMu      sync.RWMutex
+	systemFieldOwners   map[string]string // "query:<key>"/"mutation:<key>" -> plugin ID
 	SystemQueries       graphql.Fields
 	SystemQueriesChan   chan *graphql.Fields
 	SystemMutations     graphql.Fields
@@ -126,12 +131,19 @@ type GraphQLServer struct {
 	// Connection pool monitoring
 	ConnectionMonitor *database.ConnectionMonitor // Health monitoring for database connections
 
-	InstalledPluginList   []string
+	InstalledPluginList []string
+
+	// pluginRegistryMu guards InstalledHCPluginList; use the installedHCPlugin
+	// helpers rather than touching the slice directly.
+	pluginRegistryMu      sync.RWMutex
 	InstalledHCPluginList []string
 
-	ExtensionRouterList []string
-	ExtensionRouter     *echo.Group
-	MainEchoInstance    *echo.Echo // Reference to the main Echo instance for route introspection
+	ExtensionRouter  *echo.Group
+	MainEchoInstance *echo.Echo // Reference to the main Echo instance for route introspection
+
+	// pluginREST holds every plugin REST route behind one catch-all route on
+	// ExtensionRouter, so the main Echo router is never mutated after startup.
+	pluginREST *pluginRESTRouter
 
 	//LocalPluginGraphQLSchemas chan *extensions.ThirdPartyGraphQLSchemas
 	//LocalPluginRoutes chan []*extensions.ThirdPartyRESTApi
@@ -176,10 +188,10 @@ func BuildGraphQL(ctx context.Context, cfg *models.Config, extensionRouter *echo
 		Mailer:      services.NewEmailSender(cfg),
 
 		//GraphQLExecutor:    _executor,
-		ProjectDBConnPools:  &sync.Map{},
-		ExtensionRouterList: []string{},
-		ExtensionRouter:     extensionRouter,
-		MainEchoInstance:    mainEcho,
+		ProjectDBConnPools: &sync.Map{},
+		ExtensionRouter:    extensionRouter,
+		MainEchoInstance:   mainEcho,
+		pluginREST:         newPluginRESTRouter(),
 
 		HashiCorpPluginCache: make(map[string]*models.HashiCorpPluginCache),
 
@@ -224,6 +236,12 @@ func BuildGraphQL(ctx context.Context, cfg *models.Config, extensionRouter *echo
 	// Initialize SystemQueries and SystemMutations as empty maps to prevent nil panic
 	srv.SystemQueries = make(graphql.Fields)
 	srv.SystemMutations = make(graphql.Fields)
+
+	// All plugin REST routes are served through one catch-all route mounted
+	// once, before the server starts; see pluginRESTRouter.
+	if extensionRouter != nil {
+		extensionRouter.Any("/*", srv.pluginREST.dispatch)
+	}
 
 	srv.wg.Add(1) // global wg
 
@@ -320,14 +338,10 @@ func BuildGraphQL(ctx context.Context, cfg *models.Config, extensionRouter *echo
 			select {
 			case _systemQuery := <-srv.SystemQueriesChan:
 				// Merge new queries into existing map instead of replacing
-				for k, v := range *_systemQuery {
-					srv.SystemQueries[k] = v
-				}
+				srv.overwriteSystemFields(*_systemQuery, nil)
 			case _mutationQuery := <-srv.SystemMutationsChan:
 				// Merge new mutations into existing map instead of replacing
-				for k, v := range *_mutationQuery {
-					srv.SystemMutations[k] = v
-				}
+				srv.overwriteSystemFields(nil, *_mutationQuery)
 			}
 		}
 	}()
@@ -547,21 +561,13 @@ func (s *GraphQLServer) RefreshProjectAndReCache(ctx context.Context, projectID 
 }
 
 func (s *GraphQLServer) GetFunctionProvider() ([]string, error) {
-	var providers []string
 	// Only return HashiCorp plugins
-	for _, pluginId := range s.InstalledHCPluginList {
-		providers = append(providers, pluginId)
-	}
-	return providers, nil
+	return s.installedHCPluginIDs(), nil
 }
 
 func (s *GraphQLServer) GetStorageProvider() ([]string, error) {
-	var providers []string
 	// Only return HashiCorp plugins
-	for _, pluginId := range s.InstalledHCPluginList {
-		providers = append(providers, pluginId)
-	}
-	return providers, nil
+	return s.installedHCPluginIDs(), nil
 }
 
 /*func (s *GraphQLServer) GetParam(router echo.Context) (*shared.CommonSystemParams, error) {
@@ -1228,32 +1234,14 @@ func (s *GraphQLServer) errorHandler(router echo.Context, response *models.HttpR
 	router.JSON(int(response.Code), response)
 }
 
-// PrintAllPluginRoutes prints only plugin routes from both main Echo instance and extension router
-// Plugin routes are identified by paths that start with HashiCorp plugin IDs (hc-*)
+// PrintAllPluginRoutes prints the plugin REST routes served under the
+// extension group. Safe to call at any time; it reads a locked snapshot.
 func (s *GraphQLServer) PrintAllPluginRoutes() {
-	// Collect routes from both main instance and extension router
-	allRoutes := s.MainEchoInstance.Routes()
-
-	// Filter to show only plugin routes
-	pluginRoutes := make([]*echo.Route, 0)
-	for _, route := range allRoutes {
-		// Plugin routes start with /{pluginID}/ where pluginID typically starts with "hc-"
-		if s.isPluginRoute(route.Path) {
-			pluginRoutes = append(pluginRoutes, route)
-		}
-	}
-
-	// Also check the extension router list for registered plugin paths
-	if len(pluginRoutes) == 0 && len(s.ExtensionRouterList) > 0 {
-		fmt.Printf("🔌 Plugin Routes (%d routes from ExtensionRouter):\n", len(s.ExtensionRouterList))
-		fmt.Printf("%s\n", strings.Repeat("-", 50))
-
-		for i, routePath := range s.ExtensionRouterList {
-			fmt.Printf("%2d. %-6s %s\n", i+1, "N/A", routePath)
-		}
+	if s.pluginREST == nil {
+		fmt.Printf("❌ No plugin routes found\n")
 		return
 	}
-
+	pluginRoutes := s.pluginREST.routes()
 	if len(pluginRoutes) == 0 {
 		fmt.Printf("❌ No plugin routes found\n")
 		return
@@ -1263,44 +1251,8 @@ func (s *GraphQLServer) PrintAllPluginRoutes() {
 	fmt.Printf("%s\n", strings.Repeat("-", 50))
 
 	for i, route := range pluginRoutes {
-		fmt.Printf("%2d. %-6s %s", i+1, route.Method, route.Path)
-		if route.Name != "" {
-			fmt.Printf(" (name: %s)", route.Name)
-		}
-		fmt.Printf("\n")
+		fmt.Printf("%2d. %-6s %s (plugin: %s)\n", i+1, route.Method, route.Path, route.PluginID)
 	}
-}
-
-// isPluginRoute checks if a route path belongs to a plugin
-// Plugin routes are registered with pattern /{pluginID}{route.Path}
-// Most HashiCorp plugins start with "hc-" prefix
-func (s *GraphQLServer) isPluginRoute(path string) bool {
-	// Remove leading slash and split by slash to get first segment
-	if !strings.HasPrefix(path, "/") {
-		return false
-	}
-
-	pathParts := strings.Split(strings.TrimPrefix(path, "/"), "/")
-	if len(pathParts) == 0 {
-		return false
-	}
-
-	firstSegment := pathParts[0]
-
-	// Check if the first segment matches known plugin patterns
-	// HashiCorp plugins typically start with "hc-"
-	if strings.HasPrefix(firstSegment, "hc-") {
-		return true
-	}
-
-	// Also check against the list of installed HashiCorp plugins
-	for _, pluginID := range s.InstalledHCPluginList {
-		if firstSegment == pluginID {
-			return true
-		}
-	}
-
-	return false
 }
 
 // WaitForPluginsToLoad waits for all plugins to finish loading

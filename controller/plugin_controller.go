@@ -485,17 +485,8 @@ func (pc *PluginV2Controller) stopPlugin(pluginID string) error {
 	// Remove from cache
 	pc.Server.RemoveHashiCorpPlugin(pluginID)
 
-	pc.Server.Lock()
-	defer pc.Server.Unlock()
-
 	// Remove from installed plugin list
-	var updatedList []string
-	for _, id := range pc.Server.InstalledHCPluginList {
-		if id != pluginID {
-			updatedList = append(updatedList, id)
-		}
-	}
-	pc.Server.InstalledHCPluginList = updatedList
+	pc.Server.RemoveInstalledHCPlugin(pluginID)
 
 	return nil
 }
