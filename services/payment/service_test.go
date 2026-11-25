@@ -269,8 +269,8 @@ func TestReturnURLStaysOffThePlugin(t *testing.T) {
 	if strings.Contains(page, "ZgotmplZ") || !strings.Contains(page, "kisti://payment/return") {
 		t.Fatalf("app link was stripped: %s", page)
 	}
-	if !strings.Contains(page, "intent://payment/return") || !strings.Contains(page, "scheme=kisti") {
-		t.Fatalf("android intent missing: %s", page)
+	if !strings.Contains(page, `content="0;url=kisti://payment/return`) || strings.Contains(page, "intent://") {
+		t.Fatalf("return must refresh to the configured url: %s", page)
 	}
 	tx.Status = StatusSucceeded
 	okPage := RenderResultPage(tx)
@@ -331,8 +331,11 @@ func TestLocalHTTPReturnURL(t *testing.T) {
 		MetadataJSON: `{"return_url":"kisti://payment/return"}`,
 	}
 	appPage := RenderResultPage(app)
-	if strings.Contains(appPage, "location.assign") {
-		t.Fatalf("app scheme must stay a tap: %s", appPage)
+	if strings.Contains(appPage, "location.assign") || strings.Contains(appPage, "preventDefault") || strings.Contains(appPage, "intent://") {
+		t.Fatalf("app return must be the configured url, not a browser-specific link: %s", appPage)
+	}
+	if !strings.Contains(appPage, `http-equiv="refresh"`) || !strings.Contains(appPage, "kisti://payment/return") {
+		t.Fatalf("app return must refresh to the configured url: %s", appPage)
 	}
 }
 
