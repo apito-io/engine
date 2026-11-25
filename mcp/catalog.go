@@ -19,18 +19,55 @@ type Tool struct {
 }
 
 func (t Tool) schema() map[string]any {
-	return map[string]any{
-		"type": "object",
-		"properties": map[string]any{
-			"project_id":                     map[string]any{"type": "string"},
-			"tenant_id":                      map[string]any{"type": "string"},
-			"scope_lease":                    map[string]any{"type": "string"},
-			"preparation_id":                 map[string]any{"type": "string"},
-			"confirm_destructive":            map[string]any{"type": "boolean"},
-			"acknowledge_permanent_deletion": map[string]any{"type": "boolean"},
-		},
+	props := map[string]any{
+		"project_id":                     map[string]any{"type": "string"},
+		"tenant_id":                      map[string]any{"type": "string"},
+		"scope_lease":                    map[string]any{"type": "string"},
+		"preparation_id":                 map[string]any{"type": "string"},
+		"confirm_destructive":            map[string]any{"type": "boolean"},
+		"acknowledge_permanent_deletion": map[string]any{"type": "boolean"},
+	}
+	required := []string{}
+	for key, value := range dataToolProperties(t.Name) {
+		props[key] = value
+	}
+	switch t.Name {
+	case "list_data":
+		required = []string{"model"}
+	case "get_data":
+		required = []string{"model", "_id"}
+	}
+	out := map[string]any{
+		"type":                 "object",
+		"properties":           props,
 		"additionalProperties": true,
 	}
+	if len(required) > 0 {
+		out["required"] = required
+	}
+	return out
+}
+
+// dataToolProperties documents the arguments of the content tools so clients
+// do not have to guess them from the generic scope schema.
+func dataToolProperties(name string) map[string]any {
+	model := map[string]any{"type": "string", "description": "Model name, e.g. \"employee\" (see list_models)."}
+	switch name {
+	case "list_data":
+		return map[string]any{
+			"model":  model,
+			"limit":  map[string]any{"type": "integer", "minimum": 1, "maximum": listDataMaxLimit, "default": listDataDefaultLimit, "description": "Documents per page."},
+			"page":   map[string]any{"type": "integer", "minimum": 1, "description": "Page number, starting at 1."},
+			"search": map[string]any{"type": "string", "description": "Free-text search across text fields."},
+			"where":  map[string]any{"type": "object", "description": "Filter by field values, e.g. {\"status\": {\"eq\": \"active\"}}."},
+		}
+	case "get_data":
+		return map[string]any{
+			"model": model,
+			"_id":   map[string]any{"type": "string", "description": "Document id (from list_data results[].id). Alias: id."},
+		}
+	}
+	return nil
 }
 
 func Catalog() []Tool {
@@ -116,6 +153,12 @@ func proOnly(name string) bool {
 }
 
 func toolDescription(name string) string {
+	switch name {
+	case "list_data":
+		return "List documents of one model: returns count and results (id, data, meta). Paged: limit (default 20, max 100) and page. Optional search and where filters."
+	case "get_data":
+		return "Get one document of a model by its id: returns id, data and meta."
+	}
 	return "Apito MCP tool " + name + ". Schema changes are staged; publish stays in the Console."
 }
 

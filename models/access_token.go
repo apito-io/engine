@@ -122,6 +122,9 @@ type AccessPrincipal struct {
 	Capabilities     []string
 	AllowedCIDRs     []string
 	TokenType        string // always "access_token"
+	// Preset is the mint preset (e.g. mcp_assistant). Policy uses it to scope
+	// MCP document reads to data.read; it never widens other surfaces.
+	Preset string
 }
 
 // CreateAccessTokenRequest is the REST mint payload.

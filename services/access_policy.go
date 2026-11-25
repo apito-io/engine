@@ -378,6 +378,7 @@ func RequireSystemGraphQLCapabilities(ctx echo.Context, query string, operationN
 				if !known {
 					return fmt.Errorf("unknown system GraphQL operation %q", node.Name)
 				}
+				cap = mcpDocumentReadCapability(PrincipalFromEcho(ctx), node.Name, cap)
 				if err := RequireCapability(ctx, cap); err != nil {
 					return err
 				}
@@ -682,4 +683,29 @@ func EnforceTenantForPrincipal(ctx echo.Context, svc *AccessTokenService, projec
 		return err
 	}
 	return nil
+}
+
+// mcpDocumentReadFields are the system document reads behind the MCP list_data
+// and get_data tools.
+var mcpDocumentReadFields = map[string]struct{}{
+	"getModelData":  {},
+	"getSingleData": {},
+}
+
+// mcpDocumentReadCapability lets tokens minted by the named MCP approval
+// presets read documents with data.read ("Read data", what the user approved),
+// instead of the raw database.read capability the console surface uses.
+// Writes, deletes, revisions and every other token type are unchanged.
+func mcpDocumentReadCapability(p *models.AccessPrincipal, field, cap string) string {
+	if p == nil || cap != authz.CapDatabaseRead {
+		return cap
+	}
+	if _, ok := mcpDocumentReadFields[field]; !ok {
+		return cap
+	}
+	switch p.Preset {
+	case "mcp_assistant", "mcp_advanced":
+		return authz.CapDataRead
+	}
+	return cap
 }

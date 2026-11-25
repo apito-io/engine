@@ -378,6 +378,7 @@ func (s *AccessTokenService) ValidateRaw(ctx context.Context, raw string, client
 		Capabilities:     append([]string(nil), rec.Capabilities...),
 		AllowedCIDRs:     append([]string(nil), rec.AllowedCIDRs...),
 		TokenType:        "access_token",
+		Preset:           rec.Preset,
 	}
 
 	claims := &models.TokenClaims{

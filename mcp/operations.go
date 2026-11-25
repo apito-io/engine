@@ -37,6 +37,19 @@ func aliasArgs(name string, args map[string]any) map[string]any {
 				out["model"] = model
 			}
 		}
+		if name == "get_data" {
+			if _, ok := out["_id"]; !ok {
+				for _, key := range []string{"id", "document_id"} {
+					if id, ok := out[key].(string); ok && strings.TrimSpace(id) != "" {
+						out["_id"] = id
+						break
+					}
+				}
+			}
+		}
+		if name == "list_data" {
+			out["limit"] = clampListLimit(out["limit"])
+		}
 	case "upsert_data", "delete_data", "duplicate_data", "connect_relation", "disconnect_relation":
 		if _, ok := out["model_name"]; !ok {
 			if model, ok := out["model"].(string); ok {
@@ -112,8 +125,8 @@ var operations = map[string]string{
 	"get_relation_graph":                `query { projectSchemaRelationGraph }`,
 	"get_public_graphql_model_map":      `query { projectModelsInfo { name } }`,
 	"probe_public_document":             `query($model_name: String, $id: String!) { getSingleData(model: $model_name, _id: $id) { id } }`,
-	"get_data":                          `query($model: String!, $limit: Int, $page: Int, $search: String, $where: JSON) { getModelData(model: $model, limit: $limit, page: $page, search: $search, where: $where) { count } }`,
-	"list_data":                         `query($model: String!, $limit: Int, $page: Int, $search: String, $where: JSON) { getModelData(model: $model, limit: $limit, page: $page, search: $search, where: $where) { count } }`,
+	"get_data":                          `query($model: String, $_id: String!) { getSingleData(model: $model, _id: $_id) { id data meta { created_at updated_at status } } }`,
+	"list_data":                         `query($model: String!, $limit: Int, $page: Int, $search: String, $where: JSON) { getModelData(model: $model, limit: $limit, page: $page, search: $search, where: $where) { count results { id data meta { created_at updated_at status } } } }`,
 	"delete_data":                       `mutation($model_name: String!, $_id: String) { deleteModelData(model_name: $model_name, _id: $_id) { id } }`,
 	"upsert_data":                       `mutation($model_name: String!, $_id: String, $payload: JSON, $status: String, $connect: JSON, $disconnect: JSON) { upsertModelData(model_name: $model_name, _id: $_id, payload: $payload, status: $status, connect: $connect, disconnect: $disconnect) { id } }`,
 	"duplicate_data":                    `mutation($model_name: String!, $_id: String) { duplicateModelData(model_name: $model_name, _id: $_id) { id } }`,
@@ -177,4 +190,30 @@ var operations = map[string]string{
 	"get_system_trace":                  `query($trace_id: String!) { systemLogTrace(trace_id: $trace_id) { id level status error_message } }`,
 	"summarize_system_logs":             `query($project_id: String, $text: String) { systemLogStats(project_id: $project_id, text: $text) { store { total_events } health { engine open error } } }`,
 	"get_log_store_health":              `query { systemLogHealth }`,
+}
+
+// listDataDefaultLimit and listDataMaxLimit keep list_data pages small enough
+// for an assistant's context window.
+const (
+	listDataDefaultLimit = 20
+	listDataMaxLimit     = 100
+)
+
+func clampListLimit(v any) int {
+	n := 0
+	switch t := v.(type) {
+	case int:
+		n = t
+	case int64:
+		n = int(t)
+	case float64:
+		n = int(t)
+	}
+	if n <= 0 {
+		return listDataDefaultLimit
+	}
+	if n > listDataMaxLimit {
+		return listDataMaxLimit
+	}
+	return n
 }
