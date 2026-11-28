@@ -282,6 +282,10 @@ var systemGraphQLFieldAliases = map[string]string{
 	"copyBackupsToDestination":    authz.CapSettingsWrite,
 	"saveBackupEngine":            authz.CapSettingsWrite,
 	"testBackupEngine":            authz.CapSettingsWrite,
+	// System monitor (pro, 2026-11-28): disks, memory, CPU, host report, alerts.
+	"systemHealth":        authz.CapSettingsRead,
+	"systemHealthHistory": authz.CapSettingsRead,
+	"systemAlerts":        authz.CapSettingsRead,
 	// Partner Program v4 (pro). Same capabilities as the other partner and tenant billing operations.
 	"partnerProgramConfig":           authz.CapTenantsRead,
 	"partnerDashboard":               authz.CapTenantsRead,
