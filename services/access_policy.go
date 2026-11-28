@@ -270,6 +270,18 @@ var systemGraphQLFieldAliases = map[string]string{
 	"runBackupNow":                        authz.CapSettingsWrite,
 	"runFullDump":                         authz.CapSettingsWrite,
 	"restoreBackup":                       authz.CapSettingsWrite,
+	// Backup targets and backup engines (pro, 2026-11-26).
+	"backupDestinations":          authz.CapSettingsRead,
+	"backupDestinationPresets":    authz.CapSettingsRead,
+	"backupToolHealth":            authz.CapSettingsRead,
+	"backupEngines":               authz.CapSettingsRead,
+	"saveBackupDestination":       authz.CapSettingsWrite,
+	"deleteBackupDestination":     authz.CapSettingsWrite,
+	"testBackupDestination":       authz.CapSettingsWrite,
+	"setPrimaryBackupDestination": authz.CapSettingsWrite,
+	"copyBackupsToDestination":    authz.CapSettingsWrite,
+	"saveBackupEngine":            authz.CapSettingsWrite,
+	"testBackupEngine":            authz.CapSettingsWrite,
 	// Partner Program v4 (pro). Same capabilities as the other partner and tenant billing operations.
 	"partnerProgramConfig":           authz.CapTenantsRead,
 	"partnerDashboard":               authz.CapTenantsRead,
