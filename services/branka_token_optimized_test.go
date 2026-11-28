@@ -77,7 +77,9 @@ func TestCustomTokenWithTTL(t *testing.T) {
 		t.Errorf("Decoded payload mismatch. Expected: %s, Got: %s", testPayload, decoded)
 	}
 
-	// Test with very short TTL (should fail)
+	// Test with very short TTL (should fail). Timestamps are whole seconds and
+	// expiry is "now > issued+ttl", so wait past the 1s TTL before checking.
+	time.Sleep(2100 * time.Millisecond)
 	_, err = token.DecodeToStringWithTTL(encoded, 1)
 	if err == nil {
 		t.Error("Expected TTL validation to fail with short TTL")

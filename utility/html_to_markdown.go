@@ -1,6 +1,7 @@
 package utility
 
 import (
+	"fmt"
 	"errors"
 	"reflect"
 
@@ -89,7 +90,24 @@ func MultiLineTextFormat(v interface{}) (map[string]interface{}, error) {
 }
 
 func IntFormat(v interface{}) (int, error) {
-	_int := int(v.(float64))
+	// JSON decoding yields float64; drivers may also hand back integer types.
+	var _int int
+	switch n := v.(type) {
+	case float64:
+		_int = int(n)
+	case float32:
+		_int = int(n)
+	case int:
+		_int = n
+	case int32:
+		_int = int(n)
+	case int64:
+		_int = int(n)
+	case nil:
+		return 0, nil
+	default:
+		return 0, fmt.Errorf("int value has unexpected type %T", v)
+	}
 	if _int > 2147483647 {
 		return 0, errors.New("int Value Overflow")
 	}

@@ -36,3 +36,18 @@ type GraphQLServerFactory interface {
 	// CreateGraphQLServer creates a GraphQL server instance
 	CreateGraphQLServer(ctx context.Context, cfg *models.Config, extensionRouter *echo.Group, mainEcho *echo.Echo) (GraphQLServerInterface, error)
 }
+
+// ConnectionCheck is the result of a successful ConnectionChecker call.
+type ConnectionCheck struct {
+	Engine        string `json:"engine"`
+	ServerVersion string `json:"server_version"`
+	LatencyMs     int64  `json:"latency_ms"`
+}
+
+// ConnectionChecker is implemented by driver factories that can verify
+// credentials with the same connection path the project driver uses, without
+// creating a project, database, schema or table. Errors must be safe to show
+// to an operator (no passwords or full DSNs).
+type ConnectionChecker interface {
+	CheckConnection(ctx context.Context, conf *models.Config, creds *models.DriverCredentials) (ConnectionCheck, error)
+}

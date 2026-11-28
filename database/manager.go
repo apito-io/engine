@@ -4,16 +4,17 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	_const "github.com/apito-io/engine/const"
 	"log"
 	"sort"
 	"strings"
 	"sync"
 	"time"
 
-	"github.com/apito-io/open_driver/project"
 	"github.com/apito-io/engine/interfaces"
 	"github.com/apito-io/engine/models"
 	"github.com/apito-io/engine/telemetry"
+	"github.com/apito-io/open_driver/project"
 	"github.com/patrickmn/go-cache"
 	"golang.org/x/sync/singleflight"
 )
@@ -285,6 +286,12 @@ func (cm *ConnectionManager) createConnection(ctx context.Context, connKey strin
 	if !exists {
 		return nil, fmt.Errorf("connection configuration not found for: %s", connKey)
 	}
+	if resolved, err := cm.resolveStubCredentials(ctx, connKey, config); err != nil {
+		return nil, err
+	} else if resolved != nil {
+		config = resolved
+		cm.configs[connKey] = resolved
+	}
 
 	proExtras := cm.proDriverExtras[connKey]
 	projectDriver, err := project.GetProjectDriverWithConfig(cm.cfg, config, proExtras)
@@ -477,4 +484,38 @@ func (cm *ConnectionManager) GetUsagePercent() float64 {
 // GetMaxConnections returns the maximum number of connections allowed
 func (cm *ConnectionManager) GetMaxConnections() int {
 	return cm.maxConnections
+}
+
+// IsStubDriverCredentials reports whether c is a persisted stub: no host and an
+// apitoDB/empty engine, i.e. the real database is resolved elsewhere.
+func IsStubDriverCredentials(c *models.DriverCredentials) bool {
+	if c == nil || strings.TrimSpace(c.Host) != "" {
+		return false
+	}
+	db := strings.TrimSpace(c.Database)
+	if strings.HasPrefix(db, "libsql://") || strings.HasPrefix(db, "https://") || strings.HasPrefix(db, "http://") {
+		return false
+	}
+	eng := strings.TrimSpace(c.Engine)
+	return eng == "" || strings.EqualFold(eng, _const.ApitoDB)
+}
+
+// resolveStubCredentials asks ResolveProjectCredentialsHook for full
+// credentials when the registered config is a stub. Caller holds cm.mu.
+func (cm *ConnectionManager) resolveStubCredentials(ctx context.Context, connKey string, config *models.DriverCredentials) (*models.DriverCredentials, error) {
+	if cm.cfg == nil || cm.cfg.ResolveProjectCredentialsHook == nil || !IsStubDriverCredentials(config) {
+		return nil, nil
+	}
+	projectID := strings.TrimSpace(config.ProjectID)
+	if projectID == "" {
+		projectID = connKey
+	}
+	resolved, err := cm.cfg.ResolveProjectCredentialsHook(ctx, projectID, config)
+	if err != nil {
+		return nil, fmt.Errorf("resolve project %s credentials: %w", projectID, err)
+	}
+	if resolved != nil && strings.TrimSpace(resolved.ProjectID) == "" {
+		resolved.ProjectID = projectID
+	}
+	return resolved, nil
 }

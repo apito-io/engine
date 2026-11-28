@@ -173,6 +173,13 @@ type Config struct {
 	// A denied decision must never fall back to the base project connection.
 	ConnectionRoutingHook func(ctx context.Context, projectID string) ConnectionRoutingResult `env:"-"`
 
+	// ResolveProjectCredentialsHook returns full credentials for a project whose
+	// stored driver is a stub (no host; engine apitoDB or empty). The connection
+	// manager calls it before opening such a project, so credentials that were
+	// only registered in memory at create time survive restarts and background
+	// workers. Return nil to leave the stub unchanged.
+	ResolveProjectCredentialsHook func(ctx context.Context, projectID string, stub *DriverCredentials) (*DriverCredentials, error) `env:"-"`
+
 	// QueryFilterHook returns additional filters to apply before every query (e.g. row-level isolation).
 	QueryFilterHook func(ctx context.Context, params *CommonSystemParams) []*QueryFilter `env:"-"`
 

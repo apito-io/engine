@@ -28,3 +28,11 @@ func PostgresProjectSchemaName(projectID string) string {
 	}
 	return s
 }
+
+// SQLProjectDatabaseName returns the per-project database name used when a
+// MySQL/MariaDB (or database-isolated PostgreSQL) server is shared by several
+// projects: same "p_" + sanitized id rule as the schema name, ≤63 characters,
+// which fits MySQL's 64-character limit.
+func SQLProjectDatabaseName(projectID string) string {
+	return strings.ToLower(PostgresProjectSchemaName(projectID))
+}
